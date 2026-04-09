@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { cloudStorage, resetCloudStorage } from '../cloudStorageService';
 import type { Project } from '../../types/project';
 
@@ -187,20 +187,26 @@ describe('cloudStorageService', () => {
     });
 
     it('lists shared projects sorted by newest first', async () => {
-      const p1 = makeProject({ id: 'p1', name: 'First' });
-      const p2 = makeProject({ id: 'p2', name: 'Second' });
+      vi.useFakeTimers();
+      try {
+        const p1 = makeProject({ id: 'p1', name: 'First' });
+        const p2 = makeProject({ id: 'p2', name: 'Second' });
 
-      await cloudStorage.saveSharedProject({ project: p1, owner: 'u', stems: [] });
-      // Ensure p2 has a later timestamp
-      await new Promise((r) => setTimeout(r, 2));
-      await cloudStorage.saveSharedProject({ project: p2, owner: 'u', stems: [] });
+        vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+        await cloudStorage.saveSharedProject({ project: p1, owner: 'u', stems: [] });
 
-      const list = await cloudStorage.listSharedProjects();
+        vi.setSystemTime(new Date('2026-01-01T00:01:00Z'));
+        await cloudStorage.saveSharedProject({ project: p2, owner: 'u', stems: [] });
 
-      expect(list).toHaveLength(2);
-      // Newest first
-      expect(list[0].name).toBe('Second');
-      expect(list[1].name).toBe('First');
+        const list = await cloudStorage.listSharedProjects();
+
+        expect(list).toHaveLength(2);
+        // Newest first
+        expect(list[0].name).toBe('Second');
+        expect(list[1].name).toBe('First');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('includes stem count in shared project summary', async () => {

@@ -265,18 +265,23 @@ describe('LoopBrowser', () => {
   });
 
   it('calls toggleLoopBrowser when close button is clicked', () => {
+    const originalToggle = useUIStore.getState().toggleLoopBrowser;
     const toggleSpy = vi.fn();
     setupStore({ open: true });
     useUIStore.setState({ toggleLoopBrowser: toggleSpy });
 
-    render(<LoopBrowser />);
+    try {
+      render(<LoopBrowser />);
 
-    // The close button is in the header — it's the only button with an X SVG
-    const header = screen.getByText('Loop Library').closest('div')!;
-    const closeBtn = header.querySelector('button')!;
-    fireEvent.click(closeBtn);
+      // The close button is in the header — it's the only button with an X SVG
+      const header = screen.getByText('Loop Library').closest('div')!;
+      const closeBtn = header.querySelector('button')!;
+      fireEvent.click(closeBtn);
 
-    expect(toggleSpy).toHaveBeenCalled();
+      expect(toggleSpy).toHaveBeenCalled();
+    } finally {
+      useUIStore.setState({ toggleLoopBrowser: originalToggle });
+    }
   });
 
   it('filters My Loops by search text', () => {

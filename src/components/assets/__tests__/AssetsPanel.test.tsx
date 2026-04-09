@@ -222,28 +222,33 @@ describe('AssetsPanel', () => {
   });
 
   it('calls toggleAssetStar when star button is clicked', () => {
+    const originalToggle = useProjectStore.getState().toggleAssetStar;
     const toggleSpy = vi.fn();
     setupProject([makeAsset({ id: 'a1', starred: false })]);
     useProjectStore.setState({ toggleAssetStar: toggleSpy });
 
-    render(<AssetsPanel />);
-
-    // Click the star button (☆)
-    fireEvent.click(screen.getByTitle('Star'));
-
-    expect(toggleSpy).toHaveBeenCalledWith('a1');
+    try {
+      render(<AssetsPanel />);
+      fireEvent.click(screen.getByTitle('Star'));
+      expect(toggleSpy).toHaveBeenCalledWith('a1');
+    } finally {
+      useProjectStore.setState({ toggleAssetStar: originalToggle });
+    }
   });
 
   it('calls removeAsset when delete button is clicked', () => {
+    const originalRemove = useProjectStore.getState().removeAsset;
     const removeSpy = vi.fn();
     setupProject([makeAsset({ id: 'a1' })]);
     useProjectStore.setState({ removeAsset: removeSpy });
 
-    render(<AssetsPanel />);
-
-    fireEvent.click(screen.getByTitle('Remove'));
-
-    expect(removeSpy).toHaveBeenCalledWith('a1');
+    try {
+      render(<AssetsPanel />);
+      fireEvent.click(screen.getByTitle('Remove'));
+      expect(removeSpy).toHaveBeenCalledWith('a1');
+    } finally {
+      useProjectStore.setState({ removeAsset: originalRemove });
+    }
   });
 
   it('shows filled star for starred assets', () => {

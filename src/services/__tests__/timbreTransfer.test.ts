@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createTimbreReference,
   validateTimbreStrength,
@@ -9,6 +9,10 @@ describe('timbreTransfer', () => {
   describe('createTimbreReference', () => {
     beforeEach(() => {
       vi.spyOn(crypto, 'randomUUID').mockReturnValue('test-uuid-1234');
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
     });
 
     it('creates a reference with required fields', () => {

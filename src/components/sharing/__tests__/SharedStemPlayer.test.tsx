@@ -214,10 +214,13 @@ describe('SharedStemPlayer', () => {
       makeStem({ trackId: 't1', trackName: 'Drums', color: '#ff5500' }),
     ]);
 
-    const { container } = render(<SharedStemPlayer sharedProject={shared} />);
+    render(<SharedStemPlayer sharedProject={shared} />);
 
-    const colorDot = container.querySelector('[style*="background-color: rgb(255, 85, 0)"]');
+    const stemSection = screen.getByLabelText('Drums stem');
+    const colorDot = stemSection.querySelector('[aria-hidden="true"]') as HTMLElement | null;
+
     expect(colorDot).toBeTruthy();
+    expect(colorDot).toHaveStyle({ backgroundColor: '#ff5500' });
   });
 
   it('has accessible Play/Pause button', () => {

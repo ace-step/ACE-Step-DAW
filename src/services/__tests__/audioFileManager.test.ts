@@ -58,12 +58,21 @@ describe('audioFileManager', () => {
   });
 
   describe('loadAudioBlob', () => {
-    it('loads a saved blob by project/clip/type', async () => {
+    it('loads a blob by the unversioned key (legacy format)', async () => {
+      // loadAudioBlob uses the unversioned key format: audio:project:clip:type
       const blob = new Blob(['saved audio']);
       mockStore.set('audio:proj-1:clip-1:cumulative', blob);
 
       const loaded = await loadAudioBlob('proj-1', 'clip-1', 'cumulative');
       expect(loaded).toBe(blob);
+    });
+
+    it('loads a saved blob via loadAudioBlobByKey using the key from saveAudioBlob', async () => {
+      const blob = new Blob(['saved audio']);
+      const key = await saveAudioBlob('proj-1', 'clip-1', 'cumulative', blob);
+
+      const loadedByKey = await loadAudioBlobByKey(key);
+      expect(loadedByKey).toBe(blob);
     });
 
     it('returns undefined when not found', async () => {
@@ -88,12 +97,27 @@ describe('audioFileManager', () => {
   });
 
   describe('deleteAudioBlob', () => {
-    it('deletes a blob by project/clip/type', async () => {
+    it('deletes the unversioned key (legacy format)', async () => {
+      // deleteAudioBlob targets the unversioned key: audio:project:clip:type
       mockStore.set('audio:proj-1:clip-1:isolated', new Blob(['data']));
 
       await deleteAudioBlob('proj-1', 'clip-1', 'isolated');
 
       expect(mockStore.has('audio:proj-1:clip-1:isolated')).toBe(false);
+    });
+
+    it('note: versioned keys from saveAudioBlob are cleaned via deleteAllProjectAudio', async () => {
+      // saveAudioBlob creates versioned keys (audio:...:type:suffix)
+      // deleteAudioBlob only removes the unversioned key
+      // deleteAllProjectAudio handles cleanup of versioned keys by prefix
+      const blob = new Blob(['data']);
+      const key = await saveAudioBlob('proj-1', 'clip-1', 'isolated', blob);
+
+      expect(mockStore.has(key)).toBe(true);
+
+      await deleteAllProjectAudio('proj-1');
+
+      expect(mockStore.has(key)).toBe(false);
     });
   });
 

@@ -90,10 +90,15 @@ export function ClipContextMenuContainer({
   } : undefined;
 
   const handleConsolidate = async () => {
-    const consolidatedClip = await consolidateClips(track.id, selectedActionClipIds);
-    onClose();
-    if (consolidatedClip) {
-      selectClip(consolidatedClip.id, false);
+    try {
+      const consolidatedClip = await consolidateClips(track.id, selectedActionClipIds);
+      onClose();
+      if (consolidatedClip) {
+        selectClip(consolidatedClip.id, false);
+      }
+    } catch {
+      onClose();
+      toastError('Failed to consolidate clips');
     }
   };
 

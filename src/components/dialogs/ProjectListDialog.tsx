@@ -62,13 +62,17 @@ export function ProjectListDialog() {
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
-    await deleteProject(id);
-    await deleteAllProjectAudio(id);
-    setProjects((prev) => prev.filter((p) => p.id !== id));
-    // If deleting the current project, clear workspace
-    if (id === currentProject?.id) {
-      setProject(null as unknown as Project);
-      setShow(false);
+    try {
+      await deleteProject(id);
+      await deleteAllProjectAudio(id);
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      // If deleting the current project, clear workspace
+      if (id === currentProject?.id) {
+        setProject(null as unknown as Project);
+        setShow(false);
+      }
+    } catch {
+      toastError('Failed to delete project');
     }
   };
 
@@ -77,6 +81,8 @@ export function ProjectListDialog() {
     setExporting(true);
     try {
       await exportProjectArchive(currentProject);
+    } catch {
+      toastError('Failed to export project');
     } finally {
       setExporting(false);
     }
@@ -84,22 +90,30 @@ export function ProjectListDialog() {
 
   const handleSaveAsTemplate = async () => {
     if (!currentProject || !templateName.trim()) return;
-    const template = saveProjectAsTemplate(templateName);
-    await saveTemplate(template);
-    toastSuccess(`Template "${template.name}" saved`);
-    setShowTemplateName(false);
-    setTemplateName('');
+    try {
+      const template = saveProjectAsTemplate(templateName);
+      await saveTemplate(template);
+      toastSuccess(`Template "${template.name}" saved`);
+      setShowTemplateName(false);
+      setTemplateName('');
+    } catch {
+      toastError('Failed to save template');
+    }
   };
 
   const handleImport = async () => {
-    const project = await importProjectArchive();
-    if (project) {
-      if (currentProject) {
-        await saveProject(currentProject);
+    try {
+      const project = await importProjectArchive();
+      if (project) {
+        if (currentProject) {
+          await saveProject(currentProject);
+        }
+        setProject(project);
+        toastSuccess('Project loaded');
+        setShow(false);
       }
-      setProject(project);
-      toastSuccess('Project loaded');
-      setShow(false);
+    } catch {
+      toastError('Failed to import project');
     }
   };
 

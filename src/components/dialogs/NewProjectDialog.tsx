@@ -161,8 +161,12 @@ export function NewProjectDialog() {
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
-    await deleteTemplate(templateId);
-    setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+    try {
+      await deleteTemplate(templateId);
+      setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+    } catch {
+      toastError('Failed to delete template');
+    }
   };
 
   const handleSoundDesignTemplate = (template: SoundDesignTemplate) => {

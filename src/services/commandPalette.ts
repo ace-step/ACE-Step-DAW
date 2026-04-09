@@ -429,7 +429,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       ['transport', 'punch', 'recording'],
       ['toggle punch', 'punch recording', 'punch in out'],
       context.actions.togglePunch,
-      ['Shift+I'],
+      ['Shift+P'],
       'Transport control',
     ),
   );

@@ -85,12 +85,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const setSeedStr = useGenerationStore((s) => s.setGenerationSeed);
   const temperature = useGenerationStore((s) => s.generationForm.temperature);
   const setTemperature = useGenerationStore((s) => s.setGenerationTemperature);
-  const variationCount = useGenerationStore((s) => s.generationForm.variationCount);
-  const setVariationCount = useGenerationStore((s) => s.setGenerationVariationCount);
   const styleTags = useGenerationStore((s) => s.generationForm.styleTags);
   const toggleStyleTag = useGenerationStore((s) => s.toggleGenerationStyleTag);
-  const compareModelsEnabled = useGenerationStore((s) => s.generationForm.compareModelsEnabled);
-  const setCompareModelsEnabled = useGenerationStore((s) => s.setCompareModelsEnabled);
   // Stable fallback seed — only generated once per component mount, not on every render
   const fallbackSeed = useRef(Math.floor(Math.random() * 2147483647));
   const parsedSeed = Number(seedStr);
@@ -211,9 +207,13 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
       if (p.stemCount !== undefined) setStemCount(p.stemCount);
       if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
-      // Hydrate advanced controls from clip to avoid double-prepend
-      if (p.guidanceScale !== undefined) setTemperature(p.guidanceScale);
-      if (p.styleTags) useGenerationStore.getState().setGenerationStyleTags(p.styleTags);
+      // Hydrate advanced controls from clip to avoid double-prepend.
+      // Only treat guidanceScale as temperature if it's within the valid 0–1 range
+      // to avoid clamping legacy clips that have true guidanceScale values (0–20).
+      if (p.guidanceScale !== undefined && p.guidanceScale >= 0 && p.guidanceScale <= 1) {
+        setTemperature(p.guidanceScale);
+      }
+      useGenerationStore.getState().setGenerationStyleTags(p.styleTags ?? []);
     } else {
       // Backward compatibility: hydrate from basic clip fields
       setPrompt(editingClip.prompt || '');
@@ -476,6 +476,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
                 data-testid={`style-tag-${tag.value}`}
                 onClick={() => toggleStyleTag(tag.value)}
                 disabled={isDisabled}
+                aria-pressed={isActive}
                 className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
                   isActive
                     ? 'bg-indigo-600 text-white'
@@ -578,29 +579,6 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           </div>
         </div>
 
-        {/* Variation Count */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-medium uppercase text-zinc-500">
-            Variations
-          </label>
-          <div className="flex items-center gap-1.5" data-testid="variation-count-selector">
-            {([1, 2, 3, 4] as const).map((count) => (
-              <button
-                key={count}
-                type="button"
-                onClick={() => setVariationCount(count)}
-                className={`rounded px-2 py-0.5 text-[10px] transition-colors ${
-                  variationCount === count
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-[#333] text-zinc-400 hover:bg-[#444]'
-                }`}
-                disabled={isDisabled}
-              >
-                {count}
-              </button>
-            ))}
-          </div>
-        </div>
       </section>
 
       {/* Options — two-column tree layout */}
@@ -680,22 +658,6 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           )}
         </div>
 
-      </section>
-
-      {/* Advanced: Cross-model comparison */}
-      <section>
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <input
-            type="checkbox"
-            data-testid="compare-models-toggle"
-            checked={compareModelsEnabled}
-            onChange={(e) => setCompareModelsEnabled(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
-            disabled={isDisabled}
-          />
-          <span className="text-[11px] font-medium text-zinc-300">Compare models</span>
-          <span className="text-[9px] text-zinc-500">each variation uses a different model</span>
-        </label>
       </section>
 
     </div>

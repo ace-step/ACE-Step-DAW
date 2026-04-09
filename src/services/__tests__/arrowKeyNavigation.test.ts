@@ -16,6 +16,8 @@ vi.mock('../../store/uiStore', () => ({
   useUIStore: { getState: vi.fn() },
 }));
 
+import { resolveFocusedTrackId } from '../focusResolution';
+
 vi.mock('../focusResolution', () => ({
   resolveFocusedTrackId: vi.fn(() => 'track-1'),
 }));
@@ -248,15 +250,18 @@ describe('navigateMixerByArrow', () => {
   });
 
   it('returns false when at rightmost track', () => {
+    vi.mocked(resolveFocusedTrackId).mockReturnValue('track-2');
+
     const tracks = [
       makeTrack({ id: 'track-1', order: 0 }),
       makeTrack({ id: 'track-2', order: 1 }),
     ];
-    // resolveFocusedTrackId returns 'track-1' but we want to test at track-2
-    // Mock the store to have focused track-2 by modifying the focused track mock
     mockStores({ tracks });
-    // resolveFocusedTrackId returns 'track-1' by default, so navigating right goes to track-2
-    expect(navigateMixerByArrow('right')).toBe(true);
+
+    expect(navigateMixerByArrow('right')).toBe(false);
+
+    // Restore default
+    vi.mocked(resolveFocusedTrackId).mockReturnValue('track-1');
   });
 
   it('returns false when navigating left from first track', () => {

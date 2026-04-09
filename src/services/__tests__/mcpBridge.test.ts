@@ -125,8 +125,6 @@ describe('mcpBridge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     lastWsInstance = null;
-    // Set IS_DEV to true by mocking import.meta.env.DEV
-    vi.stubGlobal('import', { meta: { env: { DEV: true } } });
   });
 
   afterEach(() => {
@@ -134,71 +132,56 @@ describe('mcpBridge', () => {
   });
 
   describe('startMcpBridge / stopMcpBridge', () => {
-    it('creates a WebSocket connection in dev mode', () => {
+    it('does not throw when starting or stopping', () => {
+      // IS_DEV is evaluated at module load time. In test environment, it may be
+      // false (no dev server), so startMcpBridge may skip the WebSocket connection.
+      // We verify it doesn't throw regardless.
       startMcpBridge();
-      // startMcpBridge only connects in dev mode; the module reads import.meta.env.DEV
-      // at load time, so we test that WebSocket was created (if dev mode was on)
-      // or not created (if prod mode). Since the module was loaded in the test env,
-      // the DEV flag was set during the import. Let's check.
-      // Note: The check uses the module-level IS_DEV which was evaluated at import time.
+      stopMcpBridge();
     });
 
-    it('stopMcpBridge closes the connection', () => {
+    it('stopMcpBridge is safe to call multiple times', () => {
       stopMcpBridge();
-      // Should not throw even if no connection exists
+      stopMcpBridge();
+    });
+
+    it('opens a WebSocket when IS_DEV is true', () => {
+      startMcpBridge();
+      // If IS_DEV was true at module load time, a WebSocket would be created.
+      // In CI/test environments IS_DEV may be false, so we test conditionally.
+      if (lastWsInstance) {
+        expect(lastWsInstance.url).toContain('ws/mcp-bridge');
+      }
     });
   });
 
   describe('tool command handling (via WebSocket messages)', () => {
-    // Since executeTool is not exported, we test it indirectly via the WebSocket message flow
-    // The WebSocket onmessage handler parses JSON, calls handleToolCall, and sends response
-
-    async function sendToolCommand(tool: string, params: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
-      startMcpBridge();
-      await vi.advanceTimersByTimeAsync(0); // Let onopen fire
-
-      if (!lastWsInstance) throw new Error('No WebSocket instance');
-
-      const request = JSON.stringify({ id: 'req-1', tool, params });
-      lastWsInstance.onmessage?.({ data: request });
-
-      // Wait for async handler
-      await vi.advanceTimersByTimeAsync(0);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      const sent = lastWsInstance.sentMessages;
-      if (sent.length === 0) return {};
-      return JSON.parse(sent[sent.length - 1]) as Record<string, unknown>;
-    }
-
-    // Note: These tests require the module to have been loaded in DEV mode.
-    // Since the module checks `import.meta.env.DEV` at load time, and vitest
-    // runs in test mode (which sets DEV=true by default), these tests work.
-
-    it('handles daw_get_transport', async () => {
+    it('dispatches tool calls and sends responses when connected', async () => {
       vi.useFakeTimers();
       startMcpBridge();
       await vi.advanceTimersByTimeAsync(0);
 
-      if (lastWsInstance) {
-        lastWsInstance.onmessage?.({
-          data: JSON.stringify({ id: 'req-1', tool: 'daw_get_transport', params: {} }),
-        });
-
-        // Give time for async handler
-        await vi.advanceTimersByTimeAsync(100);
-
-        if (lastWsInstance.sentMessages.length > 0) {
-          const response = JSON.parse(lastWsInstance.sentMessages[0]);
-          expect(response.id).toBe('req-1');
-          if (response.result) {
-            expect(response.result).toEqual(expect.objectContaining({
-              isPlaying: false,
-              currentTime: 0,
-            }));
-          }
-        }
+      // If no WebSocket was created (IS_DEV=false), skip assertions
+      if (!lastWsInstance) {
+        vi.useRealTimers();
+        return;
       }
+
+      const ws = lastWsInstance;
+      ws.onmessage?.({
+        data: JSON.stringify({ id: 'req-1', tool: 'daw_get_transport', params: {} }),
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(ws.sentMessages.length).toBeGreaterThan(0);
+      const response = JSON.parse(ws.sentMessages[0]);
+      expect(response.id).toBe('req-1');
+      expect(response.result).toEqual(expect.objectContaining({
+        isPlaying: false,
+        currentTime: 0,
+      }));
+
       vi.useRealTimers();
     });
   });

@@ -43,10 +43,10 @@ function makeSequencerRow(overrides: Partial<SequencerRow> = {}): SequencerRow {
     label: 'Kick',
     muted: false,
     steps: [
-      { active: false, velocity: 100 },
-      { active: true, velocity: 100 },
-      { active: false, velocity: 100 },
-      { active: false, velocity: 100 },
+      { active: false, velocity: 1 },
+      { active: true, velocity: 1 },
+      { active: false, velocity: 1 },
+      { active: false, velocity: 1 },
     ],
     ...overrides,
   } as SequencerRow;
@@ -66,16 +66,15 @@ function makeTrack(overrides: Partial<Track> = {}): Track {
   return {
     id: 'track-1',
     displayName: 'Track 1',
-    type: 'audio',
+    trackName: 'Track 1',
     order: 0,
     volume: 0.8,
     pan: 0,
     muted: false,
-    solo: false,
+    soloed: false,
     armed: false,
     clips: [],
     color: '#4a9eff',
-    instrumentType: 'none',
     ...overrides,
   } as Track;
 }
@@ -366,7 +365,7 @@ describe('createProjectActionApi', () => {
     });
   });
 
-  // ── saveTrackPreset ──────────────────────────────────────────���─
+  // ── saveTrackPreset ─────────────────────────────────────────────
 
   describe('saveTrackPreset', () => {
     it('returns PROJECT_REQUIRED when no project', () => {
@@ -431,7 +430,7 @@ describe('createProjectActionApi', () => {
     });
   });
 
-  // ── consolidateClips ────────────────────────────────────────���──
+  // ── consolidateClips ────────────────────────────────────────────
 
   describe('consolidateClips', () => {
     beforeEach(() => {
@@ -602,6 +601,10 @@ describe('createProjectActionApi', () => {
       } as unknown as HTMLElement);
     });
 
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('returns PROJECT_REQUIRED when no project', () => {
       store = createMockStore(null);
       api = createProjectActionApi(store);
@@ -678,17 +681,29 @@ describe('createProjectActionApi', () => {
     });
 
     it('successful action clears last error', () => {
-      store = createMockStore(null);
-      api = createProjectActionApi(store);
-      // Trigger an error first
-      api.addClip({ trackId: 'any', clip: {} as Clip });
-      expect(api.getLastError()).not.toBeNull();
+      // Use a store that starts with no project, then gets one
+      const mutableState: Record<string, unknown> = {
+        project: null,
+        addClip: vi.fn((_trackId: string, clip: Partial<Clip>) => {
+          return { ...makeClip(), ...clip, id: 'new-clip-1' };
+        }),
+      };
+      const mutableStore = (() => mutableState) as unknown as ProjectStore;
+      mutableStore.getState = () => mutableState as unknown as ProjectState;
+      mutableStore.setState = vi.fn();
+      mutableStore.subscribe = vi.fn();
+      mutableStore.destroy = vi.fn();
 
-      // Now make a successful call
-      store = createMockStore(makeProject());
-      api = createProjectActionApi(store);
-      api.addClip({ trackId: 'track-1', clip: { startTime: 0, duration: 4, prompt: '', lyrics: '' } as Clip });
-      expect(api.getLastError()).toBeNull();
+      const sameApi = createProjectActionApi(mutableStore);
+
+      // Trigger an error first (no project)
+      sameApi.addClip({ trackId: 'any', clip: {} as Clip });
+      expect(sameApi.getLastError()).not.toBeNull();
+
+      // Now add a project and make a successful call on the same API instance
+      mutableState.project = makeProject();
+      sameApi.addClip({ trackId: 'track-1', clip: { startTime: 0, duration: 4, prompt: '', lyrics: '' } as Clip });
+      expect(sameApi.getLastError()).toBeNull();
     });
   });
 });

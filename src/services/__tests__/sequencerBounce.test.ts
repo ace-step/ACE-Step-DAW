@@ -159,14 +159,13 @@ describe('bounceSequencerToAudio', () => {
     expect(offlineCtxConstructorArgs[0][2]).toBe(44100); // sampleRate
   });
 
-  it('does not create a clip for a pattern with no active steps', async () => {
+  it('still creates a clip when all steps are inactive (pattern has duration)', async () => {
     const pattern = makePattern({
       rows: [makeRow({ steps: [{ active: false, velocity: 1 }, { active: false, velocity: 1 }] })],
     });
     await bounceSequencerToAudio('track-1', pattern, 120);
 
-    // Even though render happens, a clip is still created (pattern has duration)
-    // Test verifies no crash with all-inactive steps
+    // Pattern has non-zero duration, so a clip is created even with no active steps
     expect(mockProjectState.addClip).toHaveBeenCalled();
   });
 
@@ -237,14 +236,32 @@ describe('bounceSequencerToAudio', () => {
   });
 
   it('handles swing offset for odd-numbered steps', async () => {
-    const pattern = makePattern({ swing: 0.5 });
+    // Make step at odd index (1) active to test swing offset
+    const swingRow = makeRow({
+      steps: [
+        { active: true, velocity: 1 },
+        { active: true, velocity: 1 },  // odd index — should receive swing offset
+        { active: false, velocity: 1 },
+        { active: false, velocity: 1 },
+      ],
+    });
+    const pattern = makePattern({ swing: 0.5, rows: [swingRow] });
     await bounceSequencerToAudio('track-1', pattern, 120);
 
-    // The source.start() calls should include swing offset for odd steps
     const startCalls = mockOfflineCtx.createBufferSource.mock.results
-      .map(r => r.value.start.mock.calls)
+      .map((r: { value: { start: { mock: { calls: number[][] } } } }) => r.value.start.mock.calls)
       .flat();
-    // At least some calls should have been made
-    expect(startCalls.length).toBeGreaterThan(0);
+    const startTimes = startCalls.map(([when]: number[]) => when);
+
+    // At 120 BPM with stepsPerBar=4, stepDuration = (60/120) / (4/4) = 0.5s
+    // With swing=0.5, odd step offset = 0.5 * 0.5 * 0.5 = 0.125s
+    // Step 1 (odd) should start at 0.5 + 0.125 = 0.625s
+    const stepDuration = (60 / 120) / (pattern.stepsPerBar / 4);
+    const expectedOddStepStart = stepDuration + stepDuration * pattern.swing * 0.5;
+
+    expect(startTimes.length).toBe(2); // two active steps
+    expect(
+      startTimes.some((time: number) => Math.abs(time - expectedOddStepStart) < 1e-6),
+    ).toBe(true);
   });
 });

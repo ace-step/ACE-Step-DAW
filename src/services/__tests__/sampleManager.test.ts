@@ -176,15 +176,20 @@ describe('sampleManager', () => {
   });
 
   describe('clearSampleCache', () => {
-    it('clears all cached samples', async () => {
+    it('clears all cached samples and re-synthesizes on next request', async () => {
       const ctx = { sampleRate: 44100 } as AudioContext;
+      const offlineCtxMock = globalThis.OfflineAudioContext as unknown as { mock: { calls: unknown[][] } };
+      const initialCallCount = offlineCtxMock.mock.calls.length;
+
       await getSample(ctx, 'kick');
+      expect(offlineCtxMock.mock.calls.length).toBe(initialCallCount + 1);
 
       clearSampleCache();
 
       // After clear, OfflineAudioContext should be called again (not returning cached)
       const buf = await getSample(ctx, 'kick');
       expect(buf).toBeTruthy();
+      expect(offlineCtxMock.mock.calls.length).toBe(initialCallCount + 2);
     });
 
     it('clears user samples too', async () => {

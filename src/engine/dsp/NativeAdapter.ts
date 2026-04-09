@@ -332,7 +332,7 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
     this._preDelay = preDelayTime;
 
     // Attempt async upgrade to AudioWorklet
-    void this._upgradeToWorklet(ctx, scriptFallback, mix, preDelayNode, roomSize, options);
+    void this._upgradeToWorklet(ctx, scriptFallback, mix, preDelayNode);
   }
 
   private async _upgradeToWorklet(
@@ -340,27 +340,27 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
     scriptNode: ScriptProcessorNode,
     mix: DryWetMix,
     preDelayNode: DelayNode,
-    roomSize: number,
-    options?: IDSPReverbOptions,
   ): Promise<void> {
     try {
+      // Derive roomSize from current _decay (may have changed since constructor)
+      const currentRoomSize = Math.min(1, this._decay / 10);
       const result = await createDspNode(
         ctx,
         '/reverb-worklet-processor.js',
         'reverb-worklet-processor',
         2,
-        { roomSize, damping: 0.5, wet: 1, dry: 0 },
-        BUFFER_SIZE,
-        scriptNode.onaudioprocess!,
+        { roomSize: currentRoomSize, damping: 0.5, wet: 1, dry: 0 },
       );
 
-      if (result.isWorklet) {
+      if (result) {
         // Swap: disconnect ScriptProcessor, connect AudioWorklet
         preDelayNode.disconnect(scriptNode);
         scriptNode.disconnect();
         preDelayNode.connect(result.node);
         result.node.connect(mix.wetInput);
         this._dspNode = result;
+        // Send current params to worklet in case decay changed during load
+        result.port?.postMessage({ type: 'roomSize', value: currentRoomSize });
       }
     } catch {
       // Keep ScriptProcessorNode fallback — already connected

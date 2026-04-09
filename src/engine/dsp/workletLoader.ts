@@ -10,18 +10,22 @@ import { createDebugLogger } from '../../utils/debugLogger';
 
 const log = createDebugLogger('dsp:worklet-loader');
 
-const registeredWorklets = new Set<string>();
+const registeredWorklets = new WeakMap<AudioContext, Set<string>>();
 
 /**
  * Ensure a worklet module is registered on the given AudioContext.
  * No-ops if already registered for this context + URL combination.
  */
 async function ensureWorkletRegistered(ctx: AudioContext, url: string): Promise<boolean> {
-  const key = `${ctx.sampleRate}:${url}`;
-  if (registeredWorklets.has(key)) return true;
+  let contextSet = registeredWorklets.get(ctx);
+  if (contextSet?.has(url)) return true;
   try {
     await ctx.audioWorklet.addModule(url);
-    registeredWorklets.add(key);
+    if (!contextSet) {
+      contextSet = new Set();
+      registeredWorklets.set(ctx, contextSet);
+    }
+    contextSet.add(url);
     return true;
   } catch (err) {
     log.warn(`Failed to register worklet ${url}:`, err);
@@ -39,15 +43,14 @@ export interface DspNodeResult {
 }
 
 /**
- * Create a DSP processing node, preferring AudioWorklet with ScriptProcessor fallback.
+ * Try to create an AudioWorkletNode. Returns null if AudioWorklet is
+ * unavailable so callers can keep their existing ScriptProcessorNode.
  *
  * @param ctx - AudioContext
  * @param workletUrl - URL of the worklet processor file (e.g., '/reverb-worklet-processor.js')
  * @param processorName - Name registered via registerProcessor() in the worklet file
  * @param channels - Number of input/output channels
  * @param processorOptions - Options passed to the AudioWorkletProcessor constructor
- * @param fallbackBufferSize - Buffer size for ScriptProcessorNode fallback
- * @param fallbackProcess - Processing callback for ScriptProcessorNode fallback
  */
 export async function createDspNode(
   ctx: AudioContext,
@@ -55,9 +58,7 @@ export async function createDspNode(
   processorName: string,
   channels: number,
   processorOptions: Record<string, unknown>,
-  fallbackBufferSize: number,
-  fallbackProcess: (e: AudioProcessingEvent) => void,
-): Promise<DspNodeResult> {
+): Promise<DspNodeResult | null> {
   // Try AudioWorklet first
   if (typeof AudioWorkletNode !== 'undefined' && ctx.audioWorklet) {
     const registered = await ensureWorkletRegistered(ctx, workletUrl);
@@ -67,6 +68,8 @@ export async function createDspNode(
           numberOfInputs: 1,
           numberOfOutputs: 1,
           channelCount: channels,
+          outputChannelCount: [channels],
+          channelCountMode: 'explicit',
           processorOptions: { sampleRate: ctx.sampleRate, ...processorOptions },
         });
         log.info(`Created AudioWorkletNode: ${processorName}`);
@@ -77,9 +80,7 @@ export async function createDspNode(
     }
   }
 
-  // Fallback to ScriptProcessorNode
-  log.info(`Using ScriptProcessorNode fallback for ${processorName}`);
-  const scriptNode = ctx.createScriptProcessor(fallbackBufferSize, channels, channels);
-  scriptNode.onaudioprocess = fallbackProcess;
-  return { node: scriptNode, port: null, isWorklet: false };
+  // AudioWorklet unavailable — return null so callers can keep their existing fallback
+  log.info(`AudioWorklet unavailable for ${processorName}, caller should use existing fallback`);
+  return null;
 }

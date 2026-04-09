@@ -1490,8 +1490,11 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
 /** Prepend style tags to a raw prompt for text2music API requests.
  *  Used by both generateText2Music and regenerateText2MusicClip. */
 export function prependStyleTags(prompt: string, styleTags?: string[]): string {
-  if (!styleTags?.length) return prompt;
-  return `${styleTags.join(', ')}. ${prompt}`;
+  const trimmedPrompt = prompt.trim();
+  const normalized = (styleTags ?? []).map((t) => t.trim()).filter(Boolean);
+  if (normalized.length === 0) return trimmedPrompt;
+  if (!trimmedPrompt) return normalized.join(', ');
+  return `${normalized.join(', ')}. ${trimmedPrompt}`;
 }
 
 function buildGenerationPanelPrompt(prompt: string, styleTags: string[]) {

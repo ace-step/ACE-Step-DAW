@@ -83,8 +83,6 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const setThinking = useGenerationStore((s) => s.setGenerationThinking);
   const seedStr = useGenerationStore((s) => s.generationForm.seed);
   const setSeedStr = useGenerationStore((s) => s.setGenerationSeed);
-  const temperature = useGenerationStore((s) => s.generationForm.temperature);
-  const setTemperature = useGenerationStore((s) => s.setGenerationTemperature);
   const styleTags = useGenerationStore((s) => s.generationForm.styleTags);
   const toggleStyleTag = useGenerationStore((s) => s.toggleGenerationStyleTag);
   // Stable fallback seed — only generated once per component mount, not on every render
@@ -207,12 +205,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
       if (p.stemCount !== undefined) setStemCount(p.stemCount);
       if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
-      // Hydrate advanced controls from clip to avoid double-prepend.
-      // Only treat guidanceScale as temperature if it's within the valid 0–1 range
-      // to avoid clamping legacy clips that have true guidanceScale values (0–20).
-      if (p.guidanceScale !== undefined && p.guidanceScale >= 0 && p.guidanceScale <= 1) {
-        setTemperature(p.guidanceScale);
-      }
+      // Hydrate style tags from clip to avoid double-prepend
       useGenerationStore.getState().setGenerationStyleTags(p.styleTags ?? []);
     } else {
       // Backward compatibility: hydrate from basic clip fields
@@ -262,7 +255,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           stemCount,
           useProjectMeta,
           inferenceSteps: project?.generationDefaults?.inferenceSteps,
-          guidanceScale: temperature,
+          guidanceScale: project?.generationDefaults?.guidanceScale,
           shift: project?.generationDefaults?.shift,
           styleTags: styleTags.length > 0 ? [...styleTags] : undefined,
         },
@@ -286,7 +279,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       splitToStems,
       stemCount,
       inferenceSteps: project?.generationDefaults?.inferenceSteps,
-      guidanceScale: temperature,
+      guidanceScale: project?.generationDefaults?.guidanceScale,
       shift: project?.generationDefaults?.shift,
       thinking,
       seed: useRandomSeed ? undefined : seed,
@@ -300,7 +293,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId, temperature, styleTags]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId, styleTags]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -546,33 +539,6 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
               />
               <span className="text-[9px] text-zinc-500">Rand</span>
             </label>
-          </div>
-        </div>
-
-        {/* Temperature */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-medium uppercase text-zinc-500">
-            Temperature
-          </label>
-          <div className="flex items-center gap-1.5">
-            <input
-              type="range"
-              data-testid="temperature-slider"
-              min={0}
-              max={1}
-              step={0.1}
-              value={temperature}
-              onChange={(e) => setTemperature(Number(e.target.value))}
-              className="h-1.5 w-full cursor-pointer appearance-none rounded bg-[#444] accent-indigo-500"
-              disabled={isDisabled}
-              title="Lower = predictable, Higher = creative"
-            />
-            <span
-              data-testid="temperature-value"
-              className="shrink-0 w-7 text-right text-[10px] font-mono text-zinc-400"
-            >
-              {temperature.toFixed(1)}
-            </span>
           </div>
         </div>
 

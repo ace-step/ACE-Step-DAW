@@ -31,7 +31,7 @@ function renderForm() {
   return render(<FullSongForm onFooterChange={mockOnFooterChange} />);
 }
 
-describe('Generation Advanced Controls', () => {
+describe('Generation Advanced Controls — Style Tags', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -44,91 +44,53 @@ describe('Generation Advanced Controls', () => {
     useProjectStore.getState().addTrack('drums');
   });
 
-  describe('Temperature Control', () => {
-    it('renders a temperature slider with default value 0.7', () => {
-      renderForm();
-      const slider = screen.getByTestId('temperature-slider');
-      expect(slider).toBeInTheDocument();
-      expect(slider).toHaveValue('0.7');
-    });
-
-    it('updates generationStore temperature when slider changes', () => {
-      renderForm();
-      const slider = screen.getByTestId('temperature-slider');
-      fireEvent.change(slider, { target: { value: '0.3' } });
-      expect(useGenerationStore.getState().generationForm.temperature).toBe(0.3);
-    });
-
-    it('displays current temperature value as text', () => {
-      renderForm();
-      expect(screen.getByTestId('temperature-value')).toHaveTextContent('0.7');
-    });
-
-    it('clamps temperature to valid range 0-1', () => {
-      renderForm();
-      const slider = screen.getByTestId('temperature-slider');
-      fireEvent.change(slider, { target: { value: '1.5' } });
-      expect(useGenerationStore.getState().generationForm.temperature).toBeLessThanOrEqual(1);
-    });
-
-    it('hydrates temperature from store on mount', () => {
-      useGenerationStore.getState().setGenerationTemperature(0.4);
-      renderForm();
-      const slider = screen.getByTestId('temperature-slider');
-      expect(slider).toHaveValue('0.4');
-    });
+  it('renders style tags section with predefined tags', () => {
+    renderForm();
+    const section = screen.getByTestId('style-tags-section');
+    expect(section).toBeInTheDocument();
   });
 
-  describe('Style Tags Picker', () => {
-    it('renders style tags section with predefined tags', () => {
-      renderForm();
-      const section = screen.getByTestId('style-tags-section');
-      expect(section).toBeInTheDocument();
-    });
+  it('can toggle a style tag on', () => {
+    renderForm();
+    const tag = screen.getByTestId('style-tag-lo-fi');
+    fireEvent.click(tag);
+    expect(useGenerationStore.getState().generationForm.styleTags).toContain('lo-fi');
+  });
 
-    it('can toggle a style tag on', () => {
-      renderForm();
-      const tag = screen.getByTestId('style-tag-lo-fi');
-      fireEvent.click(tag);
-      expect(useGenerationStore.getState().generationForm.styleTags).toContain('lo-fi');
-    });
+  it('can toggle a style tag off', () => {
+    useGenerationStore.getState().setGenerationStyleTags(['lo-fi']);
+    renderForm();
+    const tag = screen.getByTestId('style-tag-lo-fi');
+    fireEvent.click(tag);
+    expect(useGenerationStore.getState().generationForm.styleTags).not.toContain('lo-fi');
+  });
 
-    it('can toggle a style tag off', () => {
-      useGenerationStore.getState().setGenerationStyleTags(['lo-fi']);
-      renderForm();
-      const tag = screen.getByTestId('style-tag-lo-fi');
-      fireEvent.click(tag);
-      expect(useGenerationStore.getState().generationForm.styleTags).not.toContain('lo-fi');
-    });
+  it('shows selected tags with active styling and aria-pressed', () => {
+    useGenerationStore.getState().setGenerationStyleTags(['ambient']);
+    renderForm();
+    const tag = screen.getByTestId('style-tag-ambient');
+    expect(tag.className).toContain('bg-indigo-600');
+    expect(tag).toHaveAttribute('aria-pressed', 'true');
+  });
 
-    it('shows selected tags with active styling and aria-pressed', () => {
-      useGenerationStore.getState().setGenerationStyleTags(['ambient']);
-      renderForm();
-      const tag = screen.getByTestId('style-tag-ambient');
-      expect(tag.className).toContain('bg-indigo-600');
-      expect(tag).toHaveAttribute('aria-pressed', 'true');
-    });
+  it('unselected tags have aria-pressed false', () => {
+    renderForm();
+    const tag = screen.getByTestId('style-tag-ambient');
+    expect(tag).toHaveAttribute('aria-pressed', 'false');
+  });
 
-    it('unselected tags have aria-pressed false', () => {
-      renderForm();
-      const tag = screen.getByTestId('style-tag-ambient');
-      expect(tag).toHaveAttribute('aria-pressed', 'false');
-    });
-
-    it('limits to MAX 6 style tags', () => {
-      useGenerationStore.getState().setGenerationStyleTags([
-        'lo-fi', 'ambient', 'jazz', 'house', 'techno', 'trap',
-      ]);
-      renderForm();
-      const tag = screen.getByTestId('style-tag-cinematic');
-      fireEvent.click(tag);
-      expect(useGenerationStore.getState().generationForm.styleTags).toHaveLength(6);
-    });
+  it('limits to MAX 6 style tags', () => {
+    useGenerationStore.getState().setGenerationStyleTags([
+      'lo-fi', 'ambient', 'jazz', 'house', 'techno', 'trap',
+    ]);
+    renderForm();
+    const tag = screen.getByTestId('style-tag-cinematic');
+    fireEvent.click(tag);
+    expect(useGenerationStore.getState().generationForm.styleTags).toHaveLength(6);
   });
 });
 
 describe('prependStyleTags helper', () => {
-  // Import inline to avoid module-level mock conflicts
   it('returns prompt unchanged when no tags', async () => {
     const { prependStyleTags } = await import('../../src/services/generationPipeline');
     expect(prependStyleTags('hello world')).toBe('hello world');
@@ -146,5 +108,17 @@ describe('prependStyleTags helper', () => {
     const { prependStyleTags } = await import('../../src/services/generationPipeline');
     expect(prependStyleTags('my prompt', ['jazz']))
       .toBe('jazz. my prompt');
+  });
+
+  it('trims whitespace from prompt and tags', async () => {
+    const { prependStyleTags } = await import('../../src/services/generationPipeline');
+    expect(prependStyleTags('  padded prompt  ', ['  lo-fi  ', '  ambient  ']))
+      .toBe('lo-fi, ambient. padded prompt');
+  });
+
+  it('filters out empty tags', async () => {
+    const { prependStyleTags } = await import('../../src/services/generationPipeline');
+    expect(prependStyleTags('prompt', ['lo-fi', '', '  ', 'jazz']))
+      .toBe('lo-fi, jazz. prompt');
   });
 });

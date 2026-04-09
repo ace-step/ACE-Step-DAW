@@ -6,6 +6,9 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TIMELINE_ZOOM_LEVELS } from '../../utils/timelineZoom';
 import { SaveStatusIndicator } from './SaveStatusIndicator';
+import { AudioHealthIndicator } from './AudioHealthIndicator';
+import { AudioHealthPanel } from './AudioHealthPanel';
+import { useAudioHealth } from '../../hooks/useAudioHealth';
 import type { SaveStatus } from '../../hooks/useAutoSave';
 
 const HEALTH_POLL_INTERVAL_MS = 10_000;
@@ -86,6 +89,7 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
   const normalizedSourceCodeUrl = sourceCodeUrl.replace(/\/$/, '');
   const licenseUrl = import.meta.env.VITE_LICENSE_URL?.trim() || `${normalizedSourceCodeUrl}/blob/main/LICENSE`;
   const copyrightNotice = import.meta.env.VITE_COPYRIGHT_NOTICE?.trim() || DEFAULT_COPYRIGHT_NOTICE;
+  const audioHealth = useAudioHealth();
   const zoomIndex = TIMELINE_ZOOM_LEVELS.reduce((nearestIndex, level, index) => {
     const nearestDistance = Math.abs(TIMELINE_ZOOM_LEVELS[nearestIndex] - pixelsPerSecond);
     const currentDistance = Math.abs(level - pixelsPerSecond);
@@ -168,6 +172,22 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
           {saveStatus && (
             <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
           )}
+          <div className="hidden md:flex items-center gap-1.5 text-daw-text-muted relative">
+            <AudioHealthIndicator
+              snapshot={audioHealth.snapshot}
+              status={audioHealth.status}
+              onClick={audioHealth.togglePanel}
+            />
+            <AudioHealthPanel
+              open={audioHealth.panelOpen}
+              onClose={audioHealth.togglePanel}
+              snapshot={audioHealth.snapshot}
+              status={audioHealth.status}
+              devices={audioHealth.devices}
+              xrunCount={audioHealth.xrunCount}
+              recentClipCount={audioHealth.recentClipCount}
+            />
+          </div>
           <div className="hidden md:flex items-center gap-1.5 text-daw-text-muted">
             <button
               type="button"

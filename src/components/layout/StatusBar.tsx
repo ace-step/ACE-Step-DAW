@@ -112,6 +112,17 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
           className={`flex h-6 items-center gap-3 px-3 ${hasActiveJobs ? 'border-t border-white/4' : ''}`}
           data-testid="status-bar-meta-row"
         >
+          <span
+            className="inline-flex items-center gap-1 text-daw-text-muted"
+            data-testid="status-connection"
+            title={connected ? 'Backend server connected' : 'Backend server disconnected'}
+          >
+            <span
+              className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${connected ? 'bg-emerald-500' : 'bg-zinc-500'}`}
+              data-testid="connection-dot"
+            />
+            <span>{connected ? 'Online' : 'Offline'}</span>
+          </span>
           <span className="hidden lg:inline-flex items-center gap-3 truncate text-daw-text-muted" data-testid="status-model-name">
             {t2mName ? (
               <span className="inline-flex items-center gap-1">

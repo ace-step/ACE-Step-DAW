@@ -250,4 +250,28 @@ describe('TrackHeader layout improvements (#546)', () => {
       expect(fader).toBeInTheDocument();
     });
   });
+
+  describe('track name truncation fix', () => {
+    it('name wrapper has min-w-[60px] for adequate text display', () => {
+      render(<TrackHeader track={makeTrack({ laneHeight: 80, displayName: 'Percussion' })} {...defaultProps} />);
+      const row1 = screen.getByTestId('track-header-row1');
+      const nameWrapper = row1.querySelector('.flex-1.min-w-\\[60px\\]');
+      expect(nameWrapper).not.toBeNull();
+    });
+
+    it('primary actions container is flex-shrink-0 to prevent button compression', () => {
+      render(<TrackHeader track={makeTrack({ laneHeight: 80 })} {...defaultProps} />);
+      const row1 = screen.getByTestId('track-header-row1');
+      const actionsContainer = row1.querySelector('[data-primary-actions]');
+      expect(actionsContainer).not.toBeNull();
+      expect(actionsContainer!.className).toContain('shrink-0');
+    });
+
+    it('displays full track name in title attribute for tooltip access', () => {
+      render(<TrackHeader track={makeTrack({ laneHeight: 80, displayName: 'Percussion Long Name' })} {...defaultProps} />);
+      const nameSpan = screen.getByTitle('Percussion Long Name');
+      expect(nameSpan).toBeInTheDocument();
+      expect(nameSpan.textContent).toContain('Percussion Long Name');
+    });
+  });
 });

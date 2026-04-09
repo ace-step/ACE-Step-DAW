@@ -481,10 +481,10 @@ export const TrackHeader = React.memo(function TrackHeader({
       {/* Track name element (shared between layouts) */}
       {isTwoRow ? (
         /* Two-row layout for non-compact tracks (laneHeight >= 60) */
-        <div className="flex-1 min-w-[48px] flex flex-col gap-1 py-1">
+        <div className="flex-1 min-w-[60px] flex flex-col gap-1 py-1">
           {/* Row 1: drag handle + instrument icon + name + M/S/Arm */}
           <div data-testid="track-header-row1" className="flex items-center gap-1 w-full">
-            <div className="flex-1 min-w-[48px]">
+            <div className="flex-1 min-w-[60px]">
               {isEditing ? (
                 <input
                   ref={inputRef}
@@ -514,7 +514,7 @@ export const TrackHeader = React.memo(function TrackHeader({
             {track.trackType !== 'video' ? (
             <div
               data-primary-actions
-              className="flex items-center gap-1"
+              className="flex items-center gap-1 shrink-0"
             >
               <button
                 onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}

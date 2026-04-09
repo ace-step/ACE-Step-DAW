@@ -152,8 +152,10 @@ export function CanvasClipWaveform({
     if (canvas.width !== backingWidth) canvas.width = backingWidth;
     if (canvas.height !== backingHeight) canvas.height = backingHeight;
 
-    // Draw in backing-store pixel space for crisp rendering
+    // Draw in backing-store pixel space for crisp, pixel-perfect rendering.
+    // Disable image smoothing so fillRect edges are razor-sharp.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, backingWidth, backingHeight);
 
     drawWaveform(ctx, {
@@ -188,6 +190,7 @@ export function CanvasClipWaveform({
         style={{
           width: contentWidth,
           height: '100%',
+          imageRendering: 'pixelated',
         }}
       />
     </div>

@@ -162,28 +162,28 @@ export function drawWaveform(
   // Center divider between L and R
   drawCenterDivider(ctx, waveformLayout.leftPx, waveformLayout.widthPx, halfHeight, color);
 
-  // Per-pixel-column vertical bars for each channel
+  // Per-pixel-column vertical bars — 1 bar = 1 backing-store pixel.
+  // Use integer coordinates exclusively (|0 truncation) for pixel-perfect edges.
   ctx.fillStyle = color;
-  const barWidth = waveformLayout.widthPx / columnCount;
-  const drawWidth = Math.max(1, Math.ceil(barWidth));
+  const left0 = waveformLayout.leftPx | 0;
 
   for (let i = 0; i < columnCount; i++) {
-    const x = Math.round(waveformLayout.leftPx + i * barWidth);
+    const x = left0 + i;
 
     // Left channel (top half)
-    const lTop = leftCenterY - leftData.maxArr[i] * amplitude;
-    const lBot = leftCenterY - leftData.minArr[i] * amplitude;
+    const lTop = (leftCenterY - leftData.maxArr[i] * amplitude) | 0;
+    const lBot = (leftCenterY - leftData.minArr[i] * amplitude) | 0;
     const lH = lBot - lTop;
-    if (lH >= 0.5) {
-      ctx.fillRect(x, Math.round(lTop), drawWidth, Math.max(1, Math.round(lH)));
+    if (lH > 0) {
+      ctx.fillRect(x, lTop, 1, lH);
     }
 
     // Right channel (bottom half)
-    const rTop = rightCenterY - rightData.maxArr[i] * amplitude;
-    const rBot = rightCenterY - rightData.minArr[i] * amplitude;
+    const rTop = (rightCenterY - rightData.maxArr[i] * amplitude) | 0;
+    const rBot = (rightCenterY - rightData.minArr[i] * amplitude) | 0;
     const rH = rBot - rTop;
-    if (rH >= 0.5) {
-      ctx.fillRect(x, Math.round(rTop), drawWidth, Math.max(1, Math.round(rH)));
+    if (rH > 0) {
+      ctx.fillRect(x, rTop, 1, rH);
     }
   }
 

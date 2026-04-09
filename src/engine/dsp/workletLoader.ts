@@ -2,26 +2,32 @@
  * AudioWorklet loader with ScriptProcessorNode fallback.
  *
  * Tries to register and create an AudioWorkletNode. If AudioWorklet is
- * unavailable (older Safari, insecure context) or fails to load, falls
- * back to the deprecated ScriptProcessorNode.
+ * unavailable (older Safari, insecure context) or fails to load, returns
+ * a "not available" result so the caller keeps its existing fallback node.
  */
 
 import { createDebugLogger } from '../../utils/debugLogger';
 
 const log = createDebugLogger('dsp:worklet-loader');
 
-const registeredWorklets = new Set<string>();
+const registeredWorklets = new WeakMap<AudioContext, Set<string>>();
 
 /**
  * Ensure a worklet module is registered on the given AudioContext.
  * No-ops if already registered for this context + URL combination.
  */
 async function ensureWorkletRegistered(ctx: AudioContext, url: string): Promise<boolean> {
-  const key = `${ctx.sampleRate}:${url}`;
-  if (registeredWorklets.has(key)) return true;
+  let contextWorklets = registeredWorklets.get(ctx);
+  if (!contextWorklets) {
+    contextWorklets = new Set<string>();
+    registeredWorklets.set(ctx, contextWorklets);
+  }
+
+  if (contextWorklets.has(url)) return true;
+
   try {
     await ctx.audioWorklet.addModule(url);
-    registeredWorklets.add(key);
+    contextWorklets.add(url);
     return true;
   } catch (err) {
     log.warn(`Failed to register worklet ${url}:`, err);
@@ -29,36 +35,32 @@ async function ensureWorkletRegistered(ctx: AudioContext, url: string): Promise<
   }
 }
 
-export interface DspNodeResult {
-  /** The audio node (AudioWorkletNode or ScriptProcessorNode). */
-  node: AudioWorkletNode | ScriptProcessorNode;
-  /** MessagePort for sending parameter updates (null for ScriptProcessor fallback). */
+export interface WorkletNodeResult {
+  /** The AudioWorkletNode, or null if worklet is unavailable. */
+  node: AudioWorkletNode | null;
+  /** MessagePort for sending parameter updates (null if worklet unavailable). */
   port: MessagePort | null;
   /** Whether this is using the modern AudioWorklet path. */
   isWorklet: boolean;
 }
 
 /**
- * Create a DSP processing node, preferring AudioWorklet with ScriptProcessor fallback.
+ * Try to create an AudioWorkletNode. Returns null node if unavailable.
+ * Callers are responsible for keeping their own ScriptProcessorNode fallback.
  *
  * @param ctx - AudioContext
  * @param workletUrl - URL of the worklet processor file (e.g., '/reverb-worklet-processor.js')
  * @param processorName - Name registered via registerProcessor() in the worklet file
  * @param channels - Number of input/output channels
  * @param processorOptions - Options passed to the AudioWorkletProcessor constructor
- * @param fallbackBufferSize - Buffer size for ScriptProcessorNode fallback
- * @param fallbackProcess - Processing callback for ScriptProcessorNode fallback
  */
-export async function createDspNode(
+export async function tryCreateWorkletNode(
   ctx: AudioContext,
   workletUrl: string,
   processorName: string,
   channels: number,
   processorOptions: Record<string, unknown>,
-  fallbackBufferSize: number,
-  fallbackProcess: (e: AudioProcessingEvent) => void,
-): Promise<DspNodeResult> {
-  // Try AudioWorklet first
+): Promise<WorkletNodeResult> {
   if (typeof AudioWorkletNode !== 'undefined' && ctx.audioWorklet) {
     const registered = await ensureWorkletRegistered(ctx, workletUrl);
     if (registered) {
@@ -67,6 +69,8 @@ export async function createDspNode(
           numberOfInputs: 1,
           numberOfOutputs: 1,
           channelCount: channels,
+          channelCountMode: 'explicit',
+          outputChannelCount: [channels],
           processorOptions: { sampleRate: ctx.sampleRate, ...processorOptions },
         });
         log.info(`Created AudioWorkletNode: ${processorName}`);
@@ -77,9 +81,5 @@ export async function createDspNode(
     }
   }
 
-  // Fallback to ScriptProcessorNode
-  log.info(`Using ScriptProcessorNode fallback for ${processorName}`);
-  const scriptNode = ctx.createScriptProcessor(fallbackBufferSize, channels, channels);
-  scriptNode.onaudioprocess = fallbackProcess;
-  return { node: scriptNode, port: null, isWorklet: false };
+  return { node: null, port: null, isWorklet: false };
 }

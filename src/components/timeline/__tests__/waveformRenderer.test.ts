@@ -3,9 +3,11 @@ import {
   getVisiblePeakSlice,
   getMinMaxForColumn,
   precomputeColumnMinMax,
+  precomputeMergedMonoMinMax,
   drawCenterDivider,
   drawWaveform,
   drawMidiThumbnail,
+  computeBlendFactor,
 } from '../waveformRenderer';
 
 /**
@@ -207,7 +209,7 @@ describe('drawWaveform', () => {
     expect(ctx.save).not.toHaveBeenCalled();
   });
 
-  it('draws complete waveform with save/restore', () => {
+  it('draws mono merged waveform with per-pixel fillRect bars', () => {
     drawWaveform(ctx, {
       peaks: generatePeaks(100),
       audioDuration: 5,
@@ -219,10 +221,10 @@ describe('drawWaveform', () => {
     });
     expect(ctx.save).toHaveBeenCalledTimes(1);
     expect(ctx.restore).toHaveBeenCalledTimes(1);
-    // 1 center divider + 2 channel fills + 2 channel outline strokes = 5 beginPath
-    expect(ctx.beginPath.mock.calls.length).toBeGreaterThanOrEqual(3);
-    expect(ctx.fill.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(ctx.stroke.mock.calls.length).toBeGreaterThanOrEqual(1);
+    // Per-pixel-column min-max bars: one fillRect per column (200 columns for 200px width)
+    expect(ctx.fillRect.mock.calls.length).toBe(200);
+    // No path-based fill — we use fillRect instead
+    expect(ctx.fill).not.toHaveBeenCalled();
   });
 
   it('scales amplitude by trackVolume', () => {
@@ -252,8 +254,55 @@ describe('drawWaveform', () => {
       trackVolume: 0.5,
     });
 
-    expect(ctx1.fill.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(ctx2.fill.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // Both render fillRect bars
+    expect(ctx1.fillRect.mock.calls.length).toBe(200);
+    expect(ctx2.fillRect.mock.calls.length).toBe(200);
+  });
+});
+
+// ---------- precomputeMergedMonoMinMax ----------
+
+describe('precomputeMergedMonoMinMax', () => {
+  it('merges L/R by taking max of maxes and min of mins', () => {
+    // 2 logical peaks, stride-4: [Lmax, Lmin, Rmax, Rmin, ...]
+    const peaks = [
+      0.8, -0.3, 0.5, -0.9,  // peak 0: L=(0.8,-0.3), R=(0.5,-0.9)
+      0.4, -0.6, 0.7, -0.2,  // peak 1: L=(0.4,-0.6), R=(0.7,-0.2)
+    ];
+    const peakSlice = { startPeakIdx: 0, numBars: 2 };
+    const result = precomputeMergedMonoMinMax(peaks, peakSlice, 2);
+
+    // Column 0 → peak 0: max(0.8, 0.5)=0.8, min(-0.3, -0.9)=-0.9
+    expect(result.maxArr[0]).toBe(0.8);
+    expect(result.minArr[0]).toBe(-0.9);
+
+    // Column 1 → peak 1: max(0.4, 0.7)=0.7, min(-0.6, -0.2)=-0.6
+    expect(result.maxArr[1]).toBe(0.7);
+    expect(result.minArr[1]).toBe(-0.6);
+  });
+});
+
+// ---------- computeBlendFactor ----------
+
+describe('computeBlendFactor', () => {
+  it('returns 0 when samplesPerPixel >= BLEND_START (16)', () => {
+    expect(computeBlendFactor(16)).toBe(0);
+    expect(computeBlendFactor(100)).toBe(0);
+  });
+
+  it('returns 1 when samplesPerPixel <= BLEND_END (4)', () => {
+    expect(computeBlendFactor(4)).toBe(1);
+    expect(computeBlendFactor(1)).toBe(1);
+  });
+
+  it('returns 0.5 at midpoint (10)', () => {
+    expect(computeBlendFactor(10)).toBe(0.5);
+  });
+
+  it('returns value between 0 and 1 in transition zone', () => {
+    const blend = computeBlendFactor(8);
+    expect(blend).toBeGreaterThan(0);
+    expect(blend).toBeLessThan(1);
   });
 });
 

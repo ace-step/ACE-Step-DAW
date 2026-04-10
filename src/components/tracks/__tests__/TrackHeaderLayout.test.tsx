@@ -78,13 +78,13 @@ describe('TrackHeader layout improvements (#546)', () => {
     it('mute button is red when active', () => {
       render(<TrackHeader track={makeTrack({ muted: true })} {...defaultProps} />);
       const muteBtn = screen.getByLabelText('Mute Vocals');
-      expect(muteBtn.className).toContain('bg-red-500');
+      expect(muteBtn.className).toContain('text-red-400');
     });
 
     it('solo button is amber when active', () => {
       render(<TrackHeader track={makeTrack({ soloed: true })} {...defaultProps} />);
       const soloBtn = screen.getByLabelText('Solo Vocals');
-      expect(soloBtn.className).toContain('bg-amber-400');
+      expect(soloBtn.className).toContain('text-amber-400');
     });
 
     it('M/S/FX buttons have no SVG icons', () => {
@@ -259,12 +259,12 @@ describe('TrackHeader layout improvements (#546)', () => {
       expect(nameWrapper).not.toBeNull();
     });
 
-    it('primary actions container is flex-shrink-0 to prevent button compression', () => {
+    it('primary actions container uses overflow-hidden to prevent button overflow', () => {
       render(<TrackHeader track={makeTrack({ laneHeight: 80 })} {...defaultProps} />);
       const row1 = screen.getByTestId('track-header-row1');
       const actionsContainer = row1.querySelector('[data-primary-actions]');
       expect(actionsContainer).not.toBeNull();
-      expect(actionsContainer!.className).toContain('shrink-0');
+      expect(actionsContainer!.className).toContain('overflow-hidden');
     });
 
     it('displays full track name in title attribute for tooltip access', () => {

@@ -252,6 +252,17 @@ function ChunkedWaveform({
 }: ChunkedWaveformProps) {
   const totalChunks = Math.ceil(totalWidth / CHUNK_CSS_WIDTH);
 
+  // Query mipmap ONCE for the entire clip at the parent level.
+  // All chunks share this data — eliminates per-chunk alignment drift.
+  const fullMipmapData = useMemo(() => {
+    if (!mipmapReady || !audioKey) return null;
+    const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
+    const startSample = Math.round(audioOffset * sampleRate);
+    const endSample = Math.round((audioOffset + clipDuration) * sampleRate);
+    const numColumns = Math.max(1, Math.floor(totalWidth));
+    return queryPeaksSync(audioKey, startSample, endSample, numColumns);
+  }, [mipmapReady, audioKey, audioOffset, clipDuration, totalWidth]);
+
   const chunks = useMemo(() => {
     const result: Array<{ idx: number; left: number; w: number }> = [];
     for (let i = 0; i < totalChunks; i++) {
@@ -280,7 +291,7 @@ function ChunkedWaveform({
           chunkWidth={w}
           color={color}
           trackVolume={trackVolume}
-          mipmapReady={mipmapReady}
+          fullMipmapData={fullMipmapData}
         />
       ))}
     </div>
@@ -303,13 +314,14 @@ interface ChunkCanvasProps {
   chunkWidth: number;
   color: string;
   trackVolume: number;
-  mipmapReady: boolean;
+  /** Full clip mipmap data (stride-6, totalWidth columns), queried at parent level. */
+  fullMipmapData: Float32Array | null;
 }
 
 function ChunkCanvas({
   peaks, audioKey, audioDuration, audioOffset, clipDuration,
   contentOffset, timeStretchRate, stretchMode,
-  totalWidth, chunkLeft, chunkWidth, color, trackVolume, mipmapReady,
+  totalWidth, chunkLeft, chunkWidth, color, trackVolume, fullMipmapData,
 }: ChunkCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -330,20 +342,18 @@ function ChunkCanvas({
     ctx.clearRect(0, 0, bw, bh);
     ctx.scale(dpr, dpr);
 
-    // Try synchronous mipmap query for this chunk's time range
-    if (mipmapReady && audioKey) {
-      const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
-      // Map chunk pixel range to audio time range
-      const pxPerSec = totalWidth / clipDuration;
-      const chunkStartSec = audioOffset + chunkLeft / pxPerSec;
-      const chunkEndSec = audioOffset + (chunkLeft + chunkWidth) / pxPerSec;
-      const startSample = Math.max(0, Math.round(chunkStartSec * sampleRate));
-      const endSample = Math.round(chunkEndSec * sampleRate);
-      const numColumns = Math.max(1, Math.floor(chunkWidth));
-      const peakData = queryPeaksSync(audioKey, startSample, endSample, numColumns);
-      if (peakData && peakData.length > 0) {
+    // Use full mipmap data — slice this chunk's columns from the parent array
+    if (fullMipmapData && fullMipmapData.length > 0) {
+      const STRIDE = 6;
+      const totalColumns = Math.floor(fullMipmapData.length / STRIDE);
+      // Map chunk pixel range to column range in the full data
+      const colStart = Math.floor((chunkLeft / totalWidth) * totalColumns);
+      const colEnd = Math.min(totalColumns, Math.ceil(((chunkLeft + chunkWidth) / totalWidth) * totalColumns));
+      const sliceLen = colEnd - colStart;
+      if (sliceLen > 0) {
+        const slicedData = fullMipmapData.subarray(colStart * STRIDE, colEnd * STRIDE);
         drawMipmapWaveform(ctx, {
-          peakData, leftPx: 0, width: chunkWidth, height: h, color, opacity: 1, trackVolume,
+          peakData: slicedData, leftPx: 0, width: chunkWidth, height: h, color, opacity: 1, trackVolume,
         });
         return;
       }
@@ -356,7 +366,7 @@ function ChunkCanvas({
       contentOffset, timeStretchRate, stretchMode,
       width: totalWidth, height: h, color, opacity: 1, trackVolume,
     });
-  }, [peaks, audioKey, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, totalWidth, chunkLeft, chunkWidth, color, trackVolume, mipmapReady]);
+  }, [peaks, audioKey, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, totalWidth, chunkLeft, chunkWidth, color, trackVolume, fullMipmapData]);
 
   return (
     <canvas

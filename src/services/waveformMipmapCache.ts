@@ -22,13 +22,16 @@ let wasmInitPromise: Promise<void> | null = null;
 export async function initWaveformWasm(): Promise<void> {
   if (wasmReady) return;
   if (!wasmInitPromise) {
-    // Use absolute path to public/ so it works from both main thread and workers
-    wasmInitPromise = initWasm('/ace_waveform_wasm_bg.wasm')
-      .then(() => { wasmReady = true; })
-      .catch((err) => {
-        console.warn('[waveform] WASM init failed, mipmap rendering disabled:', err);
-        wasmInitPromise = null; // allow retry
-      });
+    wasmInitPromise = (async () => {
+      try {
+        // Use absolute path to public/ so it works from both main thread and workers
+        await initWasm('/ace_waveform_wasm_bg.wasm');
+        wasmReady = true;
+      } catch {
+        // Expected in test/SSR environments where fetch('/...') fails
+        wasmInitPromise = null;
+      }
+    })();
   }
   await wasmInitPromise;
 }
@@ -36,11 +39,15 @@ export async function initWaveformWasm(): Promise<void> {
 /** Load mipmap from IndexedDB into memory cache. */
 export async function loadMipmapIntoCache(audioKey: string): Promise<boolean> {
   if (cache.has(audioKey)) return true;
-  const stored = await get<ArrayBuffer>(`${MIPMAP_KEY_PREFIX}${audioKey}`);
-  if (!stored) return false;
-  cache.set(audioKey, new Uint8Array(stored));
-  evict();
-  return true;
+  try {
+    const stored = await get<ArrayBuffer>(`${MIPMAP_KEY_PREFIX}${audioKey}`);
+    if (!stored) return false;
+    cache.set(audioKey, new Uint8Array(stored));
+    evict();
+    return true;
+  } catch {
+    return false; // IndexedDB unavailable (test/SSR environment)
+  }
 }
 
 /** Store mipmap bytes in memory cache (called after compute). */

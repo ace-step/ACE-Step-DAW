@@ -47,9 +47,11 @@ async function getAudioBuffer(key: string): Promise<AudioBuffer | null> {
 /** Max CSS width for a single canvas. */
 const MAX_SINGLE_CANVAS_CSS = 4000;
 
-// Initialize WASM once at module load
+// Initialize WASM once at module load (skip in test/SSR environments)
 let wasmInitialized = false;
-void initWaveformWasm().then(() => { wasmInitialized = true; }).catch(() => {});
+if (typeof globalThis.fetch === 'function' && typeof WebAssembly !== 'undefined') {
+  initWaveformWasm().then(() => { wasmInitialized = true; }).catch(() => {});
+}
 
 /**
  * DAW-standard waveform component.

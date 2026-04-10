@@ -56,7 +56,13 @@ export function getTimelineVisualDuration(
   viewportWidth: number,
 ) {
   if (pixelsPerSecond <= 0) return totalDuration;
-  return Math.max(totalDuration, viewportWidth / pixelsPerSecond);
+  const viewDuration = viewportWidth / pixelsPerSecond;
+  // When the project already fits within the viewport (zoom out far enough),
+  // don't pad beyond the project — add only a small buffer (10%) for breathing room
+  if (totalDuration > 0 && totalDuration * pixelsPerSecond <= viewportWidth) {
+    return totalDuration * 1.1;
+  }
+  return Math.max(totalDuration, viewDuration);
 }
 
 export function getTimelineMaxScrollLeft(

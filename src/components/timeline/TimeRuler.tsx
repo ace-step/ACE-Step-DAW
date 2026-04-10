@@ -196,11 +196,17 @@ export function TimeRuler() {
 
     if (!hasTempoMap && !hasTsMap) {
       const barDur = getBarDuration(bpm, timeSignature, timeSignatureDenominator);
+      const barPx = barDur * pixelsPerSecond;
+      // Skip bar labels to avoid overlap: show every Nth bar so labels are ≥40px apart
+      const barLabelSkip = barPx >= 40 ? 1 : Math.ceil(40 / barPx);
       const result: { label: string; x: number; isBar: boolean; tsLabel?: string }[] = [];
       for (let bar = 1; bar <= measures; bar++) {
         const barTime = (bar - 1) * barDur;
         if (barTime > visibleDuration) break;
-        result.push({ label: String(bar), x: barTime * pixelsPerSecond, isBar: true });
+        // Only show label for every Nth bar
+        if ((bar - 1) % barLabelSkip === 0) {
+          result.push({ label: String(bar), x: barTime * pixelsPerSecond, isBar: true });
+        }
         if (showBeats) {
           for (let beat = 2; beat <= timeSignature; beat++) {
             const beatTime = barTime + (beat - 1) * beatDur;
@@ -214,10 +220,16 @@ export function TimeRuler() {
 
     const result: { label: string; x: number; isBar: boolean; tsLabel?: string }[] = [];
     let prevTs = '';
+    let lastLabelX = -Infinity;
     for (let bar = 1; bar <= measures; bar++) {
       const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature, timeSignatureDenominator);
       const time = beatToTime(barBeat, tempoMap, bpm);
       if (time > visibleDuration) break;
+      const x = time * pixelsPerSecond;
+
+      // Skip bar labels that would overlap (less than 40px apart)
+      if (x - lastLabelX < 40) continue;
+      lastLabelX = x;
 
       let tsLabel: string | undefined;
       if (hasTsMap) {
@@ -228,7 +240,7 @@ export function TimeRuler() {
           prevTs = label;
         }
       }
-      result.push({ label: String(bar), x: time * pixelsPerSecond, isBar: true, tsLabel });
+      result.push({ label: String(bar), x, isBar: true, tsLabel });
       if (showBeats) {
         const ts = hasTsMap
           ? getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, timeSignatureDenominator)

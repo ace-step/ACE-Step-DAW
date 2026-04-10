@@ -307,10 +307,7 @@ export interface MipmapDrawParams {
 }
 
 /**
- * Draw waveform from mipmap query results — min/max bars + RMS overlay.
- *
- * This is the professional DAW rendering: the outer envelope shows full dynamic range
- * (min-max bars) while the inner RMS overlay shows perceived loudness.
+ * Draw waveform from mipmap query results — per-pixel min/max bars only.
  */
 export function drawMipmapWaveform(
   ctx: CanvasRenderingContext2D,
@@ -329,35 +326,18 @@ export function drawMipmapWaveform(
   const colW = width / numColumns;
 
   ctx.save();
-  ctx.globalAlpha = opacity;
-
-  // Pass 1: Min/Max bars (outer envelope)
-  ctx.fillStyle = color;
   ctx.globalAlpha = opacity * 0.85;
+  ctx.fillStyle = color;
+
   for (let i = 0; i < numColumns; i++) {
     const off = i * MIPMAP_STRIDE;
-    // Mono merge: max(L,R) for max, min(L,R) for min
-    const maxVal = Math.max(peakData[off + 1], peakData[off + 4]); // max_l, max_r
-    const minVal = Math.min(peakData[off], peakData[off + 3]);     // min_l, min_r
+    const maxVal = Math.max(peakData[off + 1], peakData[off + 4]);
+    const minVal = Math.min(peakData[off], peakData[off + 3]);
 
     const x = leftPx + i * colW;
     const yTop = centerY - maxVal * amplitude;
     const yBottom = centerY - minVal * amplitude;
     const barHeight = Math.max(yBottom - yTop, 0.5);
-    ctx.fillRect(x, yTop, Math.max(colW, 1), barHeight);
-  }
-
-  // Pass 2: RMS bars (inner loudness overlay, semi-transparent)
-  ctx.globalAlpha = opacity * 0.55;
-  for (let i = 0; i < numColumns; i++) {
-    const off = i * MIPMAP_STRIDE;
-    // Mono merge RMS: max of L/R RMS
-    const rms = Math.max(peakData[off + 2], peakData[off + 5]); // rms_l, rms_r
-
-    const x = leftPx + i * colW;
-    const yTop = centerY - rms * amplitude;
-    const yBottom = centerY + rms * amplitude;
-    const barHeight = Math.max(yBottom - yTop, 0.3);
     ctx.fillRect(x, yTop, Math.max(colW, 1), barHeight);
   }
 

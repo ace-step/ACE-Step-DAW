@@ -68,11 +68,12 @@ export function CanvasClipWaveform({
   const [hiResPeaks, setHiResPeaks] = useState<number[] | null>(null);
   const hiResReqRef = useRef<string | null>(null);
 
-  // Compute hi-res peaks when pre-computed peaks are insufficient
+  // Compute hi-res peaks when pre-computed peaks are insufficient.
+  // IMPORTANT: immediately clear stale hiResPeaks when contentWidth changes
+  // to prevent drift — the base peaks are stable at any zoom level.
   useEffect(() => {
     if (!peaks || !audioKey || contentWidth <= 0) return;
     const dpr = window.devicePixelRatio || 1;
-    // Target: enough peaks for the clip at full DPR, capped at 16384
     const targetPeaks = Math.min(Math.round(contentWidth * dpr), 16384);
     const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
     if (logicalPeakCount >= targetPeaks) {
@@ -82,6 +83,11 @@ export function CanvasClipWaveform({
     }
     const reqKey = `${audioKey}:${targetPeaks}`;
     if (hiResReqRef.current === reqKey && hiResPeaks) return;
+
+    // Clear stale hi-res peaks immediately so the draw effect
+    // uses the stable base peaks while new ones load.
+    if (hiResPeaks) setHiResPeaks(null);
+
     let cancelled = false;
     hiResReqRef.current = reqKey;
     void (async () => {
@@ -91,7 +97,7 @@ export function CanvasClipWaveform({
       if (!cancelled) setHiResPeaks(p);
     })();
     return () => { cancelled = true; };
-  }, [audioKey, peaks, contentWidth, hiResPeaks]);
+  }, [audioKey, peaks, contentWidth]); // removed hiResPeaks dep to avoid loop
 
   const activePeaks = hiResPeaks ?? peaks;
   if (!activePeaks || activePeaks.length === 0 || contentWidth <= 0) return null;

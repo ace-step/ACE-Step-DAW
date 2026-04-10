@@ -290,6 +290,80 @@ export function drawWaveform(
   ctx.restore();
 }
 
+// ---- Mipmap rendering (stride-6: min_l, max_l, rms_l, min_r, max_r, rms_r) ----
+
+/** Stride for mipmap peak data from ace-waveform WASM. */
+export const MIPMAP_STRIDE = 6;
+
+export interface MipmapDrawParams {
+  /** Float32Array with stride 6 per column: min_l, max_l, rms_l, min_r, max_r, rms_r */
+  peakData: Float32Array;
+  leftPx: number;
+  width: number;
+  height: number;
+  color: string;
+  opacity?: number;
+  trackVolume?: number;
+}
+
+/**
+ * Draw waveform from mipmap query results — min/max bars + RMS overlay.
+ *
+ * This is the professional DAW rendering: the outer envelope shows full dynamic range
+ * (min-max bars) while the inner RMS overlay shows perceived loudness.
+ */
+export function drawMipmapWaveform(
+  ctx: CanvasRenderingContext2D,
+  params: MipmapDrawParams,
+): void {
+  const {
+    peakData, leftPx, width, height, color,
+    opacity = 0.9, trackVolume = 1,
+  } = params;
+
+  const numColumns = Math.floor(peakData.length / MIPMAP_STRIDE);
+  if (numColumns === 0 || width <= 0 || height <= 0) return;
+
+  const centerY = height * 0.5;
+  const amplitude = centerY * 0.88 * Math.min(1, trackVolume);
+  const colW = width / numColumns;
+
+  ctx.save();
+  ctx.globalAlpha = opacity;
+
+  // Pass 1: Min/Max bars (outer envelope)
+  ctx.fillStyle = color;
+  ctx.globalAlpha = opacity * 0.85;
+  for (let i = 0; i < numColumns; i++) {
+    const off = i * MIPMAP_STRIDE;
+    // Mono merge: max(L,R) for max, min(L,R) for min
+    const maxVal = Math.max(peakData[off + 1], peakData[off + 4]); // max_l, max_r
+    const minVal = Math.min(peakData[off], peakData[off + 3]);     // min_l, min_r
+
+    const x = leftPx + i * colW;
+    const yTop = centerY - maxVal * amplitude;
+    const yBottom = centerY - minVal * amplitude;
+    const barHeight = Math.max(yBottom - yTop, 0.5);
+    ctx.fillRect(x, yTop, Math.max(colW, 1), barHeight);
+  }
+
+  // Pass 2: RMS bars (inner loudness overlay, semi-transparent)
+  ctx.globalAlpha = opacity * 0.55;
+  for (let i = 0; i < numColumns; i++) {
+    const off = i * MIPMAP_STRIDE;
+    // Mono merge RMS: max of L/R RMS
+    const rms = Math.max(peakData[off + 2], peakData[off + 5]); // rms_l, rms_r
+
+    const x = leftPx + i * colW;
+    const yTop = centerY - rms * amplitude;
+    const yBottom = centerY + rms * amplitude;
+    const barHeight = Math.max(yBottom - yTop, 0.3);
+    ctx.fillRect(x, yTop, Math.max(colW, 1), barHeight);
+  }
+
+  ctx.restore();
+}
+
 /**
  * Draw MIDI note rectangles as a thumbnail.
  */

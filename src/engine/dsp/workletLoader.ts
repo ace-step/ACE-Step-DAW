@@ -1,9 +1,11 @@
 /**
- * AudioWorklet loader with ScriptProcessorNode fallback.
+ * AudioWorklet loader — worklet-only creation.
  *
- * Tries to register and create an AudioWorkletNode. If AudioWorklet is
- * unavailable (older Safari, insecure context) or fails to load, falls
- * back to the deprecated ScriptProcessorNode.
+ * Tries to register and create an AudioWorkletNode. Returns null if
+ * AudioWorklet is unavailable (older Safari, insecure context), module
+ * registration fails, or AudioWorkletNode construction throws.
+ * Callers are responsible for keeping their own ScriptProcessorNode
+ * fallback already wired into the audio graph.
  */
 
 import { createDebugLogger } from '../../utils/debugLogger';

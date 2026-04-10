@@ -36,6 +36,12 @@ vi.mock('../../src/hooks/useAudioEngine', () => ({
   }),
 }));
 
+vi.mock('../../src/utils/waveformPeaks', () => ({
+  computeWaveformWithMipmap: vi.fn().mockResolvedValue(new Array(8192 * 4).fill(0.5)),
+  computeWaveformPeaks: vi.fn(() => new Array(8192 * 4).fill(0.5)),
+  PEAK_STRIDE: 4,
+}));
+
 function createMockAudioBuffer(duration = 4, sampleRate = 48_000, amplitude = 0.5): AudioBuffer {
   const length = Math.max(1, Math.round(duration * sampleRate));
   const channelData = new Float32Array(length).fill(amplitude);

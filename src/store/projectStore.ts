@@ -145,14 +145,13 @@ import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateCli
 import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
 import {
-  CLIP_WAVEFORM_PEAK_COUNT,
   getClipAudibleEndTime,
   getClipAudibleStartTime,
   getClipContentOffset,
   getClipPlaybackRate,
   isClipRepitchStretched,
 } from '../utils/clipAudio';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { snapToGrid, beatsToSeconds } from '../utils/time';
 import {
   createDefaultPlaybackLatencySettings,
@@ -7633,7 +7632,7 @@ export const useProjectStore = create<ProjectState>()(
     const audioKey = await saveAudioBlob(get().project!.id, clipId, 'isolated', wavBlob);
 
     // Compute waveform peaks for visual display
-    const waveformPeaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const waveformPeaks = await computeWaveformWithMipmap(audioKey, audioBuffer);
 
     // Create a new stems track with the rendered audio clip
     const newTrack = createTrackFromTemplate(

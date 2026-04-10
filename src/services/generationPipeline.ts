@@ -17,8 +17,7 @@ import { saveAudioBlob, loadAudioBlobByKey } from './audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import { toastError, toastInfo, toastSuccess } from '../hooks/useToast';
 import { audioBufferToWavBlob } from '../utils/wav';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
-import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../constants/defaults';
 import { extractContextAudioLazy } from './lazyContextAudioExtractor';
 import { computeEta } from '../utils/generationProgress';
@@ -339,7 +338,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     const audioKey = await saveAudioBlob(project.id, clipId, 'isolated', audioBlob);
     const engine = getAudioEngine();
     const audioBuffer = await engine.decodeAudioData(audioBlob);
-    const peaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = await computeWaveformWithMipmap(audioKey, audioBuffer);
 
     const inferredMetas: InferredMetas | undefined = firstResult
       ? { bpm: firstResult.metas?.bpm, keyScale: firstResult.metas?.keyscale, timeSignature: firstResult.metas?.timesignature, genres: firstResult.metas?.genres, seed: firstResult.seed_value, ditModel: firstResult.dit_model }
@@ -985,7 +984,7 @@ async function generateClipInternal(
     const isolatedKey = await saveAudioBlob(project.id, clipId, 'isolated', isolatedBlob);
 
     // Compute waveform peaks from the trimmed buffer (full buffer = clip region)
-    const peaks = computeWaveformPeaks(trimmedBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = await computeWaveformWithMipmap(isolatedKey, trimmedBuffer);
 
     // Build inferred metadata from result
     const inferredMetas: InferredMetas | undefined = firstResult
@@ -1874,9 +1873,9 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
       const coverBlob = await api.downloadAudio(resultAudioPath);
       const engine = getAudioEngine();
       const buffer = await engine.decodeAudioData(coverBlob);
-      const peaks = computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT);
 
       const isolatedKey = await saveAudioBlob(project.id, targetClipId, 'isolated', coverBlob);
+      const peaks = await computeWaveformWithMipmap(isolatedKey, buffer);
       const cumulativeKey = await saveAudioBlob(project.id, targetClipId, 'cumulative', coverBlob);
 
       store.updateClipStatus(targetClipId, 'ready', {
@@ -2073,7 +2072,7 @@ async function generateRepaintInternal(
 
     const isolatedBlob = audioBufferToWavBlob(trimmedBuffer);
     const isolatedKey = await saveAudioBlob(project.id, clipId, 'isolated', isolatedBlob);
-    const peaks = computeWaveformPeaks(trimmedBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = await computeWaveformWithMipmap(isolatedKey, trimmedBuffer);
 
     const inferredMetas: InferredMetas | undefined = firstResult
       ? {
@@ -2436,9 +2435,9 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
       const bgmBlob = await api.downloadAudio(resultAudioPath);
       const engine = getAudioEngine();
       const buffer = await engine.decodeAudioData(bgmBlob);
-      const peaks = computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT);
 
       const isolatedKey = await saveAudioBlob(project.id, newClip.id, 'isolated', bgmBlob);
+      const peaks = await computeWaveformWithMipmap(isolatedKey, buffer);
       const cumulativeKey = await saveAudioBlob(project.id, newClip.id, 'cumulative', bgmBlob);
 
       const inferredMetas: InferredMetas | undefined = firstResult
@@ -2627,9 +2626,9 @@ export async function generateVocalReplacement(opts: VocalReplacementOptions): P
       const vocalBlob = await api.downloadAudio(resultAudioPath);
       const engine = getAudioEngine();
       const buffer = await engine.decodeAudioData(vocalBlob);
-      const peaks = computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT);
 
       const isolatedKey = await saveAudioBlob(project.id, newClip.id, 'isolated', vocalBlob);
+      const peaks = await computeWaveformWithMipmap(isolatedKey, buffer);
       const cumulativeKey = await saveAudioBlob(project.id, newClip.id, 'cumulative', vocalBlob);
 
       const inferredMetas: InferredMetas | undefined = firstResult
@@ -2932,7 +2931,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     // Compute waveform
     const engine = getAudioEngine();
     const audioBuffer = await engine.decodeAudioData(audioBlob);
-    const peaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = await computeWaveformWithMipmap(audioKey, audioBuffer);
 
     // Build inferred metadata
     const inferredMetas: InferredMetas | undefined = firstResult

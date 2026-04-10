@@ -21,6 +21,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ace-waveform"
+version = "0.1.0"
+dependencies = [
+ "approx",
+ "libm",
+]
+
+[[package]]
+name = "ace-waveform-wasm"
+version = "0.1.0"
+dependencies = [
+ "ace-waveform",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+]
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -29,7 +29,7 @@ vi.mock('../../utils/wav', () => ({
 }));
 
 vi.mock('../../utils/waveformPeaks', () => ({
-  computeWaveformPeaks: () => [0.1, 0.2, 0.3, 0.4, 0.5],
+  computeWaveformWithMipmap: async () => [0.1, 0.2, 0.3, 0.4, 0.5],
 }));
 
 // Create a minimal AudioBuffer-like object for testing

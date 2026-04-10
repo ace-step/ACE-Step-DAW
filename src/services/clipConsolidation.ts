@@ -3,8 +3,7 @@ import type { Clip, MidiNote, Project } from '../types/project';
 import { interpolateGainEnvelope } from '../utils/gainEnvelope';
 import { timeToBeat } from '../utils/tempoMap';
 import { audioBufferToWavBlob } from '../utils/wav';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
-import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { loadAudioBlobByKey, saveAudioBlob } from './audioFileManager';
 
 type AudioBufferLike = Pick<AudioBuffer, 'numberOfChannels' | 'length' | 'sampleRate' | 'duration' | 'getChannelData'>;
@@ -227,7 +226,7 @@ export async function renderConsolidatedAudioClip(project: Project, clips: Clip[
   return {
     id: clipId,
     isolatedAudioKey,
-    waveformPeaks: computeWaveformPeaks(outputBuffer, CLIP_WAVEFORM_PEAK_COUNT),
+    waveformPeaks: await computeWaveformWithMipmap(isolatedAudioKey, outputBuffer),
     duration: merged.duration,
     audioDuration: merged.duration,
   };

@@ -1,12 +1,24 @@
 /**
- * Pure Canvas 2D drawing functions for waveform rendering.
- * Replaces SVG path-based waveforms with direct Canvas drawing
- * for better performance with many tracks.
+ * DAW-standard waveform renderer.
+ *
+ * Renders per-pixel-column min-max bars (fillRect) — the same technique used by
+ * Ableton, peaks.js, wavesurfer.js, and every professional DAW. Each pixel column
+ * shows the full dynamic range of samples in that column's time window.
+ *
+ * When zoomed in past sample-level (< ~8 samples per pixel), switches to a
+ * continuous lineTo curve connecting actual audio samples.
+ *
+ * All drawing is mono-merged (max of L/R channels) for arrangement timeline view.
  */
 
 import { PEAK_STRIDE } from '../../utils/waveformPeaks';
 import { getClipSourceSpan, getClipWaveformLayout } from '../../utils/clipAudio';
 import type { StretchMode } from '../../types/project';
+
+/** Samples-per-pixel where we start blending in sample line. */
+const BLEND_START = 16;
+/** Samples-per-pixel where sample line is fully visible. */
+const BLEND_END = 4;
 
 export interface WaveformDrawParams {
   peaks: number[];
@@ -21,8 +33,8 @@ export interface WaveformDrawParams {
   color: string;
   opacity?: number;
   trackVolume?: number;
-  /** Max columns to compute (limits work when backing store is capped). */
   maxColumns?: number;
+  rawSamples?: { left: Float32Array; right: Float32Array; sampleRate: number } | null;
 }
 
 interface PeakSlice {
@@ -30,9 +42,6 @@ interface PeakSlice {
   numBars: number;
 }
 
-/**
- * Compute the visible peak range for the current clip window.
- */
 export function getVisiblePeakSlice(
   logicalPeakCount: number,
   audioDuration: number,
@@ -42,7 +51,6 @@ export function getVisiblePeakSlice(
   if (logicalPeakCount === 0 || audioDuration <= 0) {
     return { startPeakIdx: 0, numBars: 0 };
   }
-
   const clampedAudioOffset = Math.min(Math.max(0, audioOffset), audioDuration);
   const startPeakIdx = Math.floor((clampedAudioOffset / audioDuration) * logicalPeakCount);
   const visibleAudioSec = Math.min(sourceSpan, Math.max(0, audioDuration - clampedAudioOffset));
@@ -50,17 +58,9 @@ export function getVisiblePeakSlice(
     Math.ceil(((clampedAudioOffset + visibleAudioSec) / audioDuration) * logicalPeakCount),
     logicalPeakCount,
   );
-
-  return {
-    startPeakIdx,
-    numBars: Math.max(0, endPeakIdx - startPeakIdx),
-  };
+  return { startPeakIdx, numBars: Math.max(0, endPeakIdx - startPeakIdx) };
 }
 
-/**
- * For a given display column, find the min and max sample values
- * across the corresponding peak range for a specific channel.
- */
 export function getMinMaxForColumn(
   peaks: number[],
   peakSlice: PeakSlice,
@@ -72,7 +72,6 @@ export function getMinMaxForColumn(
   const end = peakSlice.startPeakIdx + Math.ceil(((columnIndex + 1) / columnCount) * peakSlice.numBars);
   let max = 0;
   let min = 0;
-
   for (let i = start; i < end; i++) {
     const idx = i * PEAK_STRIDE + channelOffset;
     const peakMax = peaks[idx] ?? 0;
@@ -80,14 +79,9 @@ export function getMinMaxForColumn(
     if (peakMax > max) max = peakMax;
     if (peakMin < min) min = peakMin;
   }
-
   return { max, min };
 }
 
-/**
- * Precompute per-column min/max values for a channel.
- * Avoids redundant scans when drawing both filled shape and envelope line.
- */
 export function precomputeColumnMinMax(
   peaks: number[],
   peakSlice: PeakSlice,
@@ -105,87 +99,24 @@ export function precomputeColumnMinMax(
 }
 
 /**
- * Draw a single channel's waveform as a filled shape on Canvas.
- * Upper contour (max) from left to right, lower contour (min) right to left.
+ * Merge L/R peak data into mono: max(Lmax, Rmax), min(Lmin, Rmin).
  */
-export function drawChannelWaveform(
-  ctx: CanvasRenderingContext2D,
+export function precomputeMergedMonoMinMax(
+  peaks: number[],
+  peakSlice: PeakSlice,
   columnCount: number,
-  columnWidth: number,
-  leftPx: number,
-  centerY: number,
-  maxAmplitude: number,
-  color: string,
-  fillOpacity: number,
-  maxArr: Float64Array,
-  minArr: Float64Array,
-): void {
-  if (columnCount <= 0) return;
-
-  const previousAlpha = ctx.globalAlpha;
-  ctx.beginPath();
-
-  // Upper contour (max values)
+): { maxArr: Float64Array; minArr: Float64Array } {
+  const left = precomputeColumnMinMax(peaks, peakSlice, columnCount, 0);
+  const right = precomputeColumnMinMax(peaks, peakSlice, columnCount, 2);
+  const maxArr = new Float64Array(columnCount);
+  const minArr = new Float64Array(columnCount);
   for (let i = 0; i < columnCount; i++) {
-    const x = leftPx + (i + 0.5) * columnWidth;
-    const yTop = centerY - maxArr[i] * maxAmplitude;
-    if (i === 0) {
-      ctx.moveTo(x, yTop);
-    } else {
-      ctx.lineTo(x, yTop);
-    }
+    maxArr[i] = Math.max(left.maxArr[i], right.maxArr[i]);
+    minArr[i] = Math.min(left.minArr[i], right.minArr[i]);
   }
-
-  // Lower contour (min values, right to left)
-  for (let i = columnCount - 1; i >= 0; i--) {
-    const x = leftPx + (i + 0.5) * columnWidth;
-    const yBottom = centerY - minArr[i] * maxAmplitude;
-    ctx.lineTo(x, yBottom);
-  }
-
-  ctx.closePath();
-  ctx.globalAlpha = previousAlpha * fillOpacity;
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.globalAlpha = previousAlpha;
+  return { maxArr, minArr };
 }
 
-/**
- * Draw the peak envelope highlight line (positive peaks only).
- */
-export function drawPeakEnvelopeLine(
-  ctx: CanvasRenderingContext2D,
-  columnCount: number,
-  columnWidth: number,
-  leftPx: number,
-  centerY: number,
-  maxAmplitude: number,
-  color: string,
-  lineWidth: number,
-  maxArr: Float64Array,
-): void {
-  if (columnCount <= 0) return;
-
-  ctx.beginPath();
-
-  for (let i = 0; i < columnCount; i++) {
-    const x = leftPx + (i + 0.5) * columnWidth;
-    const yTop = centerY - maxArr[i] * maxAmplitude;
-    if (i === 0) {
-      ctx.moveTo(x, yTop);
-    } else {
-      ctx.lineTo(x, yTop);
-    }
-  }
-
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.stroke();
-}
-
-/**
- * Draw the center divider line between left and right channels.
- */
 export function drawCenterDivider(
   ctx: CanvasRenderingContext2D,
   leftPx: number,
@@ -193,120 +124,232 @@ export function drawCenterDivider(
   centerY: number,
   color: string,
 ): void {
-  const previousAlpha = ctx.globalAlpha;
+  const prevAlpha = ctx.globalAlpha;
   ctx.beginPath();
   ctx.moveTo(leftPx, centerY);
   ctx.lineTo(leftPx + widthPx, centerY);
   ctx.strokeStyle = color;
-  ctx.globalAlpha = previousAlpha * 0.2;
+  ctx.globalAlpha = prevAlpha * 0.15;
   ctx.lineWidth = 0.5;
   ctx.stroke();
-  ctx.globalAlpha = previousAlpha;
+  ctx.globalAlpha = prevAlpha;
 }
 
 /**
- * Main drawing entry point: renders a complete stereo waveform on a Canvas.
- * This is the Canvas equivalent of the SVG-based ClipWaveform component.
+ * Draw per-pixel-column min-max bars (fillRect).
+ * This is THE standard DAW waveform rendering technique.
+ * Each pixel column gets one vertical bar from min to max.
+ */
+function drawMinMaxBars(
+  ctx: CanvasRenderingContext2D,
+  columnCount: number,
+  leftPx: number,
+  centerY: number,
+  amplitude: number,
+  maxArr: Float64Array,
+  minArr: Float64Array,
+  color: string,
+  barAlpha: number,
+  colW: number = 1,
+): void {
+  const prevAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = prevAlpha * barAlpha;
+  ctx.fillStyle = color;
+
+  for (let i = 0; i < columnCount; i++) {
+    const x = leftPx + i * colW;
+    const yTop = centerY - maxArr[i] * amplitude;
+    const yBottom = centerY - minArr[i] * amplitude;
+    const barHeight = Math.max(yBottom - yTop, 0.5);
+    ctx.fillRect(x, yTop, Math.max(colW, 0.5), barHeight);
+  }
+
+  ctx.globalAlpha = prevAlpha;
+}
+
+/**
+ * Draw mono sample line (zoomed-in mode).
+ * Averages L/R channels, connects as continuous lineTo curve.
+ */
+function drawMonoSampleLine(
+  ctx: CanvasRenderingContext2D,
+  left: Float32Array,
+  right: Float32Array,
+  sampleRate: number,
+  audioOffset: number,
+  clipDuration: number,
+  leftPx: number,
+  widthPx: number,
+  centerY: number,
+  amplitude: number,
+  color: string,
+): void {
+  const startSample = Math.max(0, Math.floor(audioOffset * sampleRate));
+  const endSample = Math.min(left.length, Math.ceil((audioOffset + clipDuration) * sampleRate));
+  const sampleCount = endSample - startSample;
+  if (sampleCount <= 0) return;
+
+  const pxPerSample = widthPx / sampleCount;
+
+  ctx.beginPath();
+  for (let i = 0; i < sampleCount; i++) {
+    const x = leftPx + i * pxPerSample;
+    const mono = (left[startSample + i] + right[startSample + i]) * 0.5;
+    const y = centerY - mono * amplitude;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+/**
+ * Compute blend factor for cross-fade between peak bars and sample line.
+ * Returns 0 (pure bars) to 1 (pure sample line).
+ */
+export function computeBlendFactor(samplesPerPixel: number): number {
+  if (samplesPerPixel >= BLEND_START) return 0;
+  if (samplesPerPixel <= BLEND_END) return 1;
+  return (BLEND_START - samplesPerPixel) / (BLEND_START - BLEND_END);
+}
+
+/**
+ * Main entry: DAW-standard waveform rendering.
+ * Mono-merged, per-pixel-column min-max bars with sample-line crossfade.
  */
 export function drawWaveform(
   ctx: CanvasRenderingContext2D,
   params: WaveformDrawParams,
 ): void {
   const {
-    peaks,
-    audioDuration,
-    audioOffset,
-    clipDuration,
-    contentOffset,
-    timeStretchRate,
-    stretchMode,
-    width,
-    height,
-    color,
-    opacity = 0.9,
-    trackVolume = 1,
-    maxColumns,
+    peaks, audioDuration, audioOffset, clipDuration,
+    contentOffset, timeStretchRate, stretchMode,
+    width, height, color,
+    opacity = 0.9, trackVolume = 1, maxColumns,
+    rawSamples,
   } = params;
 
   const contentWidth = Math.max(width, 0);
   const clipWindow = {
-    startTime: 0,
-    duration: clipDuration,
-    audioDuration,
-    audioOffset,
-    contentOffset,
-    timeStretchRate,
-    stretchMode,
+    startTime: 0, duration: clipDuration, audioDuration,
+    audioOffset, contentOffset, timeStretchRate, stretchMode,
   };
   const waveformLayout = getClipWaveformLayout(clipWindow, contentWidth);
+  if (contentWidth <= 0 || waveformLayout.widthPx <= 0) return;
 
-  if (peaks.length === 0 || contentWidth <= 0 || waveformLayout.widthPx <= 0) {
-    return;
-  }
+  const hasPeaks = peaks.length > 0;
+  const hasSamples = rawSamples && rawSamples.sampleRate > 0;
+  if (!hasPeaks && !hasSamples) return;
 
-  const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
-  if (logicalPeakCount === 0) return;
-
-  const peakSlice = getVisiblePeakSlice(
-    logicalPeakCount,
-    audioDuration,
-    audioOffset,
-    getClipSourceSpan(clipWindow),
-  );
-  if (peakSlice.numBars === 0) return;
-
-  // Limit columns to backing store resolution when capped at 16384px
-  const rawColumnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
-  const columnCount = maxColumns ? Math.min(rawColumnCount, maxColumns) : rawColumnCount;
-  const columnWidth = waveformLayout.widthPx / columnCount;
-
-  // Scale amplitude by track volume (visual feedback of output level).
-  // Each channel occupies half the height, centered at 0.25/0.75.
-  // Max amplitude = 0.23 * height matches the SVG renderer (23 units in 100px viewBox).
-  const scaledAmplitude = (height * 0.23) * Math.min(1, trackVolume);
-
-  // Channel center Y positions (50% for each channel)
-  const leftCenterY = height * 0.25;
-  const rightCenterY = height * 0.75;
-
-  // Precompute per-column min/max for both channels (avoids redundant peak scans)
-  const leftMinMax = precomputeColumnMinMax(peaks, peakSlice, columnCount, 0);
-  const rightMinMax = precomputeColumnMinMax(peaks, peakSlice, columnCount, 2);
+  // Mono layout: centered, using full height
+  const centerY = height * 0.5;
+  const amplitude = centerY * 0.88 * Math.min(1, trackVolume);
 
   ctx.save();
   ctx.globalAlpha = opacity;
 
-  // Center divider
-  drawCenterDivider(ctx, waveformLayout.leftPx, waveformLayout.widthPx, height * 0.5, color);
+  // Compute blend factor for smooth transition
+  const samplesPerPixel = hasSamples
+    ? audioDuration * rawSamples!.sampleRate / waveformLayout.widthPx
+    : Infinity;
+  const blendFactor = computeBlendFactor(samplesPerPixel);
 
-  // Filled waveform shapes
-  drawChannelWaveform(
-    ctx, columnCount, columnWidth, waveformLayout.leftPx,
-    leftCenterY, scaledAmplitude, color, 0.6,
-    leftMinMax.maxArr, leftMinMax.minArr,
-  );
-  drawChannelWaveform(
-    ctx, columnCount, columnWidth, waveformLayout.leftPx,
-    rightCenterY, scaledAmplitude, color, 0.6,
-    rightMinMax.maxArr, rightMinMax.minArr,
-  );
+  // Draw min-max bars (when blend < 1)
+  if (blendFactor < 1 && peaks.length > 0) {
+    const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
+    if (logicalPeakCount > 0) {
+      const peakSlice = getVisiblePeakSlice(
+        logicalPeakCount, audioDuration, audioOffset, getClipSourceSpan(clipWindow),
+      );
+      if (peakSlice.numBars > 0) {
+        // Use peak count as column count (not pixel width).
+        // This ensures each peak maps to a fixed proportional position —
+        // bar width scales smoothly with zoom, no integer quantization jumps.
+        const columnCount = maxColumns
+          ? Math.min(peakSlice.numBars, maxColumns)
+          : peakSlice.numBars;
 
-  // Peak envelope lines
-  const lineWidth = Math.max(0.5, height / 125);
-  drawPeakEnvelopeLine(
-    ctx, columnCount, columnWidth, waveformLayout.leftPx,
-    leftCenterY, scaledAmplitude, color, lineWidth, leftMinMax.maxArr,
-  );
-  drawPeakEnvelopeLine(
-    ctx, columnCount, columnWidth, waveformLayout.leftPx,
-    rightCenterY, scaledAmplitude, color, lineWidth, rightMinMax.maxArr,
-  );
+        const monoData = precomputeMergedMonoMinMax(peaks, peakSlice, columnCount);
+
+        const barAlpha = blendFactor > 0 ? 0.85 * (1 - blendFactor) : 0.85;
+        const colW = waveformLayout.widthPx / columnCount;
+        drawMinMaxBars(ctx, columnCount, waveformLayout.leftPx,
+          centerY, amplitude, monoData.maxArr, monoData.minArr, color, barAlpha, colW);
+      }
+    }
+  }
+
+  // Draw sample line (when blend > 0)
+  if (blendFactor > 0 && rawSamples) {
+    const savedAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = savedAlpha * blendFactor;
+    drawMonoSampleLine(
+      ctx, rawSamples.left, rawSamples.right, rawSamples.sampleRate,
+      audioOffset, clipDuration,
+      waveformLayout.leftPx, waveformLayout.widthPx, centerY, amplitude, color,
+    );
+    ctx.globalAlpha = savedAlpha;
+  }
+
+  ctx.restore();
+}
+
+// ---- Mipmap rendering (stride-6: min_l, max_l, rms_l, min_r, max_r, rms_r) ----
+
+/** Stride for mipmap peak data from ace-waveform WASM. */
+export const MIPMAP_STRIDE = 6;
+
+export interface MipmapDrawParams {
+  /** Float32Array with stride 6 per column: min_l, max_l, rms_l, min_r, max_r, rms_r */
+  peakData: Float32Array;
+  leftPx: number;
+  width: number;
+  height: number;
+  color: string;
+  opacity?: number;
+  trackVolume?: number;
+}
+
+/**
+ * Draw waveform from mipmap query results — per-pixel min/max bars only.
+ */
+export function drawMipmapWaveform(
+  ctx: CanvasRenderingContext2D,
+  params: MipmapDrawParams,
+): void {
+  const {
+    peakData, leftPx, width, height, color,
+    opacity = 0.9, trackVolume = 1,
+  } = params;
+
+  const numColumns = Math.floor(peakData.length / MIPMAP_STRIDE);
+  if (numColumns === 0 || width <= 0 || height <= 0) return;
+
+  const centerY = height * 0.5;
+  const amplitude = centerY * 0.88 * Math.min(1, trackVolume);
+  const colW = width / numColumns;
+
+  ctx.save();
+  ctx.globalAlpha = opacity * 0.85;
+  ctx.fillStyle = color;
+
+  for (let i = 0; i < numColumns; i++) {
+    const off = i * MIPMAP_STRIDE;
+    const maxVal = Math.max(peakData[off + 1], peakData[off + 4]);
+    const minVal = Math.min(peakData[off], peakData[off + 3]);
+
+    const x = leftPx + i * colW;
+    const yTop = centerY - maxVal * amplitude;
+    const yBottom = centerY - minVal * amplitude;
+    const barHeight = Math.max(yBottom - yTop, 0.5);
+    ctx.fillRect(x, yTop, Math.max(colW, 1), barHeight);
+  }
 
   ctx.restore();
 }
 
 /**
- * Draw MIDI note rectangles as a thumbnail representation.
+ * Draw MIDI note rectangles as a thumbnail.
  */
 export function drawMidiThumbnail(
   ctx: CanvasRenderingContext2D,
@@ -319,9 +362,7 @@ export function drawMidiThumbnail(
   opacity: number = 0.7,
 ): void {
   if (notes.length === 0 || width <= 0 || height <= 0 || bpm <= 0 || duration <= 0) return;
-
   const secPerBeat = 60 / bpm;
-  // Compute min/max pitch in a single loop (avoids spread argument limit on large arrays)
   let minPitch = notes[0].pitch;
   let maxPitch = notes[0].pitch;
   for (let i = 1; i < notes.length; i++) {
@@ -331,24 +372,18 @@ export function drawMidiThumbnail(
   }
   const range = Math.max(maxPitch - minPitch, 12);
   const pad = 2;
-
-  // Density-adaptive: skip overlapping notes at narrow widths
   const maxNotes = Math.max(20, Math.floor(width / 2));
   const filteredNotes = notes.length > maxNotes
     ? notes.filter((_, i) => i % Math.ceil(notes.length / maxNotes) === 0)
     : notes;
-
   ctx.save();
   ctx.globalAlpha = opacity;
   ctx.fillStyle = color;
-
   for (const note of filteredNotes) {
     const x = (note.startBeat * secPerBeat / duration) * width;
     const noteWidth = Math.max((note.durationBeats * secPerBeat / duration) * width, 1);
     const y = height - ((note.pitch - minPitch + pad) / (range + pad * 2)) * height;
     const noteHeight = Math.max(height / (range + pad * 2), 2);
-
-    // Rounded rectangle with fallback for browsers without roundRect
     ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
       const r = Math.min(0.5, noteWidth / 2, noteHeight / 2);
@@ -358,6 +393,5 @@ export function drawMidiThumbnail(
     }
     ctx.fill();
   }
-
   ctx.restore();
 }

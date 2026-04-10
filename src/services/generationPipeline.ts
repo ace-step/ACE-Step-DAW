@@ -1886,6 +1886,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
         audioOffset: 0,
         generatedFromContext: false,
       });
+      store.updateClip(targetClipId, { duration: buffer.duration });
 
       genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
       store.saveClipVersion(targetClipId);
@@ -2460,6 +2461,7 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
         generatedFromContext: true,
       });
 
+      store.updateClip(newClip.id, { duration: buffer.duration });
       genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
       store.saveClipVersion(newClip.id);
       return true;
@@ -2651,6 +2653,7 @@ export async function generateVocalReplacement(opts: VocalReplacementOptions): P
         generatedFromContext: true,
       });
 
+      store.updateClip(newClip.id, { duration: buffer.duration });
       genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
       store.saveClipVersion(newClip.id);
       return true;

@@ -288,9 +288,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           style={{
             top: HEADER_RAIL_HEIGHT_PX,
             background: clipPresentation.bodyBackground,
-            borderTop: `1px solid ${hexToRgba(clipColor, 0.08)}`,
-            borderBottom: `1px solid ${clipPresentation.bodyBorderColor}`,
-            boxShadow: clipPresentation.bodyInnerShadow,
           }}
         />
 

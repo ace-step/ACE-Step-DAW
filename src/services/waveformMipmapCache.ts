@@ -6,7 +6,7 @@
  * it's pure computation, fast enough for real-time rendering.
  */
 
-import init, { query_peaks_wasm } from '../wasm/waveform-pkg/ace_waveform_wasm';
+import initWasm, { query_peaks_wasm } from '../wasm/waveform-pkg/ace_waveform_wasm';
 import { get } from 'idb-keyval';
 
 const MIPMAP_KEY_PREFIX = 'mipmap:';
@@ -22,7 +22,13 @@ let wasmInitPromise: Promise<void> | null = null;
 export async function initWaveformWasm(): Promise<void> {
   if (wasmReady) return;
   if (!wasmInitPromise) {
-    wasmInitPromise = init().then(() => { wasmReady = true; });
+    // Use absolute path to public/ so it works from both main thread and workers
+    wasmInitPromise = initWasm('/ace_waveform_wasm_bg.wasm')
+      .then(() => { wasmReady = true; })
+      .catch((err) => {
+        console.warn('[waveform] WASM init failed, mipmap rendering disabled:', err);
+        wasmInitPromise = null; // allow retry
+      });
   }
   await wasmInitPromise;
 }

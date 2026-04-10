@@ -150,18 +150,18 @@ function drawMinMaxBars(
   minArr: Float64Array,
   color: string,
   barAlpha: number,
+  colW: number = 1,
 ): void {
   const prevAlpha = ctx.globalAlpha;
   ctx.globalAlpha = prevAlpha * barAlpha;
   ctx.fillStyle = color;
 
-  // Draw one fillRect per pixel column — min to max vertical bar
   for (let i = 0; i < columnCount; i++) {
-    const x = leftPx + i;
+    const x = leftPx + i * colW;
     const yTop = centerY - maxArr[i] * amplitude;
     const yBottom = centerY - minArr[i] * amplitude;
-    const barHeight = Math.max(yBottom - yTop, 0.5); // min 0.5px so silent regions show a hairline
-    ctx.fillRect(x, yTop, 1, barHeight);
+    const barHeight = Math.max(yBottom - yTop, 0.5);
+    ctx.fillRect(x, yTop, Math.max(colW, 0.5), barHeight);
   }
 
   ctx.globalAlpha = prevAlpha;
@@ -262,15 +262,19 @@ export function drawWaveform(
         logicalPeakCount, audioDuration, audioOffset, getClipSourceSpan(clipWindow),
       );
       if (peakSlice.numBars > 0) {
-        const rawColumnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
-        const columnCount = maxColumns ? Math.min(rawColumnCount, maxColumns) : rawColumnCount;
+        // Use peak count as column count (not pixel width).
+        // This ensures each peak maps to a fixed proportional position —
+        // bar width scales smoothly with zoom, no integer quantization jumps.
+        const columnCount = maxColumns
+          ? Math.min(peakSlice.numBars, maxColumns)
+          : peakSlice.numBars;
 
-        // Merged mono: max(L,R) for max, min(L,R) for min
         const monoData = precomputeMergedMonoMinMax(peaks, peakSlice, columnCount);
 
         const barAlpha = blendFactor > 0 ? 0.85 * (1 - blendFactor) : 0.85;
+        const colW = waveformLayout.widthPx / columnCount;
         drawMinMaxBars(ctx, columnCount, waveformLayout.leftPx,
-          centerY, amplitude, monoData.maxArr, monoData.minArr, color, barAlpha);
+          centerY, amplitude, monoData.maxArr, monoData.minArr, color, barAlpha, colW);
       }
     }
   }

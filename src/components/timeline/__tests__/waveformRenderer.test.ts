@@ -209,7 +209,7 @@ describe('drawWaveform', () => {
     expect(ctx.save).not.toHaveBeenCalled();
   });
 
-  it('draws mono merged waveform with per-pixel fillRect bars', () => {
+  it('draws mono merged waveform with fillRect bars', () => {
     drawWaveform(ctx, {
       peaks: generatePeaks(100),
       audioDuration: 5,
@@ -221,9 +221,8 @@ describe('drawWaveform', () => {
     });
     expect(ctx.save).toHaveBeenCalledTimes(1);
     expect(ctx.restore).toHaveBeenCalledTimes(1);
-    // Per-pixel-column min-max bars: one fillRect per column (200 columns for 200px width)
-    expect(ctx.fillRect.mock.calls.length).toBe(200);
-    // No path-based fill — we use fillRect instead
+    // Column count = peak count (100 peaks for 100 logical peaks)
+    expect(ctx.fillRect.mock.calls.length).toBe(100);
     expect(ctx.fill).not.toHaveBeenCalled();
   });
 
@@ -254,9 +253,9 @@ describe('drawWaveform', () => {
       trackVolume: 0.5,
     });
 
-    // Both render fillRect bars
-    expect(ctx1.fillRect.mock.calls.length).toBe(200);
-    expect(ctx2.fillRect.mock.calls.length).toBe(200);
+    // Both render fillRect bars (10 peaks = 10 columns)
+    expect(ctx1.fillRect.mock.calls.length).toBe(10);
+    expect(ctx2.fillRect.mock.calls.length).toBe(10);
   });
 });
 

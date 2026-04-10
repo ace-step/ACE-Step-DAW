@@ -46,7 +46,8 @@ let initPromise: Promise<void> | null = null;
 async function ensureWasm(): Promise<void> {
   if (wasmReady) return;
   if (!initPromise) {
-    initPromise = init().then(() => { wasmReady = true; });
+    // Use absolute path — Worker's import.meta.url differs from main thread
+    initPromise = init('/ace_waveform_wasm_bg.wasm').then(() => { wasmReady = true; });
   }
   await initPromise;
 }

@@ -16,12 +16,17 @@ export default defineConfig(async ({ command }) => {
     plugins.push(claudeTerminalPlugin());
   }
 
-  // Copy WASM binary to public/ so it can be served as a static asset
-  // (needed for AudioWorklet which can't use ESM imports)
-  const wasmSrc = resolve(__dirname, 'src/wasm/pkg/ace_dsp_wasm_bg.wasm');
-  const wasmDest = resolve(__dirname, 'public/ace_dsp_wasm_bg.wasm');
-  if (existsSync(wasmSrc)) {
-    copyFileSync(wasmSrc, wasmDest);
+  // Copy WASM binaries to public/ so they can be served as static assets
+  const wasmFiles: [string, string][] = [
+    ['src/wasm/pkg/ace_dsp_wasm_bg.wasm', 'public/ace_dsp_wasm_bg.wasm'],
+    ['src/wasm/waveform-pkg/ace_waveform_wasm_bg.wasm', 'public/ace_waveform_wasm_bg.wasm'],
+  ];
+  for (const [src, dest] of wasmFiles) {
+    const srcPath = resolve(__dirname, src);
+    const destPath = resolve(__dirname, dest);
+    if (existsSync(srcPath)) {
+      copyFileSync(srcPath, destPath);
+    }
   }
 
   return {

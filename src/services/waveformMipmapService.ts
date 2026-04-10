@@ -118,11 +118,18 @@ export const waveformMipmapService = {
       throw new Error('No mipmap bytes returned');
     }
 
-    // Store in IndexedDB and memory cache
+    // Store in IndexedDB, local memory cache, and sync render cache
     const bytes = resp.mipmapBytes;
     await set(makeMipmapKey(audioKey), bytes);
     mipmapCache.set(audioKey, bytes);
     evictIfNeeded();
+
+    // Also populate the synchronous main-thread cache for rendering
+    try {
+      const { cacheMipmapBytes, initWaveformWasm } = await import('./waveformMipmapCache');
+      await initWaveformWasm();
+      cacheMipmapBytes(audioKey, new Uint8Array(bytes));
+    } catch { /* WASM not available */ }
 
     // Extract legacy peaks for Clip.waveformPeaks
     const legacyResp = await sendWorkerRequest({

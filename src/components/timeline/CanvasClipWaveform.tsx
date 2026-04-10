@@ -1,9 +1,15 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import type { StretchMode } from '../../types/project';
-import { drawWaveform } from './waveformRenderer';
+import { drawWaveform, drawMipmapWaveform } from './waveformRenderer';
 import { PEAK_STRIDE, computeWaveformPeaks } from '../../utils/waveformPeaks';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
+import {
+  queryPeaksSync,
+  hasCachedMipmap,
+  loadMipmapIntoCache,
+  initWaveformWasm,
+} from '../../services/waveformMipmapCache';
 
 interface CanvasClipWaveformProps {
   peaks: number[] | null;
@@ -38,17 +44,22 @@ async function getAudioBuffer(key: string): Promise<AudioBuffer | null> {
   } catch { return null; }
 }
 
-/** Max CSS width for a single canvas. Below browser limits even at 3× DPR. */
+/** Max CSS width for a single canvas. */
 const MAX_SINGLE_CANVAS_CSS = 4000;
+
+// Initialize WASM once at module load
+let wasmInitialized = false;
+void initWaveformWasm().then(() => { wasmInitialized = true; }).catch(() => {});
 
 /**
  * DAW-standard waveform component.
  *
- * For clips <= 4000px CSS width: single canvas with 1:1 DPR backing store.
- * For larger clips: chunked canvases, only visible chunks mounted.
- * Each chunk has its own canvas with exact 1:1 device-pixel backing store.
+ * Rendering priority:
+ * 1. Mipmap (Rust WASM, synchronous query) — if available
+ * 2. Legacy peaks (JS-computed) — fallback
  *
- * Same architecture as wavesurfer.js (max 8000px chunks) and peaks.js.
+ * For clips <= 4000px: single canvas with 1:1 DPR.
+ * For larger clips: chunked canvases, all mounted.
  */
 export function CanvasClipWaveform({
   peaks,
@@ -65,49 +76,29 @@ export function CanvasClipWaveform({
   trackVolume = 1,
 }: CanvasClipWaveformProps) {
   const contentWidth = Math.max(width, 0);
-  const [hiResPeaks, setHiResPeaks] = useState<number[] | null>(null);
-  const hiResReqRef = useRef<string | null>(null);
+  const [mipmapReady, setMipmapReady] = useState(false);
 
-  // Compute hi-res peaks when pre-computed peaks are insufficient.
-  // IMPORTANT: immediately clear stale hiResPeaks when contentWidth changes
-  // to prevent drift — the base peaks are stable at any zoom level.
+  // Try to load mipmap into sync cache (one-time async, then sync queries)
   useEffect(() => {
-    if (!peaks || !audioKey || contentWidth <= 0) return;
-    const dpr = window.devicePixelRatio || 1;
-    const targetPeaks = Math.min(Math.round(contentWidth * dpr), 16384);
-    const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
-    if (logicalPeakCount >= targetPeaks) {
-      if (hiResPeaks) setHiResPeaks(null);
-      hiResReqRef.current = null;
-      return;
-    }
-    const reqKey = `${audioKey}:${targetPeaks}`;
-    if (hiResReqRef.current === reqKey && hiResPeaks) return;
-
-    // Clear stale hi-res peaks immediately so the draw effect
-    // uses the stable base peaks while new ones load.
-    if (hiResPeaks) setHiResPeaks(null);
-
+    if (!audioKey) { setMipmapReady(false); return; }
+    if (hasCachedMipmap(audioKey)) { setMipmapReady(true); return; }
     let cancelled = false;
-    hiResReqRef.current = reqKey;
     void (async () => {
-      const buf = await getAudioBuffer(audioKey);
-      if (cancelled || !buf) return;
-      const p = computeWaveformPeaks(buf, targetPeaks);
-      if (!cancelled) setHiResPeaks(p);
+      const loaded = await loadMipmapIntoCache(audioKey);
+      if (!cancelled) setMipmapReady(loaded);
     })();
     return () => { cancelled = true; };
-  }, [audioKey, peaks, contentWidth]); // removed hiResPeaks dep to avoid loop
+  }, [audioKey]);
 
-  const activePeaks = hiResPeaks ?? peaks;
-  if (!activePeaks || activePeaks.length === 0 || contentWidth <= 0) return null;
+  if ((!peaks || peaks.length === 0) && !mipmapReady) return null;
+  if (contentWidth <= 0) return null;
 
-  // For small clips, single canvas — fast path
+  // For small clips, single canvas
   if (contentWidth <= MAX_SINGLE_CANVAS_CSS) {
     return (
       <div className={`absolute inset-0 overflow-hidden ${opacityClassName}`}>
         <WaveformCanvas
-          peaks={activePeaks}
+          peaks={peaks ?? []}
           audioKey={audioKey}
           audioDuration={audioDuration}
           audioOffset={audioOffset}
@@ -118,6 +109,7 @@ export function CanvasClipWaveform({
           width={contentWidth}
           color={color}
           trackVolume={trackVolume}
+          mipmapReady={mipmapReady}
         />
       </div>
     );
@@ -127,7 +119,7 @@ export function CanvasClipWaveform({
   return (
     <div className={`absolute inset-0 overflow-hidden ${opacityClassName}`}>
       <ChunkedWaveform
-        peaks={activePeaks}
+        peaks={peaks ?? []}
         audioKey={audioKey}
         audioDuration={audioDuration}
         audioOffset={audioOffset}
@@ -138,6 +130,7 @@ export function CanvasClipWaveform({
         totalWidth={contentWidth}
         color={color}
         trackVolume={trackVolume}
+        mipmapReady={mipmapReady}
       />
     </div>
   );
@@ -157,12 +150,13 @@ interface WaveformCanvasProps {
   width: number;
   color: string;
   trackVolume: number;
+  mipmapReady: boolean;
 }
 
 function WaveformCanvas({
   peaks, audioKey, audioDuration, audioOffset, clipDuration,
   contentOffset, timeStretchRate, stretchMode,
-  width, color, trackVolume,
+  width, color, trackVolume, mipmapReady,
 }: WaveformCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
@@ -180,6 +174,7 @@ function WaveformCanvas({
   }, []);
   useEffect(() => () => { observerRef.current?.disconnect(); }, []);
 
+  // Draw — synchronous, no async in this effect
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || width <= 0) return;
@@ -197,19 +192,28 @@ function WaveformCanvas({
     ctx.clearRect(0, 0, bw, bh);
     ctx.scale(dpr, dpr);
 
-    const cachedBuffer = audioKey ? audioBufferCache.get(audioKey) : null;
-    const rawSamples = cachedBuffer ? {
-      left: cachedBuffer.getChannelData(0),
-      right: cachedBuffer.numberOfChannels >= 2 ? cachedBuffer.getChannelData(1) : cachedBuffer.getChannelData(0),
-      sampleRate: cachedBuffer.sampleRate,
-    } : null;
+    // Try synchronous mipmap query first (Rust WASM)
+    if (mipmapReady && audioKey) {
+      const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
+      const startSample = Math.round(audioOffset * sampleRate);
+      const endSample = Math.round((audioOffset + clipDuration) * sampleRate);
+      const numColumns = Math.max(1, Math.floor(width));
+      const peakData = queryPeaksSync(audioKey, startSample, endSample, numColumns);
+      if (peakData && peakData.length > 0) {
+        drawMipmapWaveform(ctx, {
+          peakData, leftPx: 0, width, height: h, color, opacity: 1, trackVolume,
+        });
+        return;
+      }
+    }
 
+    // Fallback: legacy peaks
     drawWaveform(ctx, {
       peaks, audioDuration, audioOffset, clipDuration,
       contentOffset, timeStretchRate, stretchMode,
-      width, height: h, color, opacity: 1, trackVolume, rawSamples,
+      width, height: h, color, opacity: 1, trackVolume,
     });
-  }, [peaks, audioKey, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, width, color, trackVolume, resizeTick]);
+  }, [peaks, audioKey, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, width, color, trackVolume, resizeTick, mipmapReady]);
 
   return (
     <canvas
@@ -238,17 +242,16 @@ interface ChunkedWaveformProps {
   totalWidth: number;
   color: string;
   trackVolume: number;
+  mipmapReady: boolean;
 }
 
 function ChunkedWaveform({
   peaks, audioKey, audioDuration, audioOffset, clipDuration,
   contentOffset, timeStretchRate, stretchMode,
-  totalWidth, color, trackVolume,
-}: Omit<ChunkedWaveformProps, 'scrollX'>) {
+  totalWidth, color, trackVolume, mipmapReady,
+}: ChunkedWaveformProps) {
   const totalChunks = Math.ceil(totalWidth / CHUNK_CSS_WIDTH);
 
-  // Mount ALL chunks — typically 10-50 lightweight canvas elements.
-  // No viewport calculation needed, no DOM measurement, no drift bugs.
   const chunks = useMemo(() => {
     const result: Array<{ idx: number; left: number; w: number }> = [];
     for (let i = 0; i < totalChunks; i++) {
@@ -277,6 +280,7 @@ function ChunkedWaveform({
           chunkWidth={w}
           color={color}
           trackVolume={trackVolume}
+          mipmapReady={mipmapReady}
         />
       ))}
     </div>
@@ -299,12 +303,13 @@ interface ChunkCanvasProps {
   chunkWidth: number;
   color: string;
   trackVolume: number;
+  mipmapReady: boolean;
 }
 
 function ChunkCanvas({
   peaks, audioKey, audioDuration, audioOffset, clipDuration,
   contentOffset, timeStretchRate, stretchMode,
-  totalWidth, chunkLeft, chunkWidth, color, trackVolume,
+  totalWidth, chunkLeft, chunkWidth, color, trackVolume, mipmapReady,
 }: ChunkCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -325,22 +330,33 @@ function ChunkCanvas({
     ctx.clearRect(0, 0, bw, bh);
     ctx.scale(dpr, dpr);
 
-    // Translate so the chunk draws its portion of the full clip
+    // Try synchronous mipmap query for this chunk's time range
+    if (mipmapReady && audioKey) {
+      const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
+      // Map chunk pixel range to audio time range
+      const pxPerSec = totalWidth / clipDuration;
+      const chunkStartSec = audioOffset + chunkLeft / pxPerSec;
+      const chunkEndSec = audioOffset + (chunkLeft + chunkWidth) / pxPerSec;
+      const startSample = Math.max(0, Math.round(chunkStartSec * sampleRate));
+      const endSample = Math.round(chunkEndSec * sampleRate);
+      const numColumns = Math.max(1, Math.floor(chunkWidth));
+      const peakData = queryPeaksSync(audioKey, startSample, endSample, numColumns);
+      if (peakData && peakData.length > 0) {
+        drawMipmapWaveform(ctx, {
+          peakData, leftPx: 0, width: chunkWidth, height: h, color, opacity: 1, trackVolume,
+        });
+        return;
+      }
+    }
+
+    // Fallback: translate and draw from legacy peaks
     ctx.translate(-chunkLeft, 0);
-
-    const cachedBuffer = audioKey ? audioBufferCache.get(audioKey) : null;
-    const rawSamples = cachedBuffer ? {
-      left: cachedBuffer.getChannelData(0),
-      right: cachedBuffer.numberOfChannels >= 2 ? cachedBuffer.getChannelData(1) : cachedBuffer.getChannelData(0),
-      sampleRate: cachedBuffer.sampleRate,
-    } : null;
-
     drawWaveform(ctx, {
       peaks, audioDuration, audioOffset, clipDuration,
       contentOffset, timeStretchRate, stretchMode,
-      width: totalWidth, height: h, color, opacity: 1, trackVolume, rawSamples,
+      width: totalWidth, height: h, color, opacity: 1, trackVolume,
     });
-  }, [peaks, audioKey, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, totalWidth, chunkLeft, chunkWidth, color, trackVolume]);
+  }, [peaks, audioKey, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, totalWidth, chunkLeft, chunkWidth, color, trackVolume, mipmapReady]);
 
   return (
     <canvas

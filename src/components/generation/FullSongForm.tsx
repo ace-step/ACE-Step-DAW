@@ -263,7 +263,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       seed: useRandomSeed ? undefined : seed,
       useRandomSeed,
       vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
-      syncMetaToProject: !useProjectMeta && syncMetaToProject,
+      syncMetaToProject: thinking || (!useProjectMeta && syncMetaToProject),
       instrumental,
       useProjectMeta,
       negativePrompt: negativePrompt.trim() || undefined,

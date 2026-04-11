@@ -349,6 +349,23 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     useProjectStore.getState().updateClip(clipId, { duration: actualDuration });
     genStore.updateJob(jobId, { status: 'done', progress: 'Done', stage: 'Complete' });
     useProjectStore.getState().saveClipVersion(clipId);
+
+    // Sync inferred metadata back to project when thinking was enabled
+    if (params.thinking && inferredMetas) {
+      const updates: Record<string, unknown> = {};
+      if (inferredMetas.bpm && inferredMetas.bpm > 0) updates.bpm = inferredMetas.bpm;
+      if (inferredMetas.keyScale) updates.keyScale = inferredMetas.keyScale;
+      if (inferredMetas.timeSignature) {
+        const ts = Number(inferredMetas.timeSignature);
+        if (Number.isFinite(ts) && ts > 0) updates.timeSignature = ts;
+      }
+      if (Object.keys(updates).length > 0) {
+        useProjectStore.getState().updateProject(updates);
+        const parts = Object.entries(updates).map(([k, v]) => `${k}=${v}`).join(', ');
+        toastInfo(`Project updated: ${parts}`);
+      }
+    }
+
     toastSuccess('Clip regenerated');
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Regeneration failed';
@@ -1886,6 +1903,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
         audioOffset: 0,
         generatedFromContext: false,
       });
+      store.updateClip(targetClipId, { duration: buffer.duration });
 
       genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
       store.saveClipVersion(targetClipId);
@@ -2460,6 +2478,7 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
         generatedFromContext: true,
       });
 
+      store.updateClip(newClip.id, { duration: buffer.duration });
       genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
       store.saveClipVersion(newClip.id);
       return true;
@@ -2651,6 +2670,7 @@ export async function generateVocalReplacement(opts: VocalReplacementOptions): P
         generatedFromContext: true,
       });
 
+      store.updateClip(newClip.id, { duration: buffer.duration });
       genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
       store.saveClipVersion(newClip.id);
       return true;

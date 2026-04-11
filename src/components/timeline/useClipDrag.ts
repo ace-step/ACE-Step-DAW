@@ -191,6 +191,7 @@ export function useClipDrag({
     dragRef.current = false;
     scissorRef.current = false;
     let isShiftCopy = e.shiftKey;
+    const isShiftStretch = e.shiftKey && (mode === 'resize-left' || mode === 'resize-right');
 
     const currentSelectedClipIds = useUIStore.getState().selectedClipIds;
     const isMultiSelected = currentSelectedClipIds.size > 1 && currentSelectedClipIds.has(clip.id);
@@ -347,7 +348,7 @@ export function useClipDrag({
         newStart = Math.min(newStart, maxStart);
 
         const newDuration = origDuration + (origStart - newStart);
-        if (ev.shiftKey) {
+        if (isShiftStretch) {
           // Shift+drag = time-stretch: use clip's current mode or default to complexPro
           const effectiveMode = origStretchMode && origStretchMode !== 'repitch' ? origStretchMode : 'complexPro';
           scheduleStoreUpdate(() => updateClip(clip.id, {
@@ -394,13 +395,14 @@ export function useClipDrag({
         let newDuration = ev.altKey ? origDuration + deltaSec : snapToGrid(origDuration + deltaSec, bpm, 1);
         newDuration = Math.max(MIN_CLIP_DURATION, newDuration);
         newDuration = Math.min(newDuration, totalDuration - origStart);
-        if (ev.shiftKey) {
+        if (isShiftStretch) {
           // Shift+drag = time-stretch: use clip's current mode or default to complexPro
           const effectiveMode = origStretchMode && origStretchMode !== 'repitch' ? origStretchMode : 'complexPro';
+          const rate = Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration);
           scheduleStoreUpdate(() => updateClip(clip.id, {
             duration: newDuration,
             contentOffset: undefined,
-            timeStretchRate: Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration),
+            timeStretchRate: rate,
             stretchMode: effectiveMode,
           }));
           return;

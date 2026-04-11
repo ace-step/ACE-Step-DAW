@@ -311,7 +311,9 @@ export interface MipmapDrawParams {
 }
 
 /**
- * Draw waveform from mipmap query results — per-pixel min/max bars only.
+ * Draw waveform from mipmap query results as a smooth filled polygon.
+ * Traces the max envelope forward, then the min envelope backward,
+ * producing a single filled path that looks like a continuous curve.
  */
 export function drawMipmapWaveform(
   ctx: CanvasRenderingContext2D,
@@ -333,17 +335,29 @@ export function drawMipmapWaveform(
   ctx.globalAlpha = opacity * 0.85;
   ctx.fillStyle = color;
 
+  // Draw as filled polygon: top edge (max) forward, bottom edge (min) backward
+  ctx.beginPath();
+
+  // Forward pass: trace max envelope (top edge of waveform)
   for (let i = 0; i < numColumns; i++) {
     const off = i * MIPMAP_STRIDE;
     const maxVal = Math.max(peakData[off + 1], peakData[off + 4]);
-    const minVal = Math.min(peakData[off], peakData[off + 3]);
-
-    const x = leftPx + i * colW;
-    const yTop = centerY - maxVal * amplitude;
-    const yBottom = centerY - minVal * amplitude;
-    const barHeight = Math.max(yBottom - yTop, 0.5);
-    ctx.fillRect(x, yTop, Math.max(colW, 0.5), barHeight);
+    const x = leftPx + (i + 0.5) * colW;
+    const y = centerY - maxVal * amplitude;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
+
+  // Backward pass: trace min envelope (bottom edge of waveform)
+  for (let i = numColumns - 1; i >= 0; i--) {
+    const off = i * MIPMAP_STRIDE;
+    const minVal = Math.min(peakData[off], peakData[off + 3]);
+    const x = leftPx + (i + 0.5) * colW;
+    const y = centerY - minVal * amplitude;
+    ctx.lineTo(x, y);
+  }
+
+  ctx.closePath();
+  ctx.fill();
 
   ctx.restore();
 }

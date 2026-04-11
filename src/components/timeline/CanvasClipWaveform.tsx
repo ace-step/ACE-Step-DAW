@@ -195,14 +195,14 @@ function WaveformCanvas({
     ctx.scale(dpr, dpr);
 
     // Try synchronous mipmap query first (Rust WASM)
-    // Use FIXED column count (4096) — never changes with zoom.
-    // colW = width / 4096 scales smoothly, no integer quantization drift.
+    // Use pixel-proportional column count — matches visible resolution,
+    // capped at 4096 for deep zoom to avoid excessive queries.
     if (mipmapReady && audioKey) {
       const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
       const startSample = Math.round(audioOffset * sampleRate);
       const endSample = Math.round((audioOffset + clipDuration) * sampleRate);
-      const FIXED_COLUMNS = 4096;
-      const peakData = queryPeaksSync(audioKey, startSample, endSample, FIXED_COLUMNS);
+      const columns = Math.min(4096, Math.max(1, Math.round(width * dpr)));
+      const peakData = queryPeaksSync(audioKey, startSample, endSample, columns);
       if (peakData && peakData.length > 0) {
         drawMipmapWaveform(ctx, {
           peakData, leftPx: 0, width, height: h, color, opacity: 1, trackVolume,
@@ -256,17 +256,15 @@ function ChunkedWaveform({
 }: ChunkedWaveformProps) {
   const totalChunks = Math.ceil(totalWidth / CHUNK_CSS_WIDTH);
 
-  // Query mipmap ONCE with FIXED column count (4096).
-  // This data never changes with zoom — only depends on audio content.
-  // Each chunk slices its portion; colW = totalWidth / 4096 scales smoothly.
-  const FIXED_COLUMNS = 4096;
+  // Query mipmap with pixel-proportional column count, capped at 4096.
+  const mipmapColumns = Math.min(4096, Math.max(1, Math.round(totalWidth * (typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1))));
   const fullMipmapData = useMemo(() => {
     if (!mipmapReady || !audioKey) return null;
     const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
     const startSample = Math.round(audioOffset * sampleRate);
     const endSample = Math.round((audioOffset + clipDuration) * sampleRate);
-    return queryPeaksSync(audioKey, startSample, endSample, FIXED_COLUMNS);
-  }, [mipmapReady, audioKey, audioOffset, clipDuration]);
+    return queryPeaksSync(audioKey, startSample, endSample, mipmapColumns);
+  }, [mipmapReady, audioKey, audioOffset, clipDuration, mipmapColumns]);
 
   const chunks = useMemo(() => {
     const result: Array<{ idx: number; left: number; w: number }> = [];

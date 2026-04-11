@@ -57,10 +57,10 @@ export function getTimelineVisualDuration(
 ) {
   if (pixelsPerSecond <= 0) return totalDuration;
   const viewDuration = viewportWidth / pixelsPerSecond;
-  // When the project already fits within the viewport (zoom out far enough),
-  // don't pad beyond the project — add only a small buffer (10%) for breathing room
+  // When the project already fits within the viewport (at min zoom),
+  // don't pad — content should exactly fill the viewport
   if (totalDuration > 0 && totalDuration * pixelsPerSecond <= viewportWidth) {
-    return totalDuration * 1.1;
+    return totalDuration;
   }
   return Math.max(totalDuration, viewDuration);
 }
@@ -94,9 +94,8 @@ export function clampTimelinePixelsPerSecond(pixelsPerSecond: number, dynamicMin
  */
 export function getMinZoomForProject(projectDurationSeconds: number, viewportWidth: number): number {
   if (projectDurationSeconds <= 0 || viewportWidth <= 0) return MIN_TIMELINE_PIXELS_PER_SECOND;
-  // Leave a small margin (40px each side) so content doesn't touch edges
-  const usable = Math.max(1, viewportWidth - 80);
-  return Math.max(MIN_TIMELINE_PIXELS_PER_SECOND, usable / projectDurationSeconds);
+  // Exact fit: project fills the entire viewport width
+  return Math.max(MIN_TIMELINE_PIXELS_PER_SECOND, viewportWidth / projectDurationSeconds);
 }
 
 export function getNextTimelineZoomLevel(

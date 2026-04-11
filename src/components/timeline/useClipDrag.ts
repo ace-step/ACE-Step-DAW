@@ -81,8 +81,10 @@ export function useClipDrag({
     const rect = e.currentTarget.getBoundingClientRect();
     const relX = e.clientX - rect.left;
     const relY = e.clientY - rect.top;
-    // Resize only triggers in the header rail area
-    if (relY <= HEADER_RAIL_HEIGHT_PX) {
+    // Shift+edge drag = time-stretch from full clip height
+    // Normal edge drag = resize from header rail only
+    const edgeZone = e.shiftKey || relY <= HEADER_RAIL_HEIGHT_PX;
+    if (edgeZone) {
       if (relX <= EDGE_HANDLE_PX) return 'resize-left';
       if (relX >= rect.width - EDGE_HANDLE_PX) return 'resize-right';
     }

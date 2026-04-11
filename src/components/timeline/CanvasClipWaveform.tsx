@@ -195,17 +195,19 @@ function WaveformCanvas({
     ctx.scale(dpr, dpr);
 
     // Try synchronous mipmap query first (Rust WASM)
-    // Use pixel-proportional column count — matches visible resolution,
-    // capped at 4096 for deep zoom to avoid excessive queries.
+    // Use audioDuration (not clipDuration) for sample range so waveform
+    // doesn't repeat/extend beyond the actual audio content.
     if (mipmapReady && audioKey) {
       const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
+      const actualDur = Math.min(audioDuration, clipDuration);
       const startSample = Math.round(audioOffset * sampleRate);
-      const endSample = Math.round((audioOffset + clipDuration) * sampleRate);
-      const columns = Math.min(4096, Math.max(1, Math.round(width)));
+      const endSample = Math.round((audioOffset + actualDur) * sampleRate);
+      const audioWidthPx = clipDuration > 0 ? width * (actualDur / clipDuration) : width;
+      const columns = Math.min(4096, Math.max(1, Math.round(audioWidthPx)));
       const peakData = queryPeaksSync(audioKey, startSample, endSample, columns);
       if (peakData && peakData.length > 0) {
         drawMipmapWaveform(ctx, {
-          peakData, leftPx: 0, width, height: h, color, opacity: 1, trackVolume,
+          peakData, leftPx: 0, width: audioWidthPx, height: h, color, opacity: 1, trackVolume,
         });
         return;
       }
@@ -257,14 +259,17 @@ function ChunkedWaveform({
   const totalChunks = Math.ceil(totalWidth / CHUNK_CSS_WIDTH);
 
   // Query mipmap with pixel-proportional column count, capped at 4096.
-  const mipmapColumns = Math.min(4096, Math.max(1, Math.round(totalWidth)));
+  // Use audioDuration (not clipDuration) so waveform doesn't repeat beyond audio.
+  const actualDur = Math.min(audioDuration, clipDuration);
+  const audioWidthPx = clipDuration > 0 ? totalWidth * (actualDur / clipDuration) : totalWidth;
+  const mipmapColumns = Math.min(4096, Math.max(1, Math.round(audioWidthPx)));
   const fullMipmapData = useMemo(() => {
     if (!mipmapReady || !audioKey) return null;
     const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
     const startSample = Math.round(audioOffset * sampleRate);
-    const endSample = Math.round((audioOffset + clipDuration) * sampleRate);
+    const endSample = Math.round((audioOffset + actualDur) * sampleRate);
     return queryPeaksSync(audioKey, startSample, endSample, mipmapColumns);
-  }, [mipmapReady, audioKey, audioOffset, clipDuration, mipmapColumns]);
+  }, [mipmapReady, audioKey, audioOffset, actualDur, mipmapColumns]);
 
   const chunks = useMemo(() => {
     const result: Array<{ idx: number; left: number; w: number }> = [];

@@ -13,7 +13,8 @@ import type {
   Track,
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
-import { timeStretch, pitchShift as pitchShiftAudio, type TimeStretchMode } from '../utils/timeStretch';
+import { timeStretch as legacyTimeStretch, pitchShift as legacyPitchShift, type TimeStretchMode } from '../utils/timeStretch';
+import { stretchOffline } from '../services/timeStretchService';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../utils/tempoMap';
 import { computeWarpedSegments } from '../utils/audioWarp';
@@ -860,7 +861,8 @@ export class AudioEngine {
     const cached = this.stretchedBufferCache.get(cacheKey);
     if (cached) return { buffer: cached, appliedStretch: !!needsStretch };
 
-    // Process each channel
+    // Process each channel using legacy engine (synchronous).
+    // Rubber Band async path is used via preProcessClipStretch() before playback.
     const buffer = clip.buffer;
     const numChannels = buffer.numberOfChannels;
     const ratio = 1 / rate; // rate=0.5 means slower → ratio=2 (stretch to 2x)
@@ -873,7 +875,7 @@ export class AudioEngine {
 
       // Apply time-stretch if needed (non-repitch modes only)
       if (needsStretch) {
-        channelData = timeStretch(channelData, {
+        channelData = legacyTimeStretch(channelData, {
           mode: mode as TimeStretchMode,
           ratio,
           sampleRate: buffer.sampleRate,
@@ -882,7 +884,7 @@ export class AudioEngine {
 
       // Apply pitch shift if needed (preserves duration)
       if (needsPitchShift) {
-        channelData = pitchShiftAudio(channelData, {
+        channelData = legacyPitchShift(channelData, {
           semitones,
           sampleRate: buffer.sampleRate,
         });
@@ -907,6 +909,59 @@ export class AudioEngine {
   }
 
   /**
+   * Pre-process a clip's time-stretch using Rubber Band (async, high quality).
+   * Call this before playback to populate the cache. Scheduling then reads
+   * from cache synchronously via _getProcessedBuffer().
+   */
+  async preProcessClipStretch(clip: ClipScheduleInfo): Promise<void> {
+    const mode = clip.stretchMode;
+    const rawRate = clip.timeStretchRate ?? 1;
+    const rate = Number.isFinite(rawRate) ? Math.max(0.25, Math.min(4, rawRate)) : 1;
+    const semitones = clip.pitchShift ?? 0;
+    const needsStretch = mode && mode !== 'repitch' && mode !== 'slice' && Math.abs(rate - 1) >= 0.001;
+    const needsPitchShift = Math.abs(semitones) >= 0.01;
+
+    if (!needsStretch && !needsPitchShift) return;
+
+    const cacheKey = `${clip.clipId}:${mode ?? 'none'}:${rate.toFixed(4)}:ps${semitones.toFixed(2)}`;
+    if (this.stretchedBufferCache.has(cacheKey)) return;
+
+    const buffer = clip.buffer;
+    const ratio = 1 / rate;
+    const pitchScale = Math.pow(2, semitones / 12);
+
+    try {
+      // Extract channel data
+      const channelData: Float32Array[] = [];
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        channelData.push(new Float32Array(buffer.getChannelData(ch)));
+      }
+
+      // Use Rubber Band for high-quality offline stretch + pitch shift
+      const stretched = await stretchOffline(
+        channelData,
+        buffer.sampleRate,
+        needsStretch ? ratio : 1.0,
+        needsPitchShift ? pitchScale : 1.0,
+      );
+
+      const maxLen = Math.max(...stretched.map(ch => ch.length));
+      const processedBuffer = this.ctx.createBuffer(
+        buffer.numberOfChannels,
+        maxLen,
+        buffer.sampleRate,
+      );
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        processedBuffer.getChannelData(ch).set(stretched[ch]);
+      }
+
+      this.stretchedBufferCache.set(cacheKey, processedBuffer);
+    } catch {
+      // Rubber Band unavailable — _getProcessedBuffer will use legacy fallback
+    }
+  }
+
+  /**
    * Get a pitch-shifted buffer for use with warped clips.
    * Only applies pitch shift (not time-stretch, since warp handles timing).
    */
@@ -924,7 +979,7 @@ export class AudioEngine {
     let maxLen = 0;
 
     for (let ch = 0; ch < numChannels; ch++) {
-      const channelData = pitchShiftAudio(new Float32Array(buffer.getChannelData(ch)), {
+      const channelData = legacyPitchShift(new Float32Array(buffer.getChannelData(ch)), {
         semitones,
         sampleRate: buffer.sampleRate,
       });

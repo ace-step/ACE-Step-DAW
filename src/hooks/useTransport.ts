@@ -349,6 +349,16 @@ export function useTransport() {
       if (lastClipEnd > 0) effectiveEnd = lastClipEnd;
     }
 
+    // Pre-process clips that need time-stretch via Rubber Band (async, high quality).
+    // Results are cached — subsequent plays are instant.
+    const stretchClips = clipBuffers.filter(
+      (c) => c.stretchMode && c.stretchMode !== 'repitch' && c.stretchMode !== 'slice'
+        && (Math.abs((c.timeStretchRate ?? 1) - 1) >= 0.001 || Math.abs(c.pitchShift ?? 0) >= 0.01),
+    );
+    if (stretchClips.length > 0) {
+      await Promise.allSettled(stretchClips.map((c) => engine.preProcessClipStretch(c)));
+    }
+
     engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
 
     const { metronomeEnabled } = useTransportStore.getState();

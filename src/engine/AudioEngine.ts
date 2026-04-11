@@ -14,7 +14,7 @@ import type {
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
 import { pitchShift as legacyPitchShift } from '../utils/timeStretch';
-import { stretchOffline } from '../services/timeStretchService';
+import { stretchOffline, createRealtimeStretchNode } from '../services/timeStretchService';
 import { toastInfo } from '../hooks/useToast';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../utils/tempoMap';
@@ -982,13 +982,22 @@ export class AudioEngine {
     trackNode: TrackNode,
     fromTime: number,
   ) {
-    const source = this.ctx.createBufferSource();
+    // Check if we need non-repitch stretch and have no cached result
+    const clipMode = clip.stretchMode;
+    const clipRate = clip.timeStretchRate ?? 1;
+    const needsRealtimeStretch = clipMode && clipMode !== 'repitch' && clipMode !== 'slice'
+      && Math.abs(clipRate - 1) >= 0.001;
 
-    // Get processed buffer (time-stretch and/or pitch shift).
-    // The result distinguishes whether offline time-stretch was applied,
-    // so we know whether to also apply playbackRate for repitch mode.
     const processed = this._getProcessedBuffer(clip);
     const appliedStretch = processed?.appliedStretch ?? false;
+
+    // If stretch needed but no cached buffer → use Signalsmith real-time node
+    if (needsRealtimeStretch && !processed) {
+      void this._scheduleSignalsmithClip(clip, trackNode, fromTime);
+      return;
+    }
+
+    const source = this.ctx.createBufferSource();
     if (processed) {
       source.buffer = processed.buffer;
     } else {
@@ -1055,6 +1064,80 @@ export class AudioEngine {
       trackId: clip.trackId,
       startTime: clip.startTime,
     });
+  }
+
+  /**
+   * Schedule a clip using Signalsmith Stretch real-time AudioNode.
+   * Used when non-repitch stretch is needed but Rubber Band hasn't cached yet.
+   * Signalsmith processes audio in real-time through its AudioWorklet.
+   */
+  private async _scheduleSignalsmithClip(
+    clip: ClipScheduleInfo,
+    trackNode: TrackNode,
+    fromTime: number,
+  ) {
+    const rate = clip.timeStretchRate ?? 1;
+    const playbackRate = rate; // rate < 1 = slower = stretch
+    const semitones = clip.pitchShift ?? 0;
+
+    try {
+      const stretchNode = await createRealtimeStretchNode(this.ctx, clip.buffer.numberOfChannels);
+
+      // Load audio buffer into Signalsmith
+      const channelBuffers: Float32Array[] = [];
+      for (let ch = 0; ch < clip.buffer.numberOfChannels; ch++) {
+        channelBuffers.push(new Float32Array(clip.buffer.getChannelData(ch)));
+      }
+      await stretchNode.addBuffers(channelBuffers);
+
+      // Connect to track
+      stretchNode.connect(trackNode.inputGain);
+
+      // Calculate timing
+      const clipEnd = clip.startTime + clip.clipDuration;
+      if (clipEnd <= fromTime) return;
+
+      const contextNow = this.ctx.currentTime;
+      const inputStart = clip.audioOffset;
+
+      if (clip.startTime >= fromTime) {
+        const delay = clip.startTime - fromTime;
+        const when = contextNow + delay;
+        stretchNode.schedule({
+          output: when,
+          input: inputStart,
+          rate: playbackRate,
+          semitones,
+          active: true,
+        });
+        stretchNode.start(when);
+        stretchNode.stop(when + clip.clipDuration);
+      } else {
+        const seekOffset = fromTime - clip.startTime;
+        const remaining = clip.clipDuration - seekOffset;
+        stretchNode.schedule({
+          input: inputStart + seekOffset * playbackRate,
+          rate: playbackRate,
+          semitones,
+          active: true,
+        });
+        stretchNode.start();
+        stretchNode.stop(contextNow + remaining);
+      }
+    } catch {
+      // Signalsmith failed — fall back to raw buffer playback (no stretch)
+      const source = this.ctx.createBufferSource();
+      source.buffer = clip.buffer;
+      source.connect(trackNode.inputGain);
+      const contextNow = this.ctx.currentTime;
+      if (clip.startTime >= fromTime) {
+        source.start(contextNow + clip.startTime - fromTime, clip.audioOffset, clip.clipDuration);
+      } else {
+        const seekOffset = fromTime - clip.startTime;
+        source.start(contextNow, clip.audioOffset + seekOffset, clip.clipDuration - seekOffset);
+      }
+      this.scheduledSources.push({ source, clipId: clip.clipId, trackId: clip.trackId, startTime: clip.startTime });
+    }
   }
 
   private _scheduleWarpedClip(

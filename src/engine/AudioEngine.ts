@@ -942,10 +942,11 @@ export class AudioEngine {
     clipDuration: number, timeStretchRate?: number,
     stretchMode?: string, pitchShift?: number,
   ): Promise<void> {
-    const buffer = this.decodedBufferCache.get(audioKey);
+    let buffer = this.decodedBufferCache.get(audioKey);
     if (!buffer) {
-      toastInfo(`Stretch: audio buffer not decoded yet (${audioKey.slice(0, 12)}...)`);
-      return;
+      // Buffer not in memory cache — load from IndexedDB and decode
+      buffer = await this._getDecodedBuffer(audioKey) ?? undefined;
+      if (!buffer) return;
     }
     await this.preProcessClipStretch({
       clipId, trackId: '', buffer, startTime: 0,

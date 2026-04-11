@@ -13,8 +13,9 @@ import type {
   Track,
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
-import { timeStretch as legacyTimeStretch, pitchShift as legacyPitchShift, type TimeStretchMode } from '../utils/timeStretch';
+import { pitchShift as legacyPitchShift } from '../utils/timeStretch';
 import { stretchOffline, stretchWithSignalsmith } from '../services/timeStretchService';
+import { toastInfo } from '../hooks/useToast';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../utils/tempoMap';
 import { computeWarpedSegments } from '../utils/audioWarp';
@@ -861,51 +862,10 @@ export class AudioEngine {
     const cached = this.stretchedBufferCache.get(cacheKey);
     if (cached) return { buffer: cached, appliedStretch: !!needsStretch };
 
-    // Process each channel using legacy engine (synchronous).
-    // Rubber Band async path is used via preProcessClipStretch() before playback.
-    const buffer = clip.buffer;
-    const numChannels = buffer.numberOfChannels;
-    const ratio = 1 / rate; // rate=0.5 means slower → ratio=2 (stretch to 2x)
-
-    const processedChannels: Float32Array[] = [];
-    let maxLen = 0;
-
-    for (let ch = 0; ch < numChannels; ch++) {
-      let channelData: Float32Array = new Float32Array(buffer.getChannelData(ch));
-
-      // Apply time-stretch if needed (non-repitch modes only)
-      if (needsStretch) {
-        channelData = legacyTimeStretch(channelData, {
-          mode: mode as TimeStretchMode,
-          ratio,
-          sampleRate: buffer.sampleRate,
-        });
-      }
-
-      // Apply pitch shift if needed (preserves duration)
-      if (needsPitchShift) {
-        channelData = legacyPitchShift(channelData, {
-          semitones,
-          sampleRate: buffer.sampleRate,
-        });
-      }
-
-      processedChannels.push(channelData);
-      maxLen = Math.max(maxLen, channelData.length);
-    }
-
-    // Create new AudioBuffer with processed data
-    const processedBuffer = this.ctx.createBuffer(
-      numChannels,
-      maxLen,
-      buffer.sampleRate,
-    );
-    for (let ch = 0; ch < numChannels; ch++) {
-      processedBuffer.getChannelData(ch).set(processedChannels[ch]);
-    }
-
-    this.stretchedBufferCache.set(cacheKey, processedBuffer);
-    return { buffer: processedBuffer, appliedStretch: !!needsStretch };
+    // No legacy fallback — stretch is pre-processed on mouseup via
+    // Signalsmith (fast) + Rubber Band (HQ background).
+    // If cache miss here, play the raw buffer without stretch.
+    return null;
   }
 
   /**
@@ -932,17 +892,19 @@ export class AudioEngine {
     const buffer = clip.buffer;
     const ratio = 1 / rate;
 
+    toastInfo('Stretching audio (Signalsmith)...');
+
     // Step 1: Signalsmith (fast) — populate cache for immediate playback
     try {
       const signalsmithResult = await stretchWithSignalsmith(
         buffer, ratio, needsPitchShift ? semitones : 0,
       );
-      // Only set if nothing has been cached yet (Rubber Band may have finished first)
       if (!this.stretchedBufferCache.has(cacheKey)) {
         this.stretchedBufferCache.set(cacheKey, signalsmithResult);
+        toastInfo('Signalsmith stretch ready — press Play');
       }
     } catch {
-      // Signalsmith unavailable — legacy fallback in _getProcessedBuffer
+      toastInfo('Signalsmith unavailable, waiting for Rubber Band...');
     }
 
     // Step 2: Rubber Band (slow, highest quality) — upgrade in background
@@ -963,8 +925,8 @@ export class AudioEngine {
         for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
           hqBuffer.getChannelData(ch).set(stretched[ch]);
         }
-        // Upgrade cache — next play/loop uses Rubber Band quality
         this.stretchedBufferCache.set(cacheKey, hqBuffer);
+        toastInfo('Rubber Band HQ stretch ready');
       } catch {
         // Rubber Band unavailable — Signalsmith result stays in cache
       }

@@ -51,8 +51,9 @@ async function initRubberBand(): Promise<void> {
     try {
       const { RubberBandInterface } = await import('rubberband-wasm');
       // rubberband-wasm requires loading the WASM module
+      // WASM binary copied to public/ by vite.config.ts
       const wasmModule = await WebAssembly.compileStreaming(
-        fetch(new URL('rubberband-wasm/dist/rubberband.wasm', import.meta.url))
+        fetch('/rubberband.wasm')
       );
       rubberbandInterface = await RubberBandInterface.initialize(wasmModule) as unknown as RubberbandAPI;
       logger.info('Rubber Band WASM initialized');
@@ -203,47 +204,71 @@ export async function createRealtimeStretchNode(
 }
 
 /**
- * Stretch an AudioBuffer using Signalsmith Stretch via OfflineAudioContext.
- * Fast, good quality — used as immediate playback engine.
+ * Stretch an AudioBuffer using Signalsmith Stretch.
+ *
+ * Uses a real AudioContext with MediaStreamDestination to capture output,
+ * since OfflineAudioContext doesn't support AudioWorklet reliably.
+ * Records the stretched output in real-time, then returns the buffer.
  */
 export async function stretchWithSignalsmith(
   buffer: AudioBuffer,
   timeRatio: number,
   pitchSemitones: number = 0,
 ): Promise<AudioBuffer> {
-  const outputLength = Math.round(buffer.length * timeRatio);
-  const offlineCtx = new OfflineAudioContext(
-    buffer.numberOfChannels,
-    outputLength,
-    buffer.sampleRate,
-  );
-
   const SignalsmithStretch = (await import('signalsmith-stretch')).default;
-  const stretchNode = await SignalsmithStretch(offlineCtx as unknown as AudioContext, {
-    outputChannelCount: [buffer.numberOfChannels],
-  });
 
-  // Load audio into the stretch node
-  const channelBuffers: Float32Array[] = [];
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    channelBuffers.push(new Float32Array(buffer.getChannelData(ch)));
+  // Use a real AudioContext (AudioWorklet requires it)
+  const ctx = new AudioContext({ sampleRate: buffer.sampleRate });
+
+  try {
+    const stretchNode = await SignalsmithStretch(ctx, {
+      outputChannelCount: [buffer.numberOfChannels],
+    });
+    stretchNode.configure({ splitComputation: true });
+
+    // Load audio buffer
+    const channelBuffers: Float32Array[] = [];
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      channelBuffers.push(new Float32Array(buffer.getChannelData(ch)));
+    }
+    await stretchNode.addBuffers(channelBuffers);
+
+    // Set stretch parameters
+    const playbackRate = 1 / timeRatio;
+    stretchNode.schedule({
+      input: 0,
+      rate: playbackRate,
+      semitones: pitchSemitones,
+      active: true,
+    });
+
+    // Capture output via MediaRecorder
+    const dest = ctx.createMediaStreamDestination();
+    stretchNode.connect(dest);
+    stretchNode.start();
+
+    const outputDuration = buffer.duration * timeRatio;
+    const recorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm' });
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+    const recordingDone = new Promise<Blob>((resolve) => {
+      recorder.onstop = () => resolve(new Blob(chunks, { type: 'audio/webm' }));
+    });
+
+    recorder.start();
+    await new Promise((r) => setTimeout(r, outputDuration * 1000 + 200));
+    recorder.stop();
+    stretchNode.stop();
+
+    const recordedBlob = await recordingDone;
+    const arrayBuffer = await recordedBlob.arrayBuffer();
+    const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+    return decodedBuffer;
+  } finally {
+    await ctx.close();
   }
-  await stretchNode.addBuffers(channelBuffers);
-
-  // Configure stretch parameters
-  stretchNode.schedule({
-    input: 0,
-    rate: 1 / timeRatio, // Signalsmith rate = playback speed, not stretch ratio
-    semitones: pitchSemitones,
-    active: true,
-  });
-
-  // Connect to destination and render
-  stretchNode.connect(offlineCtx.destination);
-  stretchNode.start();
-
-  const rendered = await offlineCtx.startRendering();
-  return rendered;
 }
 
 // ── Unified API ────────────────────────────────────────────────────

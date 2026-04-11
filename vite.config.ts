@@ -20,6 +20,7 @@ export default defineConfig(async ({ command }) => {
   const wasmFiles: [string, string][] = [
     ['src/wasm/pkg/ace_dsp_wasm_bg.wasm', 'public/ace_dsp_wasm_bg.wasm'],
     ['src/wasm/waveform-pkg/ace_waveform_wasm_bg.wasm', 'public/ace_waveform_wasm_bg.wasm'],
+    ['node_modules/rubberband-wasm/dist/rubberband.wasm', 'public/rubberband.wasm'],
   ];
   for (const [src, dest] of wasmFiles) {
     const srcPath = resolve(__dirname, src);

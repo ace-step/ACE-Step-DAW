@@ -342,12 +342,14 @@ export function useClipDrag({
 
         const newDuration = origDuration + (origStart - newStart);
         if (ev.shiftKey) {
+          // Shift+drag = time-stretch: use clip's current mode or default to complexPro
+          const effectiveMode = origStretchMode && origStretchMode !== 'repitch' ? origStretchMode : 'complexPro';
           scheduleStoreUpdate(() => updateClip(clip.id, {
             startTime: newStart,
             duration: newDuration,
             contentOffset: undefined,
             timeStretchRate: Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration),
-            stretchMode: 'repitch',
+            stretchMode: effectiveMode,
           }));
           return;
         }
@@ -387,11 +389,13 @@ export function useClipDrag({
         newDuration = Math.max(MIN_CLIP_DURATION, newDuration);
         newDuration = Math.min(newDuration, totalDuration - origStart);
         if (ev.shiftKey) {
+          // Shift+drag = time-stretch: use clip's current mode or default to complexPro
+          const effectiveMode = origStretchMode && origStretchMode !== 'repitch' ? origStretchMode : 'complexPro';
           scheduleStoreUpdate(() => updateClip(clip.id, {
             duration: newDuration,
             contentOffset: undefined,
             timeStretchRate: Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration),
-            stretchMode: 'repitch',
+            stretchMode: effectiveMode,
           }));
           return;
         }

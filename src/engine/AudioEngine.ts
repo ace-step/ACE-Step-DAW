@@ -14,7 +14,7 @@ import type {
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
 import { pitchShift as legacyPitchShift } from '../utils/timeStretch';
-import { stretchOffline, stretchWithSignalsmith } from '../services/timeStretchService';
+import { stretchOffline } from '../services/timeStretchService';
 import { toastInfo } from '../hooks/useToast';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../utils/tempoMap';
@@ -891,46 +891,32 @@ export class AudioEngine {
 
     const buffer = clip.buffer;
     const ratio = 1 / rate;
-
-    toastInfo('Stretching audio (Signalsmith)...');
-
-    // Step 1: Signalsmith (fast) — populate cache for immediate playback
-    try {
-      const signalsmithResult = await stretchWithSignalsmith(
-        buffer, ratio, needsPitchShift ? semitones : 0,
-      );
-      if (!this.stretchedBufferCache.has(cacheKey)) {
-        this.stretchedBufferCache.set(cacheKey, signalsmithResult);
-        toastInfo('Signalsmith stretch ready — press Play');
-      }
-    } catch {
-      toastInfo('Signalsmith unavailable, waiting for Rubber Band...');
-    }
-
-    // Step 2: Rubber Band (slow, highest quality) — upgrade in background
     const pitchScale = Math.pow(2, semitones / 12);
-    void (async () => {
-      try {
-        const channelData: Float32Array[] = [];
-        for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-          channelData.push(new Float32Array(buffer.getChannelData(ch)));
-        }
-        const stretched = await stretchOffline(
-          channelData, buffer.sampleRate,
-          needsStretch ? ratio : 1.0,
-          needsPitchShift ? pitchScale : 1.0,
-        );
-        const maxLen = Math.max(...stretched.map(ch => ch.length));
-        const hqBuffer = this.ctx.createBuffer(buffer.numberOfChannels, maxLen, buffer.sampleRate);
-        for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-          hqBuffer.getChannelData(ch).set(stretched[ch]);
-        }
-        this.stretchedBufferCache.set(cacheKey, hqBuffer);
-        toastInfo('Rubber Band HQ stretch ready');
-      } catch {
-        // Rubber Band unavailable — Signalsmith result stays in cache
+
+    toastInfo('Stretching audio (Rubber Band)...');
+
+    // Use Rubber Band for high-quality offline stretch
+    // Signalsmith AudioWorklet integration deferred (worklet compatibility issues)
+    try {
+      const channelData: Float32Array[] = [];
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        channelData.push(new Float32Array(buffer.getChannelData(ch)));
       }
-    })();
+      const stretched = await stretchOffline(
+        channelData, buffer.sampleRate,
+        needsStretch ? ratio : 1.0,
+        needsPitchShift ? pitchScale : 1.0,
+      );
+      const maxLen = Math.max(...stretched.map(ch => ch.length));
+      const hqBuffer = this.ctx.createBuffer(buffer.numberOfChannels, maxLen, buffer.sampleRate);
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        hqBuffer.getChannelData(ch).set(stretched[ch]);
+      }
+      this.stretchedBufferCache.set(cacheKey, hqBuffer);
+      toastInfo('Rubber Band stretch ready — press Play');
+    } catch (err) {
+      toastInfo(`Stretch failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+    }
   }
 
   /**

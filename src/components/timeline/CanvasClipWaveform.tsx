@@ -201,7 +201,7 @@ function WaveformCanvas({
       const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
       const startSample = Math.round(audioOffset * sampleRate);
       const endSample = Math.round((audioOffset + clipDuration) * sampleRate);
-      const columns = Math.min(4096, Math.max(1, Math.round(width * dpr)));
+      const columns = Math.min(4096, Math.max(1, Math.round(width)));
       const peakData = queryPeaksSync(audioKey, startSample, endSample, columns);
       if (peakData && peakData.length > 0) {
         drawMipmapWaveform(ctx, {
@@ -257,7 +257,7 @@ function ChunkedWaveform({
   const totalChunks = Math.ceil(totalWidth / CHUNK_CSS_WIDTH);
 
   // Query mipmap with pixel-proportional column count, capped at 4096.
-  const mipmapColumns = Math.min(4096, Math.max(1, Math.round(totalWidth * (typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1))));
+  const mipmapColumns = Math.min(4096, Math.max(1, Math.round(totalWidth)));
   const fullMipmapData = useMemo(() => {
     if (!mipmapReady || !audioKey) return null;
     const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;

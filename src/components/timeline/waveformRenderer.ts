@@ -342,7 +342,7 @@ export function drawMipmapWaveform(
     const yTop = centerY - maxVal * amplitude;
     const yBottom = centerY - minVal * amplitude;
     const barHeight = Math.max(yBottom - yTop, 0.5);
-    ctx.fillRect(x, yTop, Math.max(colW, 1), barHeight);
+    ctx.fillRect(x, yTop, Math.max(colW, 0.5), barHeight);
   }
 
   ctx.restore();

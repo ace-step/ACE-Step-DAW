@@ -349,6 +349,9 @@ export function useTransport() {
       if (lastClipEnd > 0) effectiveEnd = lastClipEnd;
     }
 
+    // Playback reads from stretchedBufferCache (populated on clip stretch mouseup).
+    // If Signalsmith/Rubber Band already finished → high quality buffer used.
+    // If neither finished yet → legacy fallback via _getProcessedBuffer.
     engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
 
     const { metronomeEnabled } = useTransportStore.getState();

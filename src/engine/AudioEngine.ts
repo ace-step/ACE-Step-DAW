@@ -13,7 +13,8 @@ import type {
   Track,
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
-import { timeStretch, pitchShift as pitchShiftAudio, type TimeStretchMode } from '../utils/timeStretch';
+import { pitchShift as legacyPitchShift } from '../utils/timeStretch';
+import { stretchOffline } from '../services/timeStretchService';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../utils/tempoMap';
 import { computeWarpedSegments } from '../utils/audioWarp';
@@ -860,50 +861,79 @@ export class AudioEngine {
     const cached = this.stretchedBufferCache.get(cacheKey);
     if (cached) return { buffer: cached, appliedStretch: !!needsStretch };
 
-    // Process each channel
+    // No legacy fallback — stretch is pre-processed on mouseup via
+    // Signalsmith (fast) + Rubber Band (HQ background).
+    // If cache miss here, play the raw buffer without stretch.
+    return null;
+  }
+
+  /**
+   * Pre-process a clip's time-stretch using dual engines:
+   * 1. Signalsmith Stretch (fast) — populates cache immediately for playback
+   * 2. Rubber Band (slow, high quality) — upgrades cache in background
+   *
+   * Call before or during playback. The fast engine ensures no delay;
+   * Rubber Band silently upgrades quality for subsequent plays.
+   */
+  async preProcessClipStretch(clip: ClipScheduleInfo): Promise<void> {
+    const mode = clip.stretchMode;
+    const rawRate = clip.timeStretchRate ?? 1;
+    const rate = Number.isFinite(rawRate) ? Math.max(0.25, Math.min(4, rawRate)) : 1;
+    const semitones = clip.pitchShift ?? 0;
+    const needsStretch = mode && mode !== 'repitch' && mode !== 'slice' && Math.abs(rate - 1) >= 0.001;
+    const needsPitchShift = Math.abs(semitones) >= 0.01;
+
+    if (!needsStretch && !needsPitchShift) return;
+
+    const cacheKey = `${clip.clipId}:${mode ?? 'none'}:${rate.toFixed(4)}:ps${semitones.toFixed(2)}`;
+    if (this.stretchedBufferCache.has(cacheKey)) return;
+
     const buffer = clip.buffer;
-    const numChannels = buffer.numberOfChannels;
-    const ratio = 1 / rate; // rate=0.5 means slower → ratio=2 (stretch to 2x)
+    const ratio = 1 / rate;
+    const pitchScale = Math.pow(2, semitones / 12);
 
-    const processedChannels: Float32Array[] = [];
-    let maxLen = 0;
-
-    for (let ch = 0; ch < numChannels; ch++) {
-      let channelData: Float32Array = new Float32Array(buffer.getChannelData(ch));
-
-      // Apply time-stretch if needed (non-repitch modes only)
-      if (needsStretch) {
-        channelData = timeStretch(channelData, {
-          mode: mode as TimeStretchMode,
-          ratio,
-          sampleRate: buffer.sampleRate,
-        });
+    try {
+      const channelData: Float32Array[] = [];
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        channelData.push(new Float32Array(buffer.getChannelData(ch)));
       }
-
-      // Apply pitch shift if needed (preserves duration)
-      if (needsPitchShift) {
-        channelData = pitchShiftAudio(channelData, {
-          semitones,
-          sampleRate: buffer.sampleRate,
-        });
+      const stretched = await stretchOffline(
+        channelData, buffer.sampleRate,
+        needsStretch ? ratio : 1.0,
+        needsPitchShift ? pitchScale : 1.0,
+      );
+      const maxLen = Math.max(...stretched.map(ch => ch.length));
+      const hqBuffer = this.ctx.createBuffer(buffer.numberOfChannels, maxLen, buffer.sampleRate);
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        hqBuffer.getChannelData(ch).set(stretched[ch]);
       }
-
-      processedChannels.push(channelData);
-      maxLen = Math.max(maxLen, channelData.length);
+      this.stretchedBufferCache.set(cacheKey, hqBuffer);
+    } catch {
+      // Rubber Band unavailable
     }
+  }
 
-    // Create new AudioBuffer with processed data
-    const processedBuffer = this.ctx.createBuffer(
-      numChannels,
-      maxLen,
-      buffer.sampleRate,
-    );
-    for (let ch = 0; ch < numChannels; ch++) {
-      processedBuffer.getChannelData(ch).set(processedChannels[ch]);
+  /**
+   * Trigger dual-engine stretch pre-processing by audio key.
+   * Called from UI (mouseup after Shift+drag) to start processing immediately.
+   */
+  async preProcessClipStretchByKey(
+    clipId: string, audioKey: string,
+    clipDuration: number, timeStretchRate?: number,
+    stretchMode?: string, pitchShift?: number,
+  ): Promise<void> {
+    let buffer = this.decodedBufferCache.get(audioKey);
+    if (!buffer) {
+      // Buffer not in memory cache — load from IndexedDB and decode
+      buffer = await this._getDecodedBuffer(audioKey) ?? undefined;
+      if (!buffer) return;
     }
-
-    this.stretchedBufferCache.set(cacheKey, processedBuffer);
-    return { buffer: processedBuffer, appliedStretch: !!needsStretch };
+    await this.preProcessClipStretch({
+      clipId, trackId: '', buffer, startTime: 0,
+      clipDuration, audioDuration: buffer.duration, audioOffset: 0,
+      timeStretchRate, stretchMode: stretchMode as import('../types/project').StretchMode,
+      pitchShift,
+    } as unknown as ClipScheduleInfo);
   }
 
   /**
@@ -924,7 +954,7 @@ export class AudioEngine {
     let maxLen = 0;
 
     for (let ch = 0; ch < numChannels; ch++) {
-      const channelData = pitchShiftAudio(new Float32Array(buffer.getChannelData(ch)), {
+      const channelData = legacyPitchShift(new Float32Array(buffer.getChannelData(ch)), {
         semitones,
         sampleRate: buffer.sampleRate,
       });
@@ -946,13 +976,10 @@ export class AudioEngine {
     trackNode: TrackNode,
     fromTime: number,
   ) {
-    const source = this.ctx.createBufferSource();
-
-    // Get processed buffer (time-stretch and/or pitch shift).
-    // The result distinguishes whether offline time-stretch was applied,
-    // so we know whether to also apply playbackRate for repitch mode.
     const processed = this._getProcessedBuffer(clip);
     const appliedStretch = processed?.appliedStretch ?? false;
+
+    const source = this.ctx.createBufferSource();
     if (processed) {
       source.buffer = processed.buffer;
     } else {

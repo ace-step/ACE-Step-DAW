@@ -21,6 +21,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ace-timestretch"
+version = "0.1.0"
+dependencies = [
+ "approx",
+ "rustfft",
+]
+
+[[package]]
+name = "ace-timestretch-wasm"
+version = "0.1.0"
+dependencies = [
+ "ace-timestretch",
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "ace-waveform"
 version = "0.1.0"
 dependencies = [

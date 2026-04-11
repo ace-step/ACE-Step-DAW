@@ -195,19 +195,20 @@ function WaveformCanvas({
     ctx.scale(dpr, dpr);
 
     // Try synchronous mipmap query first (Rust WASM)
-    // Use audioDuration (not clipDuration) for sample range so waveform
-    // doesn't repeat/extend beyond the actual audio content.
     if (mipmapReady && audioKey) {
       const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
-      const actualDur = Math.min(audioDuration, clipDuration);
+      const isStretched = timeStretchRate !== undefined && timeStretchRate !== 1 && stretchMode && stretchMode !== 'repitch';
+      // When time-stretched: waveform fills entire clip width (audio is stretched to fit)
+      // When not stretched: clamp to audioDuration so extended region is empty
+      const queryDur = isStretched ? audioDuration : Math.min(audioDuration, clipDuration);
+      const drawWidth = isStretched ? width : (clipDuration > 0 ? width * (queryDur / clipDuration) : width);
       const startSample = Math.round(audioOffset * sampleRate);
-      const endSample = Math.round((audioOffset + actualDur) * sampleRate);
-      const audioWidthPx = clipDuration > 0 ? width * (actualDur / clipDuration) : width;
-      const columns = Math.min(4096, Math.max(1, Math.round(audioWidthPx)));
+      const endSample = Math.round((audioOffset + queryDur) * sampleRate);
+      const columns = Math.min(4096, Math.max(1, Math.round(drawWidth)));
       const peakData = queryPeaksSync(audioKey, startSample, endSample, columns);
       if (peakData && peakData.length > 0) {
         drawMipmapWaveform(ctx, {
-          peakData, leftPx: 0, width: audioWidthPx, height: h, color, opacity: 1, trackVolume,
+          peakData, leftPx: 0, width: drawWidth, height: h, color, opacity: 1, trackVolume,
         });
         return;
       }
@@ -258,18 +259,18 @@ function ChunkedWaveform({
 }: ChunkedWaveformProps) {
   const totalChunks = Math.ceil(totalWidth / CHUNK_CSS_WIDTH);
 
-  // Query mipmap with pixel-proportional column count, capped at 4096.
-  // Use audioDuration (not clipDuration) so waveform doesn't repeat beyond audio.
-  const actualDur = Math.min(audioDuration, clipDuration);
-  const audioWidthPx = clipDuration > 0 ? totalWidth * (actualDur / clipDuration) : totalWidth;
-  const mipmapColumns = Math.min(4096, Math.max(1, Math.round(audioWidthPx)));
+  // Query mipmap — when stretched, fill full width; otherwise clamp to audioDuration
+  const isStretched = timeStretchRate !== undefined && timeStretchRate !== 1 && stretchMode && stretchMode !== 'repitch';
+  const queryDur = isStretched ? audioDuration : Math.min(audioDuration, clipDuration);
+  const drawWidth = isStretched ? totalWidth : (clipDuration > 0 ? totalWidth * (queryDur / clipDuration) : totalWidth);
+  const mipmapColumns = Math.min(4096, Math.max(1, Math.round(drawWidth)));
   const fullMipmapData = useMemo(() => {
     if (!mipmapReady || !audioKey) return null;
     const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
     const startSample = Math.round(audioOffset * sampleRate);
-    const endSample = Math.round((audioOffset + actualDur) * sampleRate);
+    const endSample = Math.round((audioOffset + queryDur) * sampleRate);
     return queryPeaksSync(audioKey, startSample, endSample, mipmapColumns);
-  }, [mipmapReady, audioKey, audioOffset, actualDur, mipmapColumns]);
+  }, [mipmapReady, audioKey, audioOffset, queryDur, mipmapColumns]);
 
   const chunks = useMemo(() => {
     const result: Array<{ idx: number; left: number; w: number }> = [];

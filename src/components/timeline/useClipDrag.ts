@@ -11,6 +11,7 @@ import {
 } from '../../utils/clipAudio';
 import { ARRANGEMENT_EMPTY_TRACK_ID_PREFIX, parseArrangementEmptyTrackSlotIndex } from '../arrangement/trackSlotLayout';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { toastInfo } from '../../hooks/useToast';
 
 export type DragMode = 'move' | 'resize-left' | 'resize-right' | 'slip';
 
@@ -511,8 +512,8 @@ export function useClipDrag({
       document.body.style.cursor = '';
 
       // After Shift+drag stretch: trigger dual-engine pre-processing
-      // Signalsmith (fast) runs first, Rubber Band (HQ) upgrades in background
       if (isShiftStretch && dragRef.current) {
+        toastInfo('Time-stretch applied — processing audio...');
         const currentClip = useProjectStore.getState().getClipById(clip.id);
         if (currentClip) {
           try {

@@ -276,7 +276,8 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     if (!project) throw new Error('No project open');
 
     const defaults = project.generationDefaults;
-    const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
+    const activeModel = useModelStore.getState().getLoadedModelForCategory('text2music')
+      ?? useModelStore.getState().activeModelId ?? defaults.model;
 
     const taskParams: Text2MusicTaskParams = {
       task_type: 'text2music',
@@ -768,7 +769,9 @@ async function generateClipInternal(
       batch_size: 1,
       audio_format: 'wav',
       thinking: false, // lego is a pure DiT task — LM audio codes are out-of-distribution
-      model: project.generationDefaults.model,
+      model: useModelStore.getState().getLoadedModelForCategory('lego')
+        ?? useModelStore.getState().activeModelId
+        ?? project.generationDefaults.model,
     } as LegoTaskParams;
 
     // Include negative prompt from generation form if present
@@ -2841,7 +2844,8 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
   try {
     const defaults = project.generationDefaults;
-    const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
+    const activeModel = useModelStore.getState().getLoadedModelForCategory('text2music')
+      ?? useModelStore.getState().activeModelId ?? defaults.model;
 
     const params: Text2MusicTaskParams = {
       task_type: 'text2music',

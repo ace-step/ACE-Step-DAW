@@ -202,6 +202,50 @@ export async function createRealtimeStretchNode(
   return node;
 }
 
+/**
+ * Stretch an AudioBuffer using Signalsmith Stretch via OfflineAudioContext.
+ * Fast, good quality — used as immediate playback engine.
+ */
+export async function stretchWithSignalsmith(
+  buffer: AudioBuffer,
+  timeRatio: number,
+  pitchSemitones: number = 0,
+): Promise<AudioBuffer> {
+  const outputLength = Math.round(buffer.length * timeRatio);
+  const offlineCtx = new OfflineAudioContext(
+    buffer.numberOfChannels,
+    outputLength,
+    buffer.sampleRate,
+  );
+
+  const SignalsmithStretch = (await import('signalsmith-stretch')).default;
+  const stretchNode = await SignalsmithStretch(offlineCtx as unknown as AudioContext, {
+    outputChannelCount: [buffer.numberOfChannels],
+  });
+
+  // Load audio into the stretch node
+  const channelBuffers: Float32Array[] = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    channelBuffers.push(new Float32Array(buffer.getChannelData(ch)));
+  }
+  await stretchNode.addBuffers(channelBuffers);
+
+  // Configure stretch parameters
+  stretchNode.schedule({
+    input: 0,
+    rate: 1 / timeRatio, // Signalsmith rate = playback speed, not stretch ratio
+    semitones: pitchSemitones,
+    active: true,
+  });
+
+  // Connect to destination and render
+  stretchNode.connect(offlineCtx.destination);
+  stretchNode.start();
+
+  const rendered = await offlineCtx.startRendering();
+  return rendered;
+}
+
 // ── Unified API ────────────────────────────────────────────────────
 
 export interface StretchOptions {

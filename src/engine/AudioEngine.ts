@@ -14,7 +14,7 @@ import type {
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
 import { timeStretch as legacyTimeStretch, pitchShift as legacyPitchShift, type TimeStretchMode } from '../utils/timeStretch';
-import { stretchOffline } from '../services/timeStretchService';
+import { stretchOffline, stretchWithSignalsmith } from '../services/timeStretchService';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../utils/tempoMap';
 import { computeWarpedSegments } from '../utils/audioWarp';
@@ -909,9 +909,12 @@ export class AudioEngine {
   }
 
   /**
-   * Pre-process a clip's time-stretch using Rubber Band (async, high quality).
-   * Call this before playback to populate the cache. Scheduling then reads
-   * from cache synchronously via _getProcessedBuffer().
+   * Pre-process a clip's time-stretch using dual engines:
+   * 1. Signalsmith Stretch (fast) — populates cache immediately for playback
+   * 2. Rubber Band (slow, high quality) — upgrades cache in background
+   *
+   * Call before or during playback. The fast engine ensures no delay;
+   * Rubber Band silently upgrades quality for subsequent plays.
    */
   async preProcessClipStretch(clip: ClipScheduleInfo): Promise<void> {
     const mode = clip.stretchMode;
@@ -928,37 +931,63 @@ export class AudioEngine {
 
     const buffer = clip.buffer;
     const ratio = 1 / rate;
-    const pitchScale = Math.pow(2, semitones / 12);
 
+    // Step 1: Signalsmith (fast) — populate cache for immediate playback
     try {
-      // Extract channel data
-      const channelData: Float32Array[] = [];
-      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-        channelData.push(new Float32Array(buffer.getChannelData(ch)));
-      }
-
-      // Use Rubber Band for high-quality offline stretch + pitch shift
-      const stretched = await stretchOffline(
-        channelData,
-        buffer.sampleRate,
-        needsStretch ? ratio : 1.0,
-        needsPitchShift ? pitchScale : 1.0,
+      const signalsmithResult = await stretchWithSignalsmith(
+        buffer, ratio, needsPitchShift ? semitones : 0,
       );
-
-      const maxLen = Math.max(...stretched.map(ch => ch.length));
-      const processedBuffer = this.ctx.createBuffer(
-        buffer.numberOfChannels,
-        maxLen,
-        buffer.sampleRate,
-      );
-      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-        processedBuffer.getChannelData(ch).set(stretched[ch]);
+      // Only set if nothing has been cached yet (Rubber Band may have finished first)
+      if (!this.stretchedBufferCache.has(cacheKey)) {
+        this.stretchedBufferCache.set(cacheKey, signalsmithResult);
       }
-
-      this.stretchedBufferCache.set(cacheKey, processedBuffer);
     } catch {
-      // Rubber Band unavailable — _getProcessedBuffer will use legacy fallback
+      // Signalsmith unavailable — legacy fallback in _getProcessedBuffer
     }
+
+    // Step 2: Rubber Band (slow, highest quality) — upgrade in background
+    const pitchScale = Math.pow(2, semitones / 12);
+    void (async () => {
+      try {
+        const channelData: Float32Array[] = [];
+        for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+          channelData.push(new Float32Array(buffer.getChannelData(ch)));
+        }
+        const stretched = await stretchOffline(
+          channelData, buffer.sampleRate,
+          needsStretch ? ratio : 1.0,
+          needsPitchShift ? pitchScale : 1.0,
+        );
+        const maxLen = Math.max(...stretched.map(ch => ch.length));
+        const hqBuffer = this.ctx.createBuffer(buffer.numberOfChannels, maxLen, buffer.sampleRate);
+        for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+          hqBuffer.getChannelData(ch).set(stretched[ch]);
+        }
+        // Upgrade cache — next play/loop uses Rubber Band quality
+        this.stretchedBufferCache.set(cacheKey, hqBuffer);
+      } catch {
+        // Rubber Band unavailable — Signalsmith result stays in cache
+      }
+    })();
+  }
+
+  /**
+   * Trigger dual-engine stretch pre-processing by audio key.
+   * Called from UI (mouseup after Shift+drag) to start processing immediately.
+   */
+  async preProcessClipStretchByKey(
+    clipId: string, audioKey: string,
+    clipDuration: number, timeStretchRate?: number,
+    stretchMode?: string, pitchShift?: number,
+  ): Promise<void> {
+    const buffer = this.decodedBufferCache.get(audioKey);
+    if (!buffer) return;
+    await this.preProcessClipStretch({
+      clipId, trackId: '', buffer, startTime: 0,
+      clipDuration, audioDuration: buffer.duration, audioOffset: 0,
+      timeStretchRate, stretchMode: stretchMode as import('../types/project').StretchMode,
+      pitchShift,
+    } as unknown as ClipScheduleInfo);
   }
 
   /**

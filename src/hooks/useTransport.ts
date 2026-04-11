@@ -349,19 +349,10 @@ export function useTransport() {
       if (lastClipEnd > 0) effectiveEnd = lastClipEnd;
     }
 
-    // Start playback immediately using legacy stretch (synchronous, no delay).
-    // Rubber Band high-quality processing runs in background — when it finishes,
-    // the cache is updated so the next loop iteration or re-play uses it.
+    // Playback reads from stretchedBufferCache (populated on clip stretch mouseup).
+    // If Signalsmith/Rubber Band already finished → high quality buffer used.
+    // If neither finished yet → legacy fallback via _getProcessedBuffer.
     engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
-
-    // Fire-and-forget: upgrade stretch quality in background via Rubber Band
-    const stretchClips = clipBuffers.filter(
-      (c) => c.stretchMode && c.stretchMode !== 'repitch' && c.stretchMode !== 'slice'
-        && (Math.abs((c.timeStretchRate ?? 1) - 1) >= 0.001 || Math.abs(c.pitchShift ?? 0) >= 0.01),
-    );
-    if (stretchClips.length > 0) {
-      void Promise.allSettled(stretchClips.map((c) => engine.preProcessClipStretch(c)));
-    }
 
     const { metronomeEnabled } = useTransportStore.getState();
     if (metronomeEnabled) {

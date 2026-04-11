@@ -10,6 +10,7 @@ import {
   getClipSourceSpan,
 } from '../../utils/clipAudio';
 import { ARRANGEMENT_EMPTY_TRACK_ID_PREFIX, parseArrangementEmptyTrackSlotIndex } from '../arrangement/trackSlotLayout';
+import { getAudioEngine } from '../../hooks/useAudioEngine';
 
 export type DragMode = 'move' | 'resize-left' | 'resize-right' | 'slip';
 
@@ -509,7 +510,26 @@ export function useClipDrag({
       endDrag();
       document.body.style.cursor = '';
 
-      if ((mode === 'resize-left' || mode === 'resize-right') && dragRef.current && !ev.shiftKey) {
+      // After Shift+drag stretch: trigger dual-engine pre-processing
+      // Signalsmith (fast) runs first, Rubber Band (HQ) upgrades in background
+      if (isShiftStretch && dragRef.current) {
+        const currentClip = useProjectStore.getState().getClipById(clip.id);
+        if (currentClip) {
+          try {
+            const engine = getAudioEngine();
+            const audioKey = currentClip.isolatedAudioKey ?? currentClip.cumulativeMixKey;
+            if (audioKey) {
+              void engine.preProcessClipStretchByKey(
+                currentClip.id, audioKey,
+                currentClip.duration, currentClip.timeStretchRate,
+                currentClip.stretchMode, currentClip.pitchShift,
+              );
+            }
+          } catch { /* engine not ready */ }
+        }
+      }
+
+      if ((mode === 'resize-left' || mode === 'resize-right') && dragRef.current && !isShiftStretch) {
         const currentClip = useProjectStore.getState().getClipById(clip.id);
         if (currentClip) {
           if (mode === 'resize-left') {

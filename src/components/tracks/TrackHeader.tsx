@@ -519,7 +519,7 @@ export const TrackHeader = React.memo(function TrackHeader({
             >
               <button
                 onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
-                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors duration-150 ${
+                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors duration-150 focus:outline-none ${
                   track.muted ? 'text-red-400' : 'text-zinc-500 hover:text-zinc-200'
                 }`}
                 title="Mute (M)"
@@ -527,7 +527,7 @@ export const TrackHeader = React.memo(function TrackHeader({
               >M</button>
               <button
                 onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
-                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors duration-150 ${
+                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors duration-150 focus:outline-none ${
                   track.soloed ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-200'
                 }`}
                 title="Solo (S)"
@@ -536,7 +536,7 @@ export const TrackHeader = React.memo(function TrackHeader({
               {!track.isGroup && (
                 <button
                   onClick={() => setOpenEffectChainTrackId(isFxPanelOpen ? null : track.id)}
-                  className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors duration-150 ${
+                  className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors duration-150 focus:outline-none ${
                     track.frozen
                       ? 'text-zinc-600 cursor-not-allowed'
                       : isFxPanelOpen
@@ -615,7 +615,7 @@ export const TrackHeader = React.memo(function TrackHeader({
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
-              className={`text-[8px] font-bold leading-none transition-colors duration-150 ${
+              className={`text-[8px] font-bold leading-none transition-colors duration-150 focus:outline-none ${
                 track.muted ? 'text-red-400' : 'text-zinc-500 hover:text-zinc-200'
               }`}
               title="Mute (M)"
@@ -623,7 +623,7 @@ export const TrackHeader = React.memo(function TrackHeader({
             >M</button>
             <button
               onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
-              className={`text-[8px] font-bold leading-none transition-colors duration-150 ${
+              className={`text-[8px] font-bold leading-none transition-colors duration-150 focus:outline-none ${
                 track.soloed ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-200'
               }`}
               title="Solo (S)"

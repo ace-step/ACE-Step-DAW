@@ -39,7 +39,12 @@ CX_COUNT=$(ps aux | grep 'codex' | grep -v grep | grep -v 'pm-auto\|project-mana
 # Approximate: each codex agent uses ~3 processes
 CX_AGENTS=$(( CX_COUNT / 3 ))
 
-log "State: Claude=$CC_COUNT Codex≈$CX_AGENTS"
+MULTICA_ONLINE=0
+if command -v multica >/dev/null 2>&1 && multica daemon status 2>/dev/null | grep -q "running"; then
+  MULTICA_ONLINE=1
+fi
+
+log "State: Claude=$CC_COUNT Codex≈$CX_AGENTS Multica=$([ $MULTICA_ONLINE -eq 1 ] && echo 'online' || echo 'offline')"
 
 # ═══════════════════════════════════════════
 # Step 2: RECOVER STALE AGENTS
@@ -130,6 +135,25 @@ else
   else
     log "No open issues — nothing to dispatch"
   fi
+fi
+
+# ═══════════════════════════════════════════
+# Step 4.5: MULTICA DISPATCH (optional accelerator)
+# ═══════════════════════════════════════════
+
+if [ "$MULTICA_ONLINE" -eq 1 ]; then
+  MULTICA_ISSUES=$(gh issue list --repo "$REPO" --state open --label "multica-managed" --json number,title --jq '.[] | "\(.number)\t\(.title)"' 2>/dev/null)
+  while IFS=$'\t' read -r ISSUE_NUM TITLE; do
+    [ -z "$ISSUE_NUM" ] && continue
+    # Skip if already assigned to an agent (check registry)
+    if bash scripts/agents/registry.sh check "$ISSUE_NUM" 2>/dev/null | grep -q "active"; then
+      continue
+    fi
+    log "Multica dispatch: #$ISSUE_NUM — $TITLE"
+    multica issue assign "$ISSUE_NUM" --repo "$REPO" 2>/dev/null && \
+      log "Multica dispatched #$ISSUE_NUM" || \
+      log "Multica dispatch failed for #$ISSUE_NUM — falling back to sprint-runner"
+  done <<< "$MULTICA_ISSUES"
 fi
 
 log "PM-auto tick complete"

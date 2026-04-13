@@ -80,6 +80,23 @@ Before coding any non-trivial feature, create a formal spec:
 - Specs use Given/When/Then scenarios and RFC 2119 keywords (MUST, SHALL)
 - Agents read specs before TDD Red phase for test generation
 
+## Multica (Optional Agent Orchestration)
+
+When Multica daemon is running, issues labeled `multica-managed` are dispatched via Multica instead of pm-auto.sh sprint-runner. Without Multica, everything falls back to the existing bash orchestration.
+
+```bash
+multica daemon start     # Start local agent daemon
+multica daemon status    # Check if daemon is running
+multica daemon stop      # Stop daemon
+multica issue list       # List dispatched issues
+multica agent list       # List configured agents
+```
+
+- Multica is **optional** — pm-auto.sh works with or without it
+- Issues without `multica-managed` label always use sprint-runner.sh
+- Setup: run `bash scripts/agents/multica-config.sh`
+- Dashboard: http://localhost:3000 (when daemon is running)
+
 ## gstack
 
 Use `/browse` for **all web browsing**. Never use `mcp__Claude_in_Chrome__*` tools.

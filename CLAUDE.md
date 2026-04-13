@@ -64,6 +64,22 @@ npx tsc --noEmit     # Type check only
 - **Store API**: `.claude/references/store-api.md` — `window.__store` API, CLI-first mandate, testing standard
 - **Skills**: `.claude/references/skills.md` — Recommended Claude Code skills by development step
 
+## OpenSpec (Spec-Driven Development)
+
+Before coding any non-trivial feature, create a formal spec:
+
+```bash
+/opsx:propose "feature-name"   # Create proposal + specs + design + tasks
+/opsx:explore                  # Browse existing specs
+/opsx:apply                    # Implement tasks from a change
+/opsx:archive                  # Archive completed change into specs/
+```
+
+- Specs live in `openspec/specs/` (tracked in git — living behavior contracts)
+- Change proposals live in `openspec/changes/` (gitignored — working directory)
+- Specs use Given/When/Then scenarios and RFC 2119 keywords (MUST, SHALL)
+- Agents read specs before TDD Red phase for test generation
+
 ## gstack
 
 Use `/browse` for **all web browsing**. Never use `mcp__Claude_in_Chrome__*` tools.

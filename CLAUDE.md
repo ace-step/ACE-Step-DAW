@@ -80,6 +80,19 @@ Before coding any non-trivial feature, create a formal spec:
 - Specs use Given/When/Then scenarios and RFC 2119 keywords (MUST, SHALL)
 - Agents read specs before TDD Red phase for test generation
 
+## Agent Dashboard
+
+Standalone monitoring UI for the agent orchestration system (pm-auto.sh, sprint-runner, registry).
+
+```bash
+npm run dashboard        # Start at http://127.0.0.1:5175
+npm run dashboard:build  # Build static assets
+```
+
+- Reads `.pm/` files (activity.log, agent-registry.json) + GitHub API
+- Real-time updates via WebSocket (push on file change + 30s GitHub poll)
+- Shows: agent capacity, pipeline kanban, activity feed, PR status cards
+
 ## gstack
 
 Use `/browse` for **all web browsing**. Never use `mcp__Claude_in_Chrome__*` tools.

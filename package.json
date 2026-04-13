@@ -18,7 +18,9 @@
     "qa:validate": "node scripts/qa/validate-story-assets.mjs",
     "docs:dev": "vitepress dev website",
     "docs:build": "vitepress build website",
-    "docs:preview": "vitepress preview website"
+    "docs:preview": "vitepress preview website",
+    "dashboard": "tsx dashboard/server.ts",
+    "dashboard:build": "vite build --config dashboard/vite.config.ts"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",

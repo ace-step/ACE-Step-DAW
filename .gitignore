@@ -53,3 +53,6 @@ src/wasm/pkg/.gitignore
 public/models/*.onnx
 .gstack/
 coverage/
+
+# OpenSpec change proposals (working directory, not committed)
+openspec/changes/

@@ -8,6 +8,8 @@ import {
   drawWaveform,
   drawMidiThumbnail,
   computeBlendFactor,
+  fadeGainAtPixel,
+  type FadeEnvelope,
 } from '../waveformRenderer';
 
 /**
@@ -347,5 +349,54 @@ describe('drawMidiThumbnail', () => {
     // Width 40 → maxNotes = max(20, 40/2) = 20
     drawMidiThumbnail(ctx, notes, 40, 100, 60, 120, '#000');
     expect(ctx.roundRect).toHaveBeenCalledTimes(20);
+  });
+});
+
+describe('fadeGainAtPixel', () => {
+  const env: FadeEnvelope = {
+    totalWidthPx: 100,
+    fadeInPx: 20,
+    fadeOutPx: 30,
+    fadeInCurve: 'linear',
+    fadeOutCurve: 'linear',
+  };
+
+  it('returns 1 outside the fade regions', () => {
+    expect(fadeGainAtPixel(env, 30)).toBe(1);
+    expect(fadeGainAtPixel(env, 60)).toBe(1);
+  });
+
+  it('returns 0 at fade-in start and 1 at fade-in end (linear)', () => {
+    expect(fadeGainAtPixel(env, 0)).toBeCloseTo(0, 5);
+    expect(fadeGainAtPixel(env, 20)).toBeCloseTo(1, 5);
+    expect(fadeGainAtPixel(env, 10)).toBeCloseTo(0.5, 5);
+  });
+
+  it('returns 1 at fade-out start and 0 at fade-out end (linear)', () => {
+    expect(fadeGainAtPixel(env, 70)).toBeCloseTo(1, 5);
+    expect(fadeGainAtPixel(env, 100)).toBeCloseTo(0, 5);
+    expect(fadeGainAtPixel(env, 85)).toBeCloseTo(0.5, 5);
+  });
+
+  it('uses equal-power curve when configured', () => {
+    const eq: FadeEnvelope = { ...env, fadeInCurve: 'equal-power' };
+    // sin(0.5 * PI/2) = sin(PI/4) ≈ 0.707
+    expect(fadeGainAtPixel(eq, 10)).toBeCloseTo(Math.SQRT1_2, 5);
+  });
+
+  it('uses exponential curve when configured', () => {
+    const exp: FadeEnvelope = { ...env, fadeInCurve: 'exponential' };
+    // t=0.5, t² = 0.25
+    expect(fadeGainAtPixel(exp, 10)).toBeCloseTo(0.25, 5);
+  });
+
+  it('returns 1 when envelope is undefined', () => {
+    expect(fadeGainAtPixel(undefined, 50)).toBe(1);
+  });
+
+  it('honors the offsetPx for chunked canvases', () => {
+    const offset: FadeEnvelope = { ...env, offsetPx: 10 };
+    // Chunk pixel 0 → effective full-clip pixel 10 → middle of fade-in (linear) = 0.5
+    expect(fadeGainAtPixel(offset, 0)).toBeCloseTo(0.5, 5);
   });
 });

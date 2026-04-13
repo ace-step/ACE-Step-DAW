@@ -67,23 +67,53 @@ describe('ClipBlock fade handles', () => {
     useProjectStore.getState().updateClip(readyClip.id, { id: 'clip-1' });
   });
 
-  it('hides fade handles for zero-fade audio clips', () => {
+  it('hides fade handles by default — handles are strictly hover-only', () => {
     renderClip();
 
     expect(screen.queryByLabelText('Fade in handle for clip clip-1')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Fade out handle for clip clip-1')).not.toBeInTheDocument();
   });
 
+  it('reveals fade handles on pointer enter', () => {
+    const { container } = renderClip();
+    const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
+
+    fireEvent.mouseEnter(clipBlock);
+
+    expect(screen.getByLabelText('Fade in handle for clip clip-1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Fade out handle for clip clip-1')).toBeInTheDocument();
+  });
+
+  it('hides fade handles again after pointer leaves', () => {
+    const { container } = renderClip();
+    const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
+
+    fireEvent.mouseEnter(clipBlock);
+    fireEvent.mouseLeave(clipBlock);
+
+    expect(screen.queryByLabelText('Fade in handle for clip clip-1')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Fade out handle for clip clip-1')).not.toBeInTheDocument();
+  });
+
+  it('hides fade handles even when a fade exists, until the pointer enters', () => {
+    useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 0.4 });
+    renderClip();
+
+    expect(screen.queryByLabelText('Fade in handle for clip clip-1')).not.toBeInTheDocument();
+  });
+
   it('adjusts fade in with keyboard input', () => {
     useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 0.2 });
-    renderClip();
+    const { container } = renderClip();
+    const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
+    fireEvent.mouseEnter(clipBlock);
 
     fireEvent.keyDown(screen.getByLabelText('Fade in handle for clip clip-1'), { key: 'ArrowRight' });
 
     expect(getClip().fadeInDuration).toBe(0.3);
   });
 
-  it('drags fade out from the clip edge', () => {
+  it('drags fade out from the clip edge — pixel-level, no snap', () => {
     useProjectStore.getState().setClipFade('clip-1', { fadeOutDuration: 0.8 });
     const { container } = renderClip();
     const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
@@ -99,17 +129,20 @@ describe('ClipBlock fade handles', () => {
       toJSON: () => ({}),
     });
 
+    fireEvent.mouseEnter(clipBlock);
     const handle = screen.getByLabelText('Fade out handle for clip clip-1');
+    // pps = 50, rect.right = 200, clientX = 195 → fadeOut = (200 - 195) / 50 = 0.1
     fireEvent.mouseDown(handle, { button: 0, clientX: 195 });
-    fireEvent.mouseMove(window, { clientX: 150 });
     fireEvent.mouseUp(window);
 
-    expect(getClip().fadeOutDuration).toBe(1);
+    expect(getClip().fadeOutDuration).toBeCloseTo(0.1, 2);
   });
 
   it('resets fade handle on double click', () => {
     useProjectStore.getState().setClipFade('clip-1', { fadeOutDuration: 0.8 });
-    renderClip();
+    const { container } = renderClip();
+    const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
+    fireEvent.mouseEnter(clipBlock);
 
     fireEvent.doubleClick(screen.getByLabelText('Fade out handle for clip clip-1'));
 

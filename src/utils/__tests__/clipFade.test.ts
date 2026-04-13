@@ -3,6 +3,7 @@ import {
   clampClipFadeDurations,
   getClipFadeBounds,
   getClipFadeGainAtTime,
+  computeFadeFromPointer,
   MIN_FADE_SECONDS,
   FADE_HANDLE_KEYBOARD_STEP,
 } from '../clipFade';
@@ -146,3 +147,84 @@ describe('constants', () => {
     expect(FADE_HANDLE_KEYBOARD_STEP).toBe(0.1);
   });
 });
+
+describe('computeFadeFromPointer', () => {
+  const baseClip = {
+    startTime: 0,
+    duration: 4,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+  };
+
+  it('computes fade-in duration from pointer X relative to clip left edge', () => {
+    // Clip rendered at 100..500 px, 100 pps → 4s clip
+    // Pointer at 200 → 1s fade-in
+    const result = computeFadeFromPointer({
+      edge: 'in',
+      pointerX: 200,
+      clipRect: { left: 100, right: 500 },
+      pixelsPerSecond: 100,
+      clip: baseClip,
+    });
+    expect(result).toBeCloseTo(1, 5);
+  });
+
+  it('computes fade-out duration from pointer X relative to clip right edge', () => {
+    // Pointer at 400, right at 500 → 100px from right → 1s fade-out
+    const result = computeFadeFromPointer({
+      edge: 'out',
+      pointerX: 400,
+      clipRect: { left: 100, right: 500 },
+      pixelsPerSecond: 100,
+      clip: baseClip,
+    });
+    expect(result).toBeCloseTo(1, 5);
+  });
+
+  it('does not snap to the beat grid — fade dragging is pixel-level', () => {
+    // pointer at 1.4s should stay at 1.4s, not snap to nearest beat
+    const result = computeFadeFromPointer({
+      edge: 'in',
+      pointerX: 100 + 1.4 * 100,
+      clipRect: { left: 100, right: 500 },
+      pixelsPerSecond: 100,
+      clip: baseClip,
+    });
+    expect(result).toBeCloseTo(1.4, 5);
+  });
+
+  it('clamps fade-in to [0, clipDuration - fadeOutDuration]', () => {
+    // fadeOut = 1s, clip duration = 4s → max fade-in = 3s
+    const result = computeFadeFromPointer({
+      edge: 'in',
+      pointerX: 1000, // way out of range
+      clipRect: { left: 100, right: 500 },
+      pixelsPerSecond: 100,
+      clip: { ...baseClip, fadeOutDuration: 1 },
+    });
+    expect(result).toBe(3);
+  });
+
+  it('clamps to 0 when pointer is before clip start', () => {
+    const result = computeFadeFromPointer({
+      edge: 'in',
+      pointerX: 50, // before left edge of 100
+      clipRect: { left: 100, right: 500 },
+      pixelsPerSecond: 100,
+      clip: baseClip,
+    });
+    expect(result).toBe(0);
+  });
+
+  it('clamps fade-out to [0, clipDuration - fadeInDuration]', () => {
+    const result = computeFadeFromPointer({
+      edge: 'out',
+      pointerX: 0,
+      clipRect: { left: 100, right: 500 },
+      pixelsPerSecond: 100,
+      clip: { ...baseClip, fadeInDuration: 1 },
+    });
+    expect(result).toBe(3);
+  });
+});
+

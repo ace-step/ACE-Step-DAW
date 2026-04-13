@@ -70,6 +70,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const {
     hoveredResizeEdge,
     hoverSeekX,
+    isPointerInside,
     handleMouseEnter: handleMouseEnterLocal,
     handleMouseMove: handleMouseMoveLocal,
     handleMouseLeave: handleMouseLeaveLocal,
@@ -147,13 +148,38 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
   const isSelected = isClipSelected;
-  const { fadeInDuration, fadeOutDuration } = getClipFadeBounds(clip);
+  // Local override for live fade values during drag. We deliberately bypass
+  // the Zustand store while the user is dragging to keep redraws cheap: only
+  // this ClipBlock re-renders per frame, instead of the whole project tree
+  // notifying every subscriber. The store is updated once on mouseup.
+  const [liveFadeIn, setLiveFadeIn] = useState<number | null>(null);
+  const [liveFadeOut, setLiveFadeOut] = useState<number | null>(null);
+
+  const storedFade = getClipFadeBounds(clip);
+  const fadeInDuration = liveFadeIn ?? storedFade.fadeInDuration;
+  const fadeOutDuration = liveFadeOut ?? storedFade.fadeOutDuration;
   const fadeInWidth = Math.min(width, fadeInDuration * pixelsPerSecond);
   const fadeOutWidth = Math.min(width, fadeOutDuration * pixelsPerSecond);
-  const showFadeInHandle = fadeInDuration > 0;
-  const showFadeOutHandle = fadeOutDuration > 0;
+  // Handles are strictly hover-only so the timeline stays uncluttered when the
+  // pointer is elsewhere. The fade itself is shown by the waveform amplitude
+  // envelope, which is always visible when a fade exists.
+  const showFadeInHandle = isPointerInside;
+  const showFadeOutHandle = isPointerInside;
   const clipColor = clip.color ?? track.color;
   const clipPresentation = useMemo(() => getClipPresentation(clipColor, isSelected), [clipColor, isSelected]);
+
+  const fadeInCurve = clip.fadeInCurve ?? 'linear';
+  const fadeOutCurve = clip.fadeOutCurve ?? 'linear';
+  const waveformFadeEnvelope = useMemo(() => {
+    if (fadeInWidth <= 0 && fadeOutWidth <= 0) return undefined;
+    return {
+      totalWidthPx: width,
+      fadeInPx: fadeInWidth,
+      fadeOutPx: fadeOutWidth,
+      fadeInCurve,
+      fadeOutCurve,
+    };
+  }, [width, fadeInWidth, fadeOutWidth, fadeInCurve, fadeOutCurve]);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -335,23 +361,44 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             color={clipPresentation.waveformColor}
             opacityClassName={isSelected ? 'opacity-95' : 'opacity-90'}
             trackVolume={track.volume}
+            fadeEnvelope={waveformFadeEnvelope}
           />
         </div>
 
-        {/* Fade handles and overlays */}
+        {/* Fade handles — small grab targets only; the fade itself is shown
+            by the waveform amplitude envelope via CanvasClipWaveform. */}
         {!isMidiClip && hasAudioBody && (
           <ClipFadeHandles
             clipId={clip.id}
             clipDuration={clip.duration}
+            clipStartTime={clip.startTime}
             width={width}
             fadeInDuration={fadeInDuration}
             fadeOutDuration={fadeOutDuration}
-            fadeInWidth={fadeInWidth}
-            fadeOutWidth={fadeOutWidth}
+            fadeInCurve={fadeInCurve}
+            fadeOutCurve={fadeOutCurve}
             showFadeInHandle={showFadeInHandle}
             showFadeOutHandle={showFadeOutHandle}
             pixelsPerSecond={pixelsPerSecond}
             clipBlockRef={clipBlockRef}
+            clipColor={clipColor}
+            onFadeDragLive={(edge, value) => {
+              if (edge === 'in') setLiveFadeIn(value);
+              else setLiveFadeOut(value);
+            }}
+            onFadeDragCommit={(edge, value) => {
+              if (edge === 'in') {
+                setLiveFadeIn(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeInDuration: value });
+              } else {
+                setLiveFadeOut(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeOutDuration: value });
+              }
+            }}
+            onFadeDragCancel={(edge) => {
+              if (edge === 'in') setLiveFadeIn(null);
+              else setLiveFadeOut(null);
+            }}
           />
         )}
 

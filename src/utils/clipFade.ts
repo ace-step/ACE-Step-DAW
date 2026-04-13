@@ -4,6 +4,7 @@ export const MIN_FADE_SECONDS = 0;
 export const FADE_HANDLE_KEYBOARD_STEP = 0.1;
 
 type FadeCurve = NonNullable<Clip['fadeInCurve']>;
+type FadeDirection = 'in' | 'out';
 
 interface FadeInput {
   clipDuration: number;
@@ -198,3 +199,38 @@ function clampNumber(value: number, min: number, max: number) {
 function roundFadeSeconds(value: number) {
   return Math.round(value * 1000) / 1000;
 }
+
+interface ComputeFadeFromPointerArgs {
+  edge: FadeDirection;
+  pointerX: number;
+  clipRect: { left: number; right: number };
+  pixelsPerSecond: number;
+  clip: Pick<Clip, 'startTime' | 'duration' | 'fadeInDuration' | 'fadeOutDuration'>;
+}
+
+/**
+ * Convert a pointer X coordinate into a fade duration in seconds.
+ *
+ * Fades are deliberately **not snapped to the beat grid**. Snapping makes the
+ * drag feel like it's stepping cell-by-cell instead of sliding, and unlike
+ * clip edges or notes, fades don't need rhythmic alignment — Ableton, Logic,
+ * Pro Tools, and Cubase all use raw pixel positioning for fade handles.
+ */
+export function computeFadeFromPointer({
+  edge,
+  pointerX,
+  clipRect,
+  pixelsPerSecond,
+  clip,
+}: ComputeFadeFromPointerArgs): number {
+  if (pixelsPerSecond <= 0) return 0;
+
+  const rawSeconds = edge === 'in'
+    ? (pointerX - clipRect.left) / pixelsPerSecond
+    : (clipRect.right - pointerX) / pixelsPerSecond;
+
+  const otherFade = edge === 'in' ? (clip.fadeOutDuration ?? 0) : (clip.fadeInDuration ?? 0);
+  const maxFade = Math.max(0, clip.duration - otherFade);
+  return clampNumber(rawSeconds, 0, maxFade);
+}
+

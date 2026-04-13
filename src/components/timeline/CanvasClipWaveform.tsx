@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import type { StretchMode } from '../../types/project';
-import { drawWaveform, drawMipmapWaveform } from './waveformRenderer';
+import { drawWaveform, drawMipmapWaveform, type FadeEnvelope } from './waveformRenderer';
 import { PEAK_STRIDE, computeWaveformPeaks } from '../../utils/waveformPeaks';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -24,6 +24,7 @@ interface CanvasClipWaveformProps {
   color: string;
   opacityClassName?: string;
   trackVolume?: number;
+  fadeEnvelope?: FadeEnvelope;
 }
 
 // Module-level AudioBuffer cache (LRU, max 20)
@@ -76,6 +77,7 @@ export function CanvasClipWaveform({
   color,
   opacityClassName = 'opacity-90',
   trackVolume = 1,
+  fadeEnvelope,
 }: CanvasClipWaveformProps) {
   const contentWidth = Math.max(width, 0);
   const [mipmapReady, setMipmapReady] = useState(false);
@@ -112,6 +114,7 @@ export function CanvasClipWaveform({
           color={color}
           trackVolume={trackVolume}
           mipmapReady={mipmapReady}
+          fadeEnvelope={fadeEnvelope}
         />
       </div>
     );
@@ -133,6 +136,7 @@ export function CanvasClipWaveform({
         color={color}
         trackVolume={trackVolume}
         mipmapReady={mipmapReady}
+        fadeEnvelope={fadeEnvelope}
       />
     </div>
   );
@@ -153,12 +157,13 @@ interface WaveformCanvasProps {
   color: string;
   trackVolume: number;
   mipmapReady: boolean;
+  fadeEnvelope?: FadeEnvelope;
 }
 
 function WaveformCanvas({
   peaks, audioKey, audioDuration, audioOffset, clipDuration,
   contentOffset, timeStretchRate, stretchMode,
-  width, color, trackVolume, mipmapReady,
+  width, color, trackVolume, mipmapReady, fadeEnvelope,
 }: WaveformCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
@@ -176,7 +181,27 @@ function WaveformCanvas({
   }, []);
   useEffect(() => () => { observerRef.current?.disconnect(); }, []);
 
-  // Draw — synchronous, no async in this effect
+  // Memoize peak data separately from the draw effect. The WASM query allocates
+  // a ~100KB Float32Array per call and crosses the JS↔WASM boundary, so we must
+  // NOT re-run it when only the fade envelope changes (during fade drag the
+  // audio params are constant). The draw effect below takes the cached peakData
+  // and only re-runs the cheap canvas drawing on fade changes.
+  const mipmapPeakInfo = useMemo(() => {
+    if (!mipmapReady || !audioKey || width <= 0) return null;
+    const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
+    const isStretched = timeStretchRate !== undefined && timeStretchRate !== 1 && stretchMode && stretchMode !== 'repitch';
+    const queryDur = isStretched ? audioDuration : Math.min(audioDuration, clipDuration);
+    const drawWidth = isStretched ? width : (clipDuration > 0 ? width * (queryDur / clipDuration) : width);
+    const startSample = Math.round(audioOffset * sampleRate);
+    const endSample = Math.round((audioOffset + queryDur) * sampleRate);
+    const columns = Math.min(4096, Math.max(1, Math.round(drawWidth)));
+    const peakData = queryPeaksSync(audioKey, startSample, endSample, columns);
+    if (!peakData || peakData.length === 0) return null;
+    return { peakData, drawWidth };
+  }, [mipmapReady, audioKey, audioDuration, audioOffset, clipDuration, timeStretchRate, stretchMode, width]);
+
+  // Draw — synchronous, no async in this effect. Uses the memoized peakData
+  // so fade-only updates don't allocate or re-cross WASM.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || width <= 0) return;
@@ -194,33 +219,27 @@ function WaveformCanvas({
     ctx.clearRect(0, 0, bw, bh);
     ctx.scale(dpr, dpr);
 
-    // Try synchronous mipmap query first (Rust WASM)
-    if (mipmapReady && audioKey) {
-      const sampleRate = audioBufferCache.get(audioKey)?.sampleRate ?? 44100;
-      const isStretched = timeStretchRate !== undefined && timeStretchRate !== 1 && stretchMode && stretchMode !== 'repitch';
-      // When time-stretched: waveform fills entire clip width (audio is stretched to fit)
-      // When not stretched: clamp to audioDuration so extended region is empty
-      const queryDur = isStretched ? audioDuration : Math.min(audioDuration, clipDuration);
-      const drawWidth = isStretched ? width : (clipDuration > 0 ? width * (queryDur / clipDuration) : width);
-      const startSample = Math.round(audioOffset * sampleRate);
-      const endSample = Math.round((audioOffset + queryDur) * sampleRate);
-      const columns = Math.min(4096, Math.max(1, Math.round(drawWidth)));
-      const peakData = queryPeaksSync(audioKey, startSample, endSample, columns);
-      if (peakData && peakData.length > 0) {
-        drawMipmapWaveform(ctx, {
-          peakData, leftPx: 0, width: drawWidth, height: h, color, opacity: 1, trackVolume,
-        });
-        return;
-      }
+    if (mipmapPeakInfo) {
+      drawMipmapWaveform(ctx, {
+        peakData: mipmapPeakInfo.peakData,
+        leftPx: 0,
+        width: mipmapPeakInfo.drawWidth,
+        height: h,
+        color,
+        opacity: 1,
+        trackVolume,
+        fadeEnvelope,
+      });
+      return;
     }
 
     // Fallback: legacy peaks
     drawWaveform(ctx, {
       peaks, audioDuration, audioOffset, clipDuration,
       contentOffset, timeStretchRate, stretchMode,
-      width, height: h, color, opacity: 1, trackVolume,
+      width, height: h, color, opacity: 1, trackVolume, fadeEnvelope,
     });
-  }, [peaks, audioKey, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, width, color, trackVolume, resizeTick, mipmapReady]);
+  }, [mipmapPeakInfo, peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, width, color, trackVolume, resizeTick, fadeEnvelope]);
 
   return (
     <canvas
@@ -250,12 +269,13 @@ interface ChunkedWaveformProps {
   color: string;
   trackVolume: number;
   mipmapReady: boolean;
+  fadeEnvelope?: FadeEnvelope;
 }
 
 function ChunkedWaveform({
   peaks, audioKey, audioDuration, audioOffset, clipDuration,
   contentOffset, timeStretchRate, stretchMode,
-  totalWidth, color, trackVolume, mipmapReady,
+  totalWidth, color, trackVolume, mipmapReady, fadeEnvelope,
 }: ChunkedWaveformProps) {
   const totalChunks = Math.ceil(totalWidth / CHUNK_CSS_WIDTH);
 
@@ -301,6 +321,7 @@ function ChunkedWaveform({
           color={color}
           trackVolume={trackVolume}
           fullMipmapData={fullMipmapData}
+          fadeEnvelope={fadeEnvelope}
         />
       ))}
     </div>
@@ -325,12 +346,13 @@ interface ChunkCanvasProps {
   trackVolume: number;
   /** Full clip mipmap data (stride-6, totalWidth columns), queried at parent level. */
   fullMipmapData: Float32Array | null;
+  fadeEnvelope?: FadeEnvelope;
 }
 
 function ChunkCanvas({
   peaks, audioKey, audioDuration, audioOffset, clipDuration,
   contentOffset, timeStretchRate, stretchMode,
-  totalWidth, chunkLeft, chunkWidth, color, trackVolume, fullMipmapData,
+  totalWidth, chunkLeft, chunkWidth, color, trackVolume, fullMipmapData, fadeEnvelope,
 }: ChunkCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -351,6 +373,12 @@ function ChunkCanvas({
     ctx.clearRect(0, 0, bw, bh);
     ctx.scale(dpr, dpr);
 
+    // Each chunk draws a sub-range of the clip; the envelope still indexes
+    // into the full-clip pixel space, so pass the chunk's left offset.
+    const chunkEnvelope: FadeEnvelope | undefined = fadeEnvelope
+      ? { ...fadeEnvelope, offsetPx: chunkLeft }
+      : undefined;
+
     // Use full mipmap data — slice this chunk's columns from the parent array
     if (fullMipmapData && fullMipmapData.length > 0) {
       const STRIDE = 6;
@@ -362,7 +390,7 @@ function ChunkCanvas({
       if (sliceLen > 0) {
         const slicedData = fullMipmapData.subarray(colStart * STRIDE, colEnd * STRIDE);
         drawMipmapWaveform(ctx, {
-          peakData: slicedData, leftPx: 0, width: chunkWidth, height: h, color, opacity: 1, trackVolume,
+          peakData: slicedData, leftPx: 0, width: chunkWidth, height: h, color, opacity: 1, trackVolume, fadeEnvelope: chunkEnvelope,
         });
         return;
       }
@@ -374,8 +402,9 @@ function ChunkCanvas({
       peaks, audioDuration, audioOffset, clipDuration,
       contentOffset, timeStretchRate, stretchMode,
       width: totalWidth, height: h, color, opacity: 1, trackVolume,
+      fadeEnvelope, // legacy path uses absolute coordinates so no offset needed
     });
-  }, [peaks, audioKey, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, totalWidth, chunkLeft, chunkWidth, color, trackVolume, fullMipmapData]);
+  }, [peaks, audioKey, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, totalWidth, chunkLeft, chunkWidth, color, trackVolume, fullMipmapData, fadeEnvelope]);
 
   return (
     <canvas

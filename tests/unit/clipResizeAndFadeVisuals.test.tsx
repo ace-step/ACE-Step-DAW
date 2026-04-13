@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ClipBlock } from '../../src/components/timeline/ClipBlock';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useUIStore } from '../../src/store/uiStore';
@@ -109,39 +109,33 @@ describe('Clip resize handle width and fade visuals', () => {
     expect(clipEl.style.boxShadow).toBeTruthy();
   });
 
-  it('does not render fade controls or overlays for zero-fade clips', () => {
-    const { container } = renderClip();
-
-    expect(container.querySelector('[data-testid="fade-in-overlay"]')).toBeNull();
-    expect(container.querySelector('[data-testid="fade-out-overlay"]')).toBeNull();
-    expect(screen.queryByLabelText('Fade in handle for clip clip-1')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Fade out handle for clip clip-1')).not.toBeInTheDocument();
-  });
-
-  it('fade-in triangle uses correct clip path (upper-left triangle)', () => {
-    useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 1 });
-    const { container } = renderClip();
-    const fadeIn = container.querySelector('[data-testid="fade-in-overlay"]') as HTMLElement;
-    expect(fadeIn).not.toBeNull();
-    expect(fadeIn.style.clipPath).toBe('polygon(0 0, 100% 0, 0 100%)');
-  });
-
-  it('fade-out triangle uses correct clip path (upper-right triangle)', () => {
-    useProjectStore.getState().setClipFade('clip-1', { fadeOutDuration: 1 });
-    const { container } = renderClip();
-    const fadeOut = container.querySelector('[data-testid="fade-out-overlay"]') as HTMLElement;
-    expect(fadeOut).not.toBeNull();
-    expect(fadeOut.style.clipPath).toBe('polygon(0 0, 100% 0, 100% 100%)');
-  });
-
-  it('fade overlays use reduced opacity', () => {
+  it('renders a translucent fade mask SVG when a fade exists', () => {
     useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 1, fadeOutDuration: 1 });
     const { container } = renderClip();
-    const fadeIn = container.querySelector('[data-testid="fade-in-overlay"]') as HTMLElement;
-    const fadeOut = container.querySelector('[data-testid="fade-out-overlay"]') as HTMLElement;
-    expect(fadeIn.style.background).toContain('0.35');
-    expect(fadeIn.style.background).not.toContain('0.72');
-    expect(fadeOut.style.background).toContain('0.35');
-    expect(fadeOut.style.background).not.toContain('0.72');
+    const fadeIn = container.querySelector('[data-testid="fade-in-overlay"]');
+    const fadeOut = container.querySelector('[data-testid="fade-out-overlay"]');
+    expect(fadeIn).not.toBeNull();
+    expect(fadeOut).not.toBeNull();
+    // Mask path is always present; line path only appears on hover.
+    const fadeInMask = fadeIn!.querySelector('path[fill]');
+    expect(fadeInMask).not.toBeNull();
+    expect(fadeInMask!.getAttribute('fill')).toMatch(/rgba\(/);
+  });
+
+  it('reveals the black curve line on hover when a fade exists', () => {
+    useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 1 });
+    const { container } = renderClip();
+    const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
+
+    // Without hover: only the mask is rendered (no stroked line)
+    let fadeIn = container.querySelector('[data-testid="fade-in-overlay"]')!;
+    expect(fadeIn.querySelector('path[stroke]')).toBeNull();
+
+    // With hover: the curve line appears as a stroked path
+    fireEvent.mouseEnter(clipBlock);
+    fadeIn = container.querySelector('[data-testid="fade-in-overlay"]')!;
+    const linePath = fadeIn.querySelector('path[stroke]');
+    expect(linePath).not.toBeNull();
+    expect(linePath!.getAttribute('stroke')).toBe('#000');
   });
 });

@@ -35,6 +35,62 @@ export interface WaveformDrawParams {
   trackVolume?: number;
   maxColumns?: number;
   rawSamples?: { left: Float32Array; right: Float32Array; sampleRate: number } | null;
+  /** Fade envelope for amplitude-modulating the waveform per pixel column. */
+  fadeEnvelope?: FadeEnvelope;
+}
+
+/**
+ * Per-pixel-column fade gain envelope, expressed in CSS pixels of the
+ * full clip width. Both fade widths are non-negative and clamped so that
+ * `fadeInPx + fadeOutPx <= totalWidthPx`. Curve names follow the project's
+ * `fadeInCurve` / `fadeOutCurve` union type.
+ */
+export interface FadeEnvelope {
+  totalWidthPx: number;
+  fadeInPx: number;
+  fadeOutPx: number;
+  fadeInCurve: 'linear' | 'exponential' | 'equal-power';
+  fadeOutCurve: 'linear' | 'exponential' | 'equal-power';
+  /** Optional pixel offset applied before the envelope is sampled.
+   *  Used by chunked canvases that draw a sub-range of the full clip. */
+  offsetPx?: number;
+}
+
+/**
+ * Returns the fade gain ∈ [0, 1] at a given pixel column relative to the
+ * envelope's total clip width. Outside the fade-in / fade-out regions the
+ * gain is exactly 1 so the rest of the clip renders at full amplitude.
+ */
+export function fadeGainAtPixel(env: FadeEnvelope | undefined, pixelX: number): number {
+  if (!env || env.totalWidthPx <= 0) return 1;
+  const x = pixelX + (env.offsetPx ?? 0);
+  if (env.fadeInPx > 0 && x < env.fadeInPx) {
+    const progress = Math.max(0, Math.min(1, x / env.fadeInPx));
+    return curveValue(env.fadeInCurve, 0, 1, progress);
+  }
+  const fadeOutStart = env.totalWidthPx - env.fadeOutPx;
+  if (env.fadeOutPx > 0 && x > fadeOutStart) {
+    const progress = Math.max(0, Math.min(1, (x - fadeOutStart) / env.fadeOutPx));
+    return curveValue(env.fadeOutCurve, 1, 0, progress);
+  }
+  return 1;
+}
+
+function curveValue(
+  curve: 'linear' | 'exponential' | 'equal-power',
+  from: number,
+  to: number,
+  progress: number,
+): number {
+  const t = Math.max(0, Math.min(1, progress));
+  if (curve === 'equal-power') {
+    return from < to ? Math.sin((t * Math.PI) / 2) : Math.cos((t * Math.PI) / 2);
+  }
+  if (curve === 'exponential') {
+    if (from < to) return t === 0 ? 0 : Math.pow(t, 2);
+    return t === 1 ? 0 : Math.pow(1 - t, 2);
+  }
+  return from + (to - from) * t;
 }
 
 interface PeakSlice {
@@ -151,6 +207,7 @@ function drawMinMaxBars(
   color: string,
   barAlpha: number,
   colW: number = 1,
+  fadeEnvelope?: FadeEnvelope,
 ): void {
   const prevAlpha = ctx.globalAlpha;
   ctx.globalAlpha = prevAlpha * barAlpha;
@@ -158,8 +215,10 @@ function drawMinMaxBars(
 
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + i * colW;
-    const yTop = centerY - maxArr[i] * amplitude;
-    const yBottom = centerY - minArr[i] * amplitude;
+    const gain = fadeGainAtPixel(fadeEnvelope, x);
+    const scaled = amplitude * gain;
+    const yTop = centerY - maxArr[i] * scaled;
+    const yBottom = centerY - minArr[i] * scaled;
     const barHeight = Math.max(yBottom - yTop, 0.5);
     ctx.fillRect(x, yTop, Math.max(colW, 0.5), barHeight);
   }
@@ -227,6 +286,7 @@ export function drawWaveform(
     width, height, color,
     opacity = 0.9, trackVolume = 1, maxColumns,
     rawSamples,
+    fadeEnvelope,
   } = params;
 
   const contentWidth = Math.max(width, 0);
@@ -274,7 +334,7 @@ export function drawWaveform(
         const barAlpha = blendFactor > 0 ? 0.85 * (1 - blendFactor) : 0.85;
         const colW = waveformLayout.widthPx / columnCount;
         drawMinMaxBars(ctx, columnCount, waveformLayout.leftPx,
-          centerY, amplitude, monoData.maxArr, monoData.minArr, color, barAlpha, colW);
+          centerY, amplitude, monoData.maxArr, monoData.minArr, color, barAlpha, colW, fadeEnvelope);
       }
     }
   }
@@ -308,6 +368,7 @@ export interface MipmapDrawParams {
   color: string;
   opacity?: number;
   trackVolume?: number;
+  fadeEnvelope?: FadeEnvelope;
 }
 
 /**
@@ -321,7 +382,7 @@ export function drawMipmapWaveform(
 ): void {
   const {
     peakData, leftPx, width, height, color,
-    opacity = 0.9, trackVolume = 1,
+    opacity = 0.9, trackVolume = 1, fadeEnvelope,
   } = params;
 
   const numColumns = Math.floor(peakData.length / MIPMAP_STRIDE);
@@ -335,7 +396,9 @@ export function drawMipmapWaveform(
   ctx.globalAlpha = opacity * 0.85;
   ctx.fillStyle = color;
 
-  // Draw as filled polygon: top edge (max) forward, bottom edge (min) backward
+  // Draw as filled polygon: top edge (max) forward, bottom edge (min) backward.
+  // Per-column gain comes from the optional fade envelope so the polygon's
+  // top and bottom edges shrink toward centerY inside fade-in / fade-out regions.
   ctx.beginPath();
 
   // Forward pass: trace max envelope (top edge of waveform)
@@ -343,7 +406,8 @@ export function drawMipmapWaveform(
     const off = i * MIPMAP_STRIDE;
     const maxVal = Math.max(peakData[off + 1], peakData[off + 4]);
     const x = leftPx + (i + 0.5) * colW;
-    const y = centerY - maxVal * amplitude;
+    const gain = fadeGainAtPixel(fadeEnvelope, x);
+    const y = centerY - maxVal * amplitude * gain;
     if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
 
@@ -352,7 +416,8 @@ export function drawMipmapWaveform(
     const off = i * MIPMAP_STRIDE;
     const minVal = Math.min(peakData[off], peakData[off + 3]);
     const x = leftPx + (i + 0.5) * colW;
-    const y = centerY - minVal * amplitude;
+    const gain = fadeGainAtPixel(fadeEnvelope, x);
+    const y = centerY - minVal * amplitude * gain;
     ctx.lineTo(x, y);
   }
 

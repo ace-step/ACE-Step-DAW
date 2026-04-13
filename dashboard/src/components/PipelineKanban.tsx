@@ -10,7 +10,6 @@ const STAGES: { key: PipelineItem['stage']; label: string; color: string }[] = [
   { key: 'ci_failed', label: 'CI Failed', color: 'border-red-600' },
   { key: 'ci_passed', label: 'CI Passed', color: 'border-emerald-600' },
   { key: 'review', label: 'Review', color: 'border-purple-600' },
-  { key: 'merged', label: 'Merged', color: 'border-emerald-500' },
 ];
 
 function IssueCard({ item }: { item: PipelineItem }) {

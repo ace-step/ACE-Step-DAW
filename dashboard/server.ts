@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFile, watch, access, readdir } from 'node:fs/promises';
-import { join, extname } from 'node:path';
+import { readFile, watch, access } from 'node:fs/promises';
+import { join, extname, resolve, relative } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -93,8 +93,9 @@ async function queryPipeline(agents: AgentEntry[], prs: PRStatus[]): Promise<Pip
   return issues.map(issue => {
     const agent = agentByIssue.get(issue.number);
     const branchPatterns = [`feat/issue-${issue.number}`, `fix/issue-${issue.number}`];
+    const issueRe = new RegExp(`issue-${issue.number}(?:\\b|$)`);
     const pr = branchPatterns.map(b => prByBranch.get(b)).find(Boolean) ||
-               prs.find(p => p.branch.includes(String(issue.number)));
+               prs.find(p => issueRe.test(p.branch));
     const labels = (issue.labels || []).map((l: any) => l.name);
 
     let stage: PipelineItem['stage'] = 'open';
@@ -175,9 +176,21 @@ const MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
 };
 
+const DIST_ROOT = resolve(process.cwd(), 'dashboard', 'dist');
+
 async function serveStatic(res: ServerResponse, urlPath: string) {
-  const filePath = urlPath === '/' ? '/index.html' : urlPath;
-  const fullPath = join(process.cwd(), 'dashboard', 'dist', filePath);
+  // Parse URL to strip query strings and decode
+  const parsedPath = new URL(urlPath, 'http://localhost').pathname;
+  const filePath = parsedPath === '/' ? '/index.html' : parsedPath;
+  const fullPath = resolve(DIST_ROOT, '.' + filePath);
+
+  // Prevent path traversal: resolved path must stay under DIST_ROOT
+  if (!fullPath.startsWith(DIST_ROOT)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
   try {
     const content = await readFile(fullPath);
     const ext = extname(fullPath);
@@ -186,12 +199,12 @@ async function serveStatic(res: ServerResponse, urlPath: string) {
   } catch {
     // SPA fallback: serve index.html
     try {
-      const index = await readFile(join(process.cwd(), 'dashboard', 'dist', 'index.html'));
+      const index = await readFile(join(DIST_ROOT, 'index.html'));
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(index);
     } catch {
       res.writeHead(404);
-      res.end('Dashboard not built. Run: npx vite build --config dashboard/vite.config.ts');
+      res.end('Dashboard not built. Run: npm run dashboard:build');
     }
   }
 }
@@ -200,7 +213,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   const url = req.url || '/';
   if (url === '/api/snapshot') {
     const snapshot = await gatherSnapshot();
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(snapshot));
   } else {
     await serveStatic(res, url);
@@ -213,14 +226,16 @@ const wss = new WebSocketServer({ noServer: true });
 let currentSnapshot: DashboardSnapshot | null = null;
 
 server.on('upgrade', (req, socket, head) => {
-  if (req.url === '/ws') {
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws);
-      if (currentSnapshot) ws.send(JSON.stringify(currentSnapshot));
-    });
-  } else {
-    socket.destroy();
-  }
+  if (req.url !== '/ws') { socket.destroy(); return; }
+  // Validate origin — only accept localhost connections
+  const origin = req.headers.origin || '';
+  const allowed = origin === '' || /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin);
+  if (!allowed) { socket.destroy(); return; }
+
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    wss.emit('connection', ws);
+    if (currentSnapshot) ws.send(JSON.stringify(currentSnapshot));
+  });
 });
 
 function broadcast(snapshot: DashboardSnapshot) {

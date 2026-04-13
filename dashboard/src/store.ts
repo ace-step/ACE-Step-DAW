@@ -12,6 +12,10 @@ interface DashboardState {
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let intentionalClose = false;
+
+// Dashboard server always runs on port 5175, regardless of Vite HMR port
+const WS_URL = `ws://${window.location.hostname}:5175/ws`;
 
 export const useDashboardStore = create<DashboardState>()((set) => ({
   connected: false,
@@ -19,9 +23,9 @@ export const useDashboardStore = create<DashboardState>()((set) => ({
   activityFilter: '',
 
   connect: () => {
-    if (ws?.readyState === WebSocket.OPEN) return;
-    const url = `ws://${window.location.hostname}:${window.location.port}/ws`;
-    ws = new WebSocket(url);
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    intentionalClose = false;
+    ws = new WebSocket(WS_URL);
 
     ws.onopen = () => set({ connected: true });
     ws.onmessage = (e) => {
@@ -30,13 +34,17 @@ export const useDashboardStore = create<DashboardState>()((set) => ({
     ws.onclose = () => {
       set({ connected: false });
       ws = null;
-      reconnectTimer = setTimeout(() => useDashboardStore.getState().connect(), 3000);
+      // Only reconnect if not intentionally closed
+      if (!intentionalClose) {
+        reconnectTimer = setTimeout(() => useDashboardStore.getState().connect(), 3000);
+      }
     };
     ws.onerror = () => ws?.close();
   },
 
   disconnect: () => {
-    if (reconnectTimer) clearTimeout(reconnectTimer);
+    intentionalClose = true;
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     ws?.close();
     ws = null;
     set({ connected: false });

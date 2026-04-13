@@ -40,7 +40,7 @@ CX_COUNT=$(ps aux | grep 'codex' | grep -v grep | grep -v 'pm-auto\|project-mana
 CX_AGENTS=$(( CX_COUNT / 3 ))
 
 MULTICA_ONLINE=0
-if command -v multica >/dev/null 2>&1 && multica daemon status 2>/dev/null | grep -q "running"; then
+if command -v multica >/dev/null 2>&1 && multica daemon status --output json 2>/dev/null | python3 -c "import sys,json; exit(0 if json.load(sys.stdin).get('status')=='running' else 1)" 2>/dev/null; then
   MULTICA_ONLINE=1
 fi
 
@@ -115,6 +115,23 @@ fi
 # Step 4: DISPATCH via Sprint Runner (native sub-agents)
 # ═══════════════════════════════════════════
 
+# Step 4a: Multica dispatch for multica-managed issues (if daemon is online)
+if [ "$MULTICA_ONLINE" -eq 1 ]; then
+  MULTICA_ISSUES=$(gh issue list --repo "$REPO" --state open --label "multica-managed" --json number,title --jq '.[] | "\(.number)\t\(.title)"' 2>/dev/null)
+  while IFS=$'\t' read -r ISSUE_NUM TITLE; do
+    [ -z "$ISSUE_NUM" ] && continue
+    # Skip if already assigned in local registry (outputs "yes" or "no")
+    if bash scripts/agents/registry.sh check "$ISSUE_NUM" 2>/dev/null | grep -q "yes"; then
+      continue
+    fi
+    log "Multica dispatch: #$ISSUE_NUM — $TITLE"
+    multica issue assign "$ISSUE_NUM" --to "coder-claude" 2>/dev/null && \
+      log "Multica dispatched #$ISSUE_NUM" || \
+      log "Multica dispatch failed for #$ISSUE_NUM — will fall through to sprint-runner"
+  done <<< "$MULTICA_ISSUES"
+fi
+
+# Step 4b: Sprint runner for non-multica issues (existing logic, excludes multica-managed)
 # Check if sprint runner is already active
 if [ -d "/tmp/sprint-runner.lock.d" ]; then
   RUNNER_AGE=$(( $(date +%s) - $(stat -f %m "/tmp/sprint-runner.lock.d" 2>/dev/null || echo 0) ))
@@ -127,33 +144,19 @@ if [ -d "/tmp/sprint-runner.lock.d" ]; then
     log "Relaunched sprint runner (PID $!)"
   fi
 else
-  # Check if there are un-assigned issues
-  HAS_WORK=$(gh issue list --repo "$REPO" --state open --limit 1 --json number -q '.[0].number' 2>/dev/null)
+  # Check if there are non-multica un-assigned issues
+  if [ "$MULTICA_ONLINE" -eq 1 ]; then
+    HAS_WORK=$(gh issue list --repo "$REPO" --state open --limit 1 --json number,labels \
+      --jq '[.[] | select(.labels | map(.name) | index("multica-managed") | not)] | .[0].number' 2>/dev/null)
+  else
+    HAS_WORK=$(gh issue list --repo "$REPO" --state open --limit 1 --json number -q '.[0].number' 2>/dev/null)
+  fi
   if [ -n "$HAS_WORK" ]; then
     nohup bash scripts/agents/sprint-runner.sh 6 >> "$LOG" 2>&1 &
     log "Launched sprint runner (PID $!)"
   else
     log "No open issues — nothing to dispatch"
   fi
-fi
-
-# ═══════════════════════════════════════════
-# Step 4.5: MULTICA DISPATCH (optional accelerator)
-# ═══════════════════════════════════════════
-
-if [ "$MULTICA_ONLINE" -eq 1 ]; then
-  MULTICA_ISSUES=$(gh issue list --repo "$REPO" --state open --label "multica-managed" --json number,title --jq '.[] | "\(.number)\t\(.title)"' 2>/dev/null)
-  while IFS=$'\t' read -r ISSUE_NUM TITLE; do
-    [ -z "$ISSUE_NUM" ] && continue
-    # Skip if already assigned to an agent (check registry)
-    if bash scripts/agents/registry.sh check "$ISSUE_NUM" 2>/dev/null | grep -q "active"; then
-      continue
-    fi
-    log "Multica dispatch: #$ISSUE_NUM — $TITLE"
-    multica issue assign "$ISSUE_NUM" --repo "$REPO" 2>/dev/null && \
-      log "Multica dispatched #$ISSUE_NUM" || \
-      log "Multica dispatch failed for #$ISSUE_NUM — falling back to sprint-runner"
-  done <<< "$MULTICA_ISSUES"
 fi
 
 log "PM-auto tick complete"

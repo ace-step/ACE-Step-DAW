@@ -95,7 +95,7 @@ multica agent list       # List configured agents
 - Multica is **optional** — pm-auto.sh works with or without it
 - Issues without `multica-managed` label always use sprint-runner.sh
 - Setup: run `bash scripts/agents/multica-config.sh`
-- Dashboard: http://localhost:3000 (when daemon is running)
+- Dashboard: https://app.multica.ai (cloud) or http://localhost:3000 (self-hosted)
 
 ## gstack
 

@@ -244,10 +244,39 @@ export function ClipFadeHandles({
     const regionH = Math.max(1, regionBottom - regionTop);
     const localX = clientX - regionLeft;
     const localY = clientY - regionTop;
-    const x = clampNumber(localX / fadePx, CURVE_POINT_X_MIN, CURVE_POINT_X_MAX);
-    // y = 1 at top (unity), 0 at bottom (silence).
-    const y = clampNumber(1 - localY / regionH, CURVE_POINT_Y_MIN, CURVE_POINT_Y_MAX);
-    return { x, y };
+    const rawX = clampNumber(localX / fadePx, 0, 1);
+    // y = 1 at top (unity), 0 at bottom (silence) — same semantics as the stored field.
+    const rawY = clampNumber(1 - localY / regionH, 0, 1);
+
+    // Snap the dot to the actual bezier midpoint after the control point is
+    // clamped to [0, 1] × [0, 1]. Without this, when the user drags the mouse
+    // toward a corner the bezier control point ends up outside the body, the
+    // curve is forced toward a straight line via clamping (good — keeps the
+    // line in bounds), but the dot stays at the raw drag position and ends up
+    // floating off the curve. Snapping the dot to the actual bezier midpoint
+    // restricts the dot to the central [0.25, 0.75]² of the fade region, which
+    // is the set of midpoints achievable while keeping the control point in
+    // bounds, and the dot is always on the curve.
+    //
+    // Math (normalized 0..1 coords, y=0 top, y=1 bottom):
+    //   P0_in  = (0, 1) silenced bottom-left   P2_in  = (1, 0) unity top-right
+    //   P0_out = (0, 0) unity top-left          P2_out = (1, 1) silenced bottom-right
+    //   M screen = (rawX, 1 − rawY)
+    //   raw P1   = 2·M − 0.5·(P0 + P2)
+    //   clamped  = clamp(raw P1, [0,1]²)
+    //   snapped M = 0.25·P0 + 0.5·clamped + 0.25·P2
+    const p0 = edge === 'in' ? { x: 0, y: 1 } : { x: 0, y: 0 };
+    const p2 = edge === 'in' ? { x: 1, y: 0 } : { x: 1, y: 1 };
+    const userMidScreenX = rawX;
+    const userMidScreenY = 1 - rawY; // convert gain → "y from top"
+    const rawP1x = 2 * userMidScreenX - 0.5 * (p0.x + p2.x);
+    const rawP1y = 2 * userMidScreenY - 0.5 * (p0.y + p2.y);
+    const p1x = clampNumber(rawP1x, 0, 1);
+    const p1y = clampNumber(rawP1y, 0, 1);
+    const snappedScreenX = 0.25 * p0.x + 0.5 * p1x + 0.25 * p2.x;
+    const snappedScreenY = 0.25 * p0.y + 0.5 * p1y + 0.25 * p2.y;
+
+    return { x: snappedScreenX, y: 1 - snappedScreenY };
   }, [clipBlockRef, fadeInWidthPx, fadeOutWidthPx]);
 
   const handleCurvePointMouseDown = useCallback((edge: FadeEdge) => (e: React.MouseEvent<HTMLButtonElement>) => {

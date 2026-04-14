@@ -524,19 +524,30 @@ function buildFadePaths(
   }
 
   // ONE smooth quadratic bezier from corner to corner. We solve for the
-  // control point P1 such that the bezier passes exactly through the
-  // user-dragged midpoint at its geometric center (t = 0.5):
+  // control point P1 such that the bezier passes through the user-dragged
+  // midpoint at its geometric center (t = 0.5):
   //
   //   B(0.5) = 0.25·P0 + 0.5·P1 + 0.25·P2 = midpoint
   //   →  P1 = 2·midpoint − 0.5·(P0 + P2)
   //
   // A single quadratic is C∞ smooth — there is no joint, no kink, and the
-  // dot sits naturally on the curve. The curve shape (logarithmic rise,
-  // straight line, or exponential rise) is determined entirely by where
-  // the user drags the dot, and SVG rasterizes the bezier at sub-pixel
-  // precision so there are no visible polyline artifacts.
-  const cpx = 2 * midpointCx - 0.5 * (start.x + end.x);
-  const cpy = 2 * midpointCy - 0.5 * (start.y + end.y);
+  // dot sits naturally on the curve.
+  //
+  // Edge handling: when the dot is dragged near a corner, the unclamped P1
+  // swings outside the body rectangle and the bezier between the dot and
+  // the box exits the SVG bounds, getting clipped by the parent's
+  // overflow:hidden. Clamping P1 to [0, w] × [0, h] guarantees the entire
+  // curve stays inside (a quadratic bezier always lies within the convex
+  // hull of its three control points). At extreme dot positions the curve
+  // gracefully degrades toward a straight line (P1 collapses toward an
+  // endpoint), which matches the user's stated preference of "the curve
+  // should approach a straight line near the corners". The dot may then
+  // sit slightly off the curve, but the curve always visually connects
+  // both endpoints with no truncation.
+  const rawCpx = 2 * midpointCx - 0.5 * (start.x + end.x);
+  const rawCpy = 2 * midpointCy - 0.5 * (start.y + end.y);
+  const cpx = clampNumber(rawCpx, 0, w);
+  const cpy = clampNumber(rawCpy, 0, h);
 
   const lineSpline = `M ${fmt(start.x)},${fmt(start.y)}`
     + ` Q ${fmt(cpx)},${fmt(cpy)} ${fmt(end.x)},${fmt(end.y)}`;

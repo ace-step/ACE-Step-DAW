@@ -32,15 +32,17 @@ You are a TDD-driven developer agent. Your job is to pick up ONE task and comple
    - If branch doesn't exist, create it from main
 3. **Check for spec context** (spec-aware TDD):
    - Check if the issue has a `spec:` label: `gh issue view NUMBER --json labels`
-   - If `spec:` label present, read the issue body for Given/When/Then scenarios
-   - Use those scenarios directly as your test cases in the Red phase
-   - Each `Given/When/Then` becomes one test assertion
-   - MUST/SHALL keywords in specs are mandatory — every MUST becomes a test
+   - If a `spec:<change-name>` label is present, read the actual spec files:
+     - First check `openspec/changes/<change-name>/specs/` (active change)
+     - Fallback: `openspec/specs/` (archived specs)
+     - Use the issue body as supplementary context only (it may drift from source)
+   - Each Given/When/Then scenario becomes at least one test case
+   - MUST/SHALL keywords are mandatory — every MUST must be asserted in the test suite
 4. **Understand** the task — read relevant source files
 5. **Write a failing test first** (Red phase):
    - For store/utility tasks: create a Vitest test in `src/**/__tests__/`
    - For UI/workflow tasks: create a Playwright test in `tests/e2e/`
-   - If spec scenarios exist: each Given/When/Then becomes a test case
+   - If spec scenarios exist: each Given/When/Then scenario becomes a test case
 6. **Run the test** to confirm it fails: `npm test` or `npx playwright test`
 7. **Implement** the minimum code to make the test pass (Green phase)
 8. **Run all tests** to ensure nothing else broke: `npm test`

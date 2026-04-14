@@ -35,7 +35,7 @@ Full spec-driven development cycle: from idea to merged code via formal specs.
 
    Show: how many issues were created, their numbers.
 
-3. **Phase 2 — Dispatch (automatic)**
+3. **Phase 2 — Dispatch + Review (automatic with gates)**
 
    Issues are automatically picked up by `pm-auto.sh` → `sprint-runner.sh`.
    Monitor progress at: http://127.0.0.1:5175 (Agent Dashboard).
@@ -45,15 +45,24 @@ Full spec-driven development cycle: from idea to merged code via formal specs.
    npm run dashboard  # Start if not already running
    ```
 
-4. **Phase 3 — Verify**
+   **Review gate** (per AGENTS.md Step 5): Each PR must pass before merge:
+   - CI passes (type check + tests + build)
+   - GitHub Copilot automatic review: check via `gh pr view <num> --json reviews`
+   - Codex independent review: run `/codex review`, post findings as PR comment
+   - Both reviewers' feedback must be addressed before merge
 
-   After all issues are closed and PRs merged, verify the spec:
-   ```bash
-   openspec status --change "<name>"
-   ```
+4. **Phase 3 — Verify (spec coverage)**
 
-   Check that all MUST/SHALL requirements from specs are covered.
-   If any are missing, create additional issues.
+   After all issues are closed and PRs merged, verify spec coverage:
+
+   Run `@tester` with the change name to check MUST/SHALL coverage:
+   - Read the actual spec files from `openspec/changes/<name>/specs/`
+   - Extract all MUST/SHALL requirements
+   - Search test files for corresponding test cases
+   - Report any uncovered requirements as spec gaps
+
+   If any MUST/SHALL requirements are uncovered, create additional issues.
+   Only proceed to Phase 4 when all requirements have passing tests.
 
 5. **Phase 4 — Archive**
 

@@ -2,7 +2,7 @@
 # spec-to-issues.sh — Parse OpenSpec tasks.md → GitHub Issues
 # Usage: bash scripts/agents/spec-to-issues.sh <change-name>
 # Creates one GitHub Issue per task, with Given/When/Then from specs/ in the body
-set -e
+set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 REPO="ace-step/ACE-Step-DAW"
@@ -22,16 +22,20 @@ TASKS_FILE="$CHANGE_DIR/tasks.md"
 
 info "Decomposing spec '$CHANGE_NAME' into GitHub Issues"
 
+# ── Create spec label if it doesn't exist (before issue loop) ──
+gh label create "spec:$CHANGE_NAME" --repo "$REPO" \
+  --description "OpenSpec change: $CHANGE_NAME" \
+  --color "D4C5F9" 2>/dev/null || true
+
 # ── Read specs (if available) ──
 SPEC_CONTEXT=""
 if [ -d "$CHANGE_DIR/specs" ]; then
-  for spec_file in "$CHANGE_DIR/specs"/*.md "$CHANGE_DIR/specs"/**/*.md; do
-    [ -f "$spec_file" ] || continue
+  while IFS= read -r spec_file; do
     SPEC_CONTEXT="$SPEC_CONTEXT
 ---
 $(cat "$spec_file")
 "
-  done
+  done < <(find "$CHANGE_DIR/specs" -name '*.md' -type f)
 fi
 
 # ── Read proposal summary ──
@@ -47,14 +51,14 @@ CREATED_COUNT=0
 
 while IFS= read -r line; do
   # Match markdown task items: - [ ] Task description
-  if echo "$line" | grep -qE '^\s*-\s*\[\s*\]\s+'; then
-    TASK_DESC=$(echo "$line" | sed 's/^\s*-\s*\[\s*\]\s*//')
+  if echo "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[[[:space:]]*\][[:space:]]+'; then
+    TASK_DESC=$(echo "$line" | sed -E 's/^[[:space:]]*-[[:space:]]*\[[[:space:]]*\][[:space:]]*//')
     [ -z "$TASK_DESC" ] && continue
     TASK_COUNT=$((TASK_COUNT + 1))
 
     # Check for duplicate (issue with same title already exists)
     EXISTING=$(gh issue list --repo "$REPO" --state open --search "$TASK_DESC" --json number,title \
-      --jq ".[] | select(.title == \"$TASK_DESC\") | .number" 2>/dev/null | head -1)
+      --jq --arg title "$TASK_DESC" '.[] | select(.title == $title) | .number' 2>/dev/null | head -1)
     if [ -n "$EXISTING" ]; then
       warn "Skip duplicate: #$EXISTING — $TASK_DESC"
       continue
@@ -96,30 +100,24 @@ $SPEC_CONTEXT
 - [ ] \`npm run build\` succeeds
 "
 
-    # Create issue
-    ISSUE_NUM=$(gh issue create --repo "$REPO" \
+    # Create issue (wrapped in if-block for graceful failure)
+    if ISSUE_URL=$(gh issue create --repo "$REPO" \
       --title "$TASK_DESC" \
       --body "$ISSUE_BODY" \
       --label "enhancement" \
-      --label "spec:$CHANGE_NAME" \
-      2>/dev/null | grep -oE '[0-9]+$')
-
-    if [ -n "$ISSUE_NUM" ]; then
+      --label "spec:$CHANGE_NAME" 2>&1); then
+      ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
       ok "Created #$ISSUE_NUM — $TASK_DESC"
       CREATED_COUNT=$((CREATED_COUNT + 1))
     else
       warn "Failed to create issue for: $TASK_DESC"
+      warn "  Error: $ISSUE_URL"
     fi
 
     # Rate limit: avoid GitHub API throttling
     sleep 1
   fi
 done < "$TASKS_FILE"
-
-# ── Create spec label if it doesn't exist ──
-gh label create "spec:$CHANGE_NAME" --repo "$REPO" \
-  --description "OpenSpec change: $CHANGE_NAME" \
-  --color "D4C5F9" 2>/dev/null || true
 
 # ── Summary ──
 echo ""
@@ -134,6 +132,6 @@ echo ""
 echo "  Next steps:"
 echo "    - pm-auto.sh will dispatch agents automatically"
 echo "    - Monitor at: http://127.0.0.1:5175 (Agent Dashboard)"
-echo "    - Verify: /opsx:verify"
+echo "    - Verify: @tester"
 echo "    - Archive: /opsx:archive $CHANGE_NAME"
 echo "════════════════════════════════════════"

@@ -148,4 +148,65 @@ describe('ClipBlock fade handles', () => {
 
     expect(getClip().fadeOutDuration).toBe(0);
   });
+
+  it('renders a draggable curve point on the fade-in curve when hovering a faded clip', () => {
+    useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 1 });
+    const { container } = renderClip();
+    const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
+    fireEvent.mouseEnter(clipBlock);
+
+    expect(container.querySelector('[data-fade-curve-point="in"]')).not.toBeNull();
+  });
+
+  it('hides the curve point when the pointer leaves', () => {
+    useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 1 });
+    const { container } = renderClip();
+    const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
+    fireEvent.mouseEnter(clipBlock);
+    fireEvent.mouseLeave(clipBlock);
+
+    expect(container.querySelector('[data-fade-curve-point="in"]')).toBeNull();
+  });
+
+  it('drags the fade-in curve point and commits a fadeInCurvePoint to the store', () => {
+    useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 2 });
+    const { container } = renderClip();
+    const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
+    clipBlock.getBoundingClientRect = () => ({
+      x: 0, y: 0, left: 0, top: 0,
+      right: 200, bottom: 80,
+      width: 200, height: 80,
+      toJSON: () => ({}),
+    });
+    fireEvent.mouseEnter(clipBlock);
+
+    const point = container.querySelector('[data-fade-curve-point="in"]') as HTMLButtonElement;
+    expect(point).not.toBeNull();
+
+    // Drag to the middle of the fade-in region (50px), high up (y=30)
+    fireEvent.mouseDown(point, { button: 0, clientX: 50, clientY: 30 });
+    fireEvent.mouseUp(window);
+
+    const stored = getClip().fadeInCurvePoint;
+    expect(stored).toBeDefined();
+    expect(stored!.x).toBeGreaterThan(0);
+    expect(stored!.x).toBeLessThan(1);
+    expect(stored!.y).toBeGreaterThan(0);
+    expect(stored!.y).toBeLessThan(1);
+  });
+
+  it('resets the curve point on double click', () => {
+    useProjectStore.getState().setClipFade('clip-1', {
+      fadeInDuration: 1,
+      fadeInCurvePoint: { x: 0.7, y: 0.4 },
+    });
+    const { container } = renderClip();
+    const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
+    fireEvent.mouseEnter(clipBlock);
+
+    const point = container.querySelector('[data-fade-curve-point="in"]') as HTMLButtonElement;
+    fireEvent.doubleClick(point);
+
+    expect(getClip().fadeInCurvePoint).toBeUndefined();
+  });
 });

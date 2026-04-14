@@ -399,4 +399,24 @@ describe('fadeGainAtPixel', () => {
     // Chunk pixel 0 → effective full-clip pixel 10 → middle of fade-in (linear) = 0.5
     expect(fadeGainAtPixel(offset, 0)).toBeCloseTo(0.5, 5);
   });
+
+  it('uses the fade-in bezier curve point when present (overrides preset)', () => {
+    const bowed: FadeEnvelope = {
+      ...env,
+      fadeInCurve: 'linear',
+      fadeInCurvePoint: { x: 0.5, y: 0.9 },
+    };
+    // Middle of fade-in (pixel 10 of 0..20) → bezier gives ~0.9, not 0.5
+    expect(fadeGainAtPixel(bowed, 10)).toBeCloseTo(0.9, 2);
+  });
+
+  it('uses the fade-out bezier curve point when present', () => {
+    const bowed: FadeEnvelope = {
+      ...env,
+      fadeOutCurve: 'linear',
+      fadeOutCurvePoint: { x: 0.5, y: 0.2 },
+    };
+    // Middle of fade-out (pixel 85 of 70..100) → bezier gives ~0.2
+    expect(fadeGainAtPixel(bowed, 85)).toBeCloseTo(0.2, 2);
+  });
 });

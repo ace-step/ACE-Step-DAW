@@ -4,6 +4,8 @@ import {
   getClipFadeBounds,
   getClipFadeGainAtTime,
   computeFadeFromPointer,
+  evaluateBezierFadeGain,
+  sampleBezierFadeCurve,
   MIN_FADE_SECONDS,
   FADE_HANDLE_KEYBOARD_STEP,
 } from '../clipFade';
@@ -225,6 +227,107 @@ describe('computeFadeFromPointer', () => {
       clip: { ...baseClip, fadeInDuration: 1 },
     });
     expect(result).toBe(3);
+  });
+});
+
+describe('evaluateBezierFadeGain', () => {
+  it('returns 0 at progress 0 for fade-in (silenced corner)', () => {
+    const gain = evaluateBezierFadeGain({ x: 0.5, y: 0.5 }, 0, 1, 0);
+    expect(gain).toBeCloseTo(0, 5);
+  });
+
+  it('returns 1 at progress 1 for fade-in (unity corner)', () => {
+    const gain = evaluateBezierFadeGain({ x: 0.5, y: 0.5 }, 0, 1, 1);
+    expect(gain).toBeCloseTo(1, 5);
+  });
+
+  it('returns 1 at progress 0 for fade-out (unity corner)', () => {
+    const gain = evaluateBezierFadeGain({ x: 0.5, y: 0.5 }, 1, 0, 0);
+    expect(gain).toBeCloseTo(1, 5);
+  });
+
+  it('returns 0 at progress 1 for fade-out (silenced corner)', () => {
+    const gain = evaluateBezierFadeGain({ x: 0.5, y: 0.5 }, 1, 0, 1);
+    expect(gain).toBeCloseTo(0, 5);
+  });
+
+  it('matches a straight line when midpoint is at (0.5, 0.5)', () => {
+    // Midpoint at (0.5, 0.5) should give linear gain
+    expect(evaluateBezierFadeGain({ x: 0.5, y: 0.5 }, 0, 1, 0.25)).toBeCloseTo(0.25, 3);
+    expect(evaluateBezierFadeGain({ x: 0.5, y: 0.5 }, 0, 1, 0.5)).toBeCloseTo(0.5, 3);
+    expect(evaluateBezierFadeGain({ x: 0.5, y: 0.5 }, 0, 1, 0.75)).toBeCloseTo(0.75, 3);
+  });
+
+  it('bows the curve up when midpoint y is dragged above the diagonal', () => {
+    // Midpoint at (0.5, 0.8) → at progress 0.5 the gain should be 0.8 (the user's drag position)
+    const gain = evaluateBezierFadeGain({ x: 0.5, y: 0.8 }, 0, 1, 0.5);
+    expect(gain).toBeCloseTo(0.8, 2);
+  });
+
+  it('bows the curve down when midpoint y is dragged below the diagonal', () => {
+    const gain = evaluateBezierFadeGain({ x: 0.5, y: 0.2 }, 0, 1, 0.5);
+    expect(gain).toBeCloseTo(0.2, 2);
+  });
+
+  it('produces monotonic increasing values for fade-in across [0, 1]', () => {
+    const point = { x: 0.7, y: 0.3 };
+    let prev = evaluateBezierFadeGain(point, 0, 1, 0);
+    for (let i = 1; i <= 20; i++) {
+      const cur = evaluateBezierFadeGain(point, 0, 1, i / 20);
+      expect(cur).toBeGreaterThanOrEqual(prev - 1e-6);
+      prev = cur;
+    }
+  });
+});
+
+describe('sampleBezierFadeCurve', () => {
+  it('samples N values across the requested progress range', () => {
+    const arr = sampleBezierFadeCurve({ x: 0.5, y: 0.5 }, 0, 1, 0, 1, 8);
+    expect(arr.length).toBe(8);
+    expect(arr[0]).toBeCloseTo(0, 5);
+    expect(arr[arr.length - 1]).toBeCloseTo(1, 5);
+  });
+
+  it('flips direction for fade-out', () => {
+    const arr = sampleBezierFadeCurve({ x: 0.5, y: 0.5 }, 1, 0, 0, 1, 8);
+    expect(arr[0]).toBeCloseTo(1, 5);
+    expect(arr[arr.length - 1]).toBeCloseTo(0, 5);
+  });
+
+  it('returns a partial range when start/end progress are not 0/1', () => {
+    // Sub-range 0.25..0.75 of a linear curve → values from 0.25 to 0.75
+    const arr = sampleBezierFadeCurve({ x: 0.5, y: 0.5 }, 0, 1, 0.25, 0.75, 16);
+    expect(arr[0]).toBeCloseTo(0.25, 3);
+    expect(arr[arr.length - 1]).toBeCloseTo(0.75, 3);
+  });
+});
+
+describe('getClipFadeGainAtTime with bezier curve point', () => {
+  it('uses the bezier override instead of the preset curve', () => {
+    const clip = {
+      startTime: 0,
+      duration: 4,
+      fadeInDuration: 2,
+      fadeOutDuration: 0,
+      fadeInCurve: 'linear' as const,
+      // Curve point bows the gain up at the midpoint
+      fadeInCurvePoint: { x: 0.5, y: 0.9 },
+    };
+    // At time 1 (progress 0.5 through fade-in), gain should be ~0.9 from the bezier
+    const gain = getClipFadeGainAtTime(clip, 1);
+    expect(gain).toBeCloseTo(0.9, 2);
+  });
+
+  it('falls back to the preset curve when no point is set', () => {
+    const clip = {
+      startTime: 0,
+      duration: 4,
+      fadeInDuration: 2,
+      fadeOutDuration: 0,
+      fadeInCurve: 'linear' as const,
+    };
+    const gain = getClipFadeGainAtTime(clip, 1);
+    expect(gain).toBeCloseTo(0.5, 3);
   });
 });
 

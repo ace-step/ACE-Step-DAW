@@ -170,6 +170,12 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
   const fadeInCurve = clip.fadeInCurve ?? 'linear';
   const fadeOutCurve = clip.fadeOutCurve ?? 'linear';
+  // Local override for live curve point during drag (same store-bypass pattern
+  // as fade duration drag). Cleared on commit in the callback below.
+  const [liveFadeInCurvePoint, setLiveFadeInCurvePoint] = useState<{ x: number; y: number } | null>(null);
+  const [liveFadeOutCurvePoint, setLiveFadeOutCurvePoint] = useState<{ x: number; y: number } | null>(null);
+  const fadeInCurvePoint = liveFadeInCurvePoint ?? clip.fadeInCurvePoint;
+  const fadeOutCurvePoint = liveFadeOutCurvePoint ?? clip.fadeOutCurvePoint;
   const waveformFadeEnvelope = useMemo(() => {
     if (fadeInWidth <= 0 && fadeOutWidth <= 0) return undefined;
     return {
@@ -178,8 +184,10 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       fadeOutPx: fadeOutWidth,
       fadeInCurve,
       fadeOutCurve,
+      fadeInCurvePoint,
+      fadeOutCurvePoint,
     };
-  }, [width, fadeInWidth, fadeOutWidth, fadeInCurve, fadeOutCurve]);
+  }, [width, fadeInWidth, fadeOutWidth, fadeInCurve, fadeOutCurve, fadeInCurvePoint, fadeOutCurvePoint]);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -377,6 +385,8 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             fadeOutDuration={fadeOutDuration}
             fadeInCurve={fadeInCurve}
             fadeOutCurve={fadeOutCurve}
+            fadeInCurvePoint={fadeInCurvePoint}
+            fadeOutCurvePoint={fadeOutCurvePoint}
             showFadeInHandle={showFadeInHandle}
             showFadeOutHandle={showFadeOutHandle}
             pixelsPerSecond={pixelsPerSecond}
@@ -398,6 +408,28 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             onFadeDragCancel={(edge) => {
               if (edge === 'in') setLiveFadeIn(null);
               else setLiveFadeOut(null);
+            }}
+            onCurvePointDragLive={(edge, point) => {
+              if (edge === 'in') setLiveFadeInCurvePoint(point);
+              else setLiveFadeOutCurvePoint(point);
+            }}
+            onCurvePointDragCommit={(edge, point) => {
+              if (edge === 'in') {
+                setLiveFadeInCurvePoint(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeInCurvePoint: point });
+              } else {
+                setLiveFadeOutCurvePoint(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeOutCurvePoint: point });
+              }
+            }}
+            onCurvePointDragCancel={(edge) => {
+              if (edge === 'in') setLiveFadeInCurvePoint(null);
+              else setLiveFadeOutCurvePoint(null);
+            }}
+            onCurvePointReset={(edge) => {
+              useProjectStore.getState().setClipFade(clip.id, edge === 'in'
+                ? { fadeInCurvePoint: undefined }
+                : { fadeOutCurvePoint: undefined });
             }}
           />
         )}

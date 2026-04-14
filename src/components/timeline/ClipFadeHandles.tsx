@@ -11,8 +11,16 @@ const FADE_HANDLE_SIZE_PX = 8;
 const FADE_CURVE_LINE_COLOR = '#000';
 const FADE_CURVE_LINE_WIDTH = 0.5;
 const FADE_MASK_FILL = 'rgba(0, 0, 0, 0.22)';
+const CURVE_POINT_HIT_TARGET_PX = 14;
+const CURVE_POINT_VISUAL_RADIUS_PX = 4;
+/** Constrain how far the curve can bow (clamps the normalized {x,y}). */
+const CURVE_POINT_X_MIN = 0.05;
+const CURVE_POINT_X_MAX = 0.95;
+const CURVE_POINT_Y_MIN = 0;
+const CURVE_POINT_Y_MAX = 1;
 
 type FadeEdge = 'in' | 'out';
+type CurvePoint = { x: number; y: number };
 
 interface ClipFadeHandlesProps {
   clipId: string;
@@ -23,6 +31,8 @@ interface ClipFadeHandlesProps {
   fadeOutDuration: number;
   fadeInCurve?: Clip['fadeInCurve'];
   fadeOutCurve?: Clip['fadeOutCurve'];
+  fadeInCurvePoint?: Clip['fadeInCurvePoint'];
+  fadeOutCurvePoint?: Clip['fadeOutCurvePoint'];
   showFadeInHandle: boolean;
   showFadeOutHandle: boolean;
   pixelsPerSecond: number;
@@ -36,6 +46,12 @@ interface ClipFadeHandlesProps {
   onFadeDragCommit: (edge: FadeEdge, valueSeconds: number) => void;
   /** Cancel callback fired on Escape — discard any live override. */
   onFadeDragCancel: (edge: FadeEdge) => void;
+  /** Live + commit + cancel for the bezier curve point on the fade. */
+  onCurvePointDragLive: (edge: FadeEdge, point: CurvePoint) => void;
+  onCurvePointDragCommit: (edge: FadeEdge, point: CurvePoint) => void;
+  onCurvePointDragCancel: (edge: FadeEdge) => void;
+  /** Reset the curve point to undefined (return to preset shape). */
+  onCurvePointReset: (edge: FadeEdge) => void;
 }
 
 export function ClipFadeHandles({
@@ -47,6 +63,8 @@ export function ClipFadeHandles({
   fadeOutDuration,
   fadeInCurve,
   fadeOutCurve,
+  fadeInCurvePoint,
+  fadeOutCurvePoint,
   showFadeInHandle,
   showFadeOutHandle,
   pixelsPerSecond,
@@ -55,6 +73,10 @@ export function ClipFadeHandles({
   onFadeDragLive,
   onFadeDragCommit,
   onFadeDragCancel,
+  onCurvePointDragLive,
+  onCurvePointDragCommit,
+  onCurvePointDragCancel,
+  onCurvePointReset,
 }: ClipFadeHandlesProps) {
   const setClipFade = useProjectStore((s) => s.setClipFade);
 
@@ -182,16 +204,107 @@ export function ClipFadeHandles({
 
   // Sample the gain envelope to build SVG paths for the visible curve line
   // and the translucent dark mask. The curve always matches the actual fade
-  // curve type (linear / exponential / equal-power) used by the audio engine.
+  // curve type (preset OR user-dragged bezier point) used by the audio engine.
   const fadeInPaths = useMemo(() => {
     if (fadeInWidthPx <= 0) return null;
-    return buildFadePaths('in', fadeInWidthPx, fadeInCurve ?? 'linear');
-  }, [fadeInWidthPx, fadeInCurve]);
+    return buildFadePaths('in', fadeInWidthPx, fadeInCurve ?? 'linear', fadeInCurvePoint ?? undefined);
+  }, [fadeInWidthPx, fadeInCurve, fadeInCurvePoint]);
 
   const fadeOutPaths = useMemo(() => {
     if (fadeOutWidthPx <= 0) return null;
-    return buildFadePaths('out', fadeOutWidthPx, fadeOutCurve ?? 'linear');
-  }, [fadeOutWidthPx, fadeOutCurve]);
+    return buildFadePaths('out', fadeOutWidthPx, fadeOutCurve ?? 'linear', fadeOutCurvePoint ?? undefined);
+  }, [fadeOutWidthPx, fadeOutCurve, fadeOutCurvePoint]);
+
+  // Curve point drag uses the same store-bypass pattern as fade duration:
+  // a ref holds the latest value, rAF coalesces mousemove updates, and the
+  // parent receives onCurvePointDragLive so only the local clip re-renders
+  // per frame. Final commit on mouseup is a single setClipFade.
+  const livePointRef = useRef<CurvePoint>({ x: 0.5, y: 0.5 });
+  const cpPendingRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const cpRafIdRef = useRef<number | null>(null);
+
+  const computeCurvePoint = useCallback((edge: FadeEdge, clientX: number, clientY: number): CurvePoint => {
+    const rect = clipBlockRef.current?.getBoundingClientRect();
+    if (!rect) return livePointRef.current;
+    const fadePx = edge === 'in' ? fadeInWidthPx : fadeOutWidthPx;
+    if (fadePx <= 0) return livePointRef.current;
+    // Convert pointer to fade-region-local pixels (top of body, not top of clip).
+    const regionLeft = edge === 'in' ? rect.left : rect.right - fadePx;
+    const regionTop = rect.top + HEADER_RAIL_HEIGHT_PX;
+    const regionBottom = rect.bottom;
+    const regionH = Math.max(1, regionBottom - regionTop);
+    const localX = clientX - regionLeft;
+    const localY = clientY - regionTop;
+    const x = clampNumber(localX / fadePx, CURVE_POINT_X_MIN, CURVE_POINT_X_MAX);
+    // y = 1 at top (unity), 0 at bottom (silence).
+    const y = clampNumber(1 - localY / regionH, CURVE_POINT_Y_MIN, CURVE_POINT_Y_MAX);
+    return { x, y };
+  }, [clipBlockRef, fadeInWidthPx, fadeOutWidthPx]);
+
+  const handleCurvePointMouseDown = useCallback((edge: FadeEdge) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const initial = computeCurvePoint(edge, e.clientX, e.clientY);
+    livePointRef.current = initial;
+    onCurvePointDragLive(edge, initial);
+    cpPendingRef.current = { clientX: e.clientX, clientY: e.clientY };
+
+    const flush = () => {
+      cpRafIdRef.current = null;
+      const pending = cpPendingRef.current;
+      if (!pending) return;
+      const next = computeCurvePoint(edge, pending.clientX, pending.clientY);
+      if (next.x !== livePointRef.current.x || next.y !== livePointRef.current.y) {
+        livePointRef.current = next;
+        onCurvePointDragLive(edge, next);
+      }
+    };
+
+    const onMouseMove = (ev: MouseEvent) => {
+      cpPendingRef.current = { clientX: ev.clientX, clientY: ev.clientY };
+      if (cpRafIdRef.current === null) {
+        cpRafIdRef.current = requestAnimationFrame(flush);
+      }
+    };
+
+    const cleanup = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
+      if (cpRafIdRef.current !== null) {
+        cancelAnimationFrame(cpRafIdRef.current);
+        cpRafIdRef.current = null;
+      }
+      cpPendingRef.current = null;
+    };
+
+    const onMouseUp = () => {
+      const pending = cpPendingRef.current;
+      if (pending) {
+        livePointRef.current = computeCurvePoint(edge, pending.clientX, pending.clientY);
+      }
+      cleanup();
+      onCurvePointDragCommit(edge, livePointRef.current);
+    };
+
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      cleanup();
+      onCurvePointDragCancel(edge);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('keydown', onKeyDown);
+  }, [computeCurvePoint, onCurvePointDragLive, onCurvePointDragCommit, onCurvePointDragCancel]);
+
+  const handleCurvePointDoubleClick = useCallback((edge: FadeEdge) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onCurvePointReset(edge);
+  }, [onCurvePointReset]);
 
   return (
     <>
@@ -213,6 +326,37 @@ export function ClipFadeHandles({
           maskPath={fadeOutPaths.maskPath}
           linePath={fadeOutPaths.linePath}
           showLine={showFadeOutHandle}
+        />
+      )}
+      {fadeInPaths && showFadeInHandle && (
+        <CurvePointHandle
+          edge="in"
+          clipId={clipId}
+          regionLeft={0}
+          regionWidthPx={fadeInWidthPx}
+          midpointFraction={{
+            x: fadeInPaths.midpointCx / Math.max(1, fadeInWidthPx),
+            // y in viewBox space: 0 = top (unity), 100 = bottom (silence). Convert to fraction-from-top.
+            y: fadeInPaths.midpointCy / 100,
+          }}
+          fillColor={clipColor}
+          onMouseDown={handleCurvePointMouseDown('in')}
+          onDoubleClick={handleCurvePointDoubleClick('in')}
+        />
+      )}
+      {fadeOutPaths && showFadeOutHandle && (
+        <CurvePointHandle
+          edge="out"
+          clipId={clipId}
+          regionLeft={width - fadeOutWidthPx}
+          regionWidthPx={fadeOutWidthPx}
+          midpointFraction={{
+            x: fadeOutPaths.midpointCx / Math.max(1, fadeOutWidthPx),
+            y: fadeOutPaths.midpointCy / 100,
+          }}
+          fillColor={clipColor}
+          onMouseDown={handleCurvePointMouseDown('out')}
+          onDoubleClick={handleCurvePointDoubleClick('out')}
         />
       )}
       {showFadeInHandle && (
@@ -336,46 +480,67 @@ function buildFadePaths(
   direction: 'in' | 'out',
   widthPx: number,
   curve: NonNullable<Clip['fadeInCurve']>,
-): { linePath: string; maskPath: string } {
+  curvePoint: CurvePoint | undefined,
+): { linePath: string; maskPath: string; midpointCx: number; midpointCy: number } {
   const VIEWBOX_HEIGHT = 100;
   const w = widthPx;
   const h = VIEWBOX_HEIGHT;
 
-  const cp = direction === 'in'
-    ? controlPointForFadeIn(curve, w, h)
-    : controlPointForFadeOut(curve, w, h);
+  // When a user-dragged curve point exists, derive the bezier control point
+  // P1 from "B(0.5) = midpoint" → P1 = 2·midpoint − 0.5·(P0 + P2). The
+  // control point lives in viewBox space; midpointCx / midpointCy is the
+  // visible circle position (always on the curve at t=0.5).
+  let cp: { cx: number; cy: number };
+  let midpointCx: number;
+  let midpointCy: number;
+
+  if (curvePoint) {
+    midpointCx = clampNumber(curvePoint.x, 0, 1) * w;
+    midpointCy = (1 - clampNumber(curvePoint.y, 0, 1)) * h;
+    if (direction === 'in') {
+      // P0 = (0, h) silence, P2 = (w, 0) unity → 0.5·(P0 + P2) = (w/2, h/2)
+      cp = { cx: 2 * midpointCx - w / 2, cy: 2 * midpointCy - h / 2 };
+    } else {
+      // P0 = (0, 0) unity, P2 = (w, h) silence → 0.5·(P0 + P2) = (w/2, h/2)
+      cp = { cx: 2 * midpointCx - w / 2, cy: 2 * midpointCy - h / 2 };
+    }
+  } else {
+    cp = direction === 'in'
+      ? controlPointForFadeIn(curve, w, h)
+      : controlPointForFadeOut(curve, w, h);
+    // For preset curves we still expose a midpoint dot at the bezier's
+    // geometric midpoint so the user can grab it and start shaping.
+    if (direction === 'in') {
+      midpointCx = 0.25 * 0 + 0.5 * cp.cx + 0.25 * w; // 0.25·P0.x + 0.5·P1.x + 0.25·P2.x
+      midpointCy = 0.25 * h + 0.5 * cp.cy + 0.25 * 0;
+    } else {
+      midpointCx = 0.25 * 0 + 0.5 * cp.cx + 0.25 * w;
+      midpointCy = 0.25 * 0 + 0.5 * cp.cy + 0.25 * h;
+    }
+  }
 
   let linePath: string;
   let maskPath: string;
 
   if (direction === 'in') {
-    // Line: from silenced corner (0, h) up to unity corner (w, 0)
-    if (curve === 'linear') {
+    if (curve === 'linear' && !curvePoint) {
       linePath = `M 0,${fmt(h)} L ${fmt(w)},0`;
-    } else {
-      linePath = `M 0,${fmt(h)} Q ${fmt(cp.cx)},${fmt(cp.cy)} ${fmt(w)},0`;
-    }
-    // Mask: close back across the top edge, then bezier from (w,0) to (0,h)
-    if (curve === 'linear') {
       maskPath = `M 0,0 L ${fmt(w)},0 L 0,${fmt(h)} Z`;
     } else {
+      linePath = `M 0,${fmt(h)} Q ${fmt(cp.cx)},${fmt(cp.cy)} ${fmt(w)},0`;
       maskPath = `M 0,0 L ${fmt(w)},0 Q ${fmt(cp.cx)},${fmt(cp.cy)} 0,${fmt(h)} Z`;
     }
   } else {
-    // Fade-out: from (0, 0) unity down to (w, h) silenced
-    if (curve === 'linear') {
+    if (curve === 'linear' && !curvePoint) {
       linePath = `M 0,0 L ${fmt(w)},${fmt(h)}`;
-    } else {
-      linePath = `M 0,0 Q ${fmt(cp.cx)},${fmt(cp.cy)} ${fmt(w)},${fmt(h)}`;
-    }
-    if (curve === 'linear') {
       maskPath = `M 0,0 L ${fmt(w)},${fmt(h)} L ${fmt(w)},0 Z`;
     } else {
+      linePath = `M 0,0 Q ${fmt(cp.cx)},${fmt(cp.cy)} ${fmt(w)},${fmt(h)}`;
       maskPath = `M 0,0 Q ${fmt(cp.cx)},${fmt(cp.cy)} ${fmt(w)},${fmt(h)} L ${fmt(w)},0 Z`;
     }
   }
 
-  return { linePath, maskPath };
+  return { linePath, maskPath, midpointCx, midpointCy };
 }
 
 function controlPointForFadeIn(curve: NonNullable<Clip['fadeInCurve']>, w: number, h: number) {
@@ -402,6 +567,82 @@ function controlPointForFadeOut(curve: NonNullable<Clip['fadeInCurve']>, w: numb
     default:
       return { cx: w * 0.5, cy: h * 0.5 };
   }
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+interface CurvePointHandleProps {
+  edge: FadeEdge;
+  clipId: string;
+  regionLeft: number;
+  regionWidthPx: number;
+  /** Position on the curve as a fraction of the fade region: x in [0,1] of
+   *  width, y in [0,1] of body height (0 = top = unity, 1 = bottom = silence). */
+  midpointFraction: { x: number; y: number };
+  fillColor: string;
+  onMouseDown: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onDoubleClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+}
+
+/**
+ * Small draggable circle sitting on the fade curve at its geometric midpoint.
+ * Dragging it bends the bezier; double-click resets to the preset shape.
+ *
+ * Positioned via CSS (not SVG) because the parent SVG uses
+ * `preserveAspectRatio="none"` which would distort a circle drawn inside it.
+ * Hit target is 14×14 with a 4px-radius visible dot centered inside.
+ */
+function CurvePointHandle({
+  edge,
+  clipId,
+  regionLeft,
+  regionWidthPx,
+  midpointFraction,
+  fillColor,
+  onMouseDown,
+  onDoubleClick,
+}: CurvePointHandleProps) {
+  const xPx = regionLeft + clampNumber(midpointFraction.x, 0, 1) * regionWidthPx;
+  // The body height isn't known at JSX time; the handle is positioned with
+  // top: HEADER_RAIL + (yFraction * 100%) by stacking absolute insets.
+  const yPercent = clampNumber(midpointFraction.y, 0, 1) * 100;
+  return (
+    <button
+      type="button"
+      role="slider"
+      aria-label={`Fade ${edge} curve shape for clip ${clipId}`}
+      aria-valuetext={`x ${midpointFraction.x.toFixed(2)} y ${(1 - midpointFraction.y).toFixed(2)}`}
+      data-fade-curve-point={edge}
+      className="absolute z-30 cursor-grab active:cursor-grabbing focus:outline-none"
+      style={{
+        left: xPx - CURVE_POINT_HIT_TARGET_PX / 2,
+        top: `calc(${HEADER_RAIL_HEIGHT_PX}px + (100% - ${HEADER_RAIL_HEIGHT_PX}px) * ${yPercent / 100} - ${CURVE_POINT_HIT_TARGET_PX / 2}px)`,
+        width: CURVE_POINT_HIT_TARGET_PX,
+        height: CURVE_POINT_HIT_TARGET_PX,
+        background: 'transparent',
+        border: 'none',
+        padding: 0,
+      }}
+      onMouseDown={onMouseDown}
+      onDoubleClick={onDoubleClick}
+    >
+      <span
+        aria-hidden
+        className="block rounded-full"
+        style={{
+          width: CURVE_POINT_VISUAL_RADIUS_PX * 2,
+          height: CURVE_POINT_VISUAL_RADIUS_PX * 2,
+          marginLeft: CURVE_POINT_HIT_TARGET_PX / 2 - CURVE_POINT_VISUAL_RADIUS_PX,
+          marginTop: CURVE_POINT_HIT_TARGET_PX / 2 - CURVE_POINT_VISUAL_RADIUS_PX,
+          backgroundColor: fillColor,
+          border: '1px solid #000',
+          boxSizing: 'border-box',
+        }}
+      />
+    </button>
+  );
 }
 
 function fmt(value: number): string {

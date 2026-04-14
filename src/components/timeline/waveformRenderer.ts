@@ -13,7 +13,8 @@
 
 import { PEAK_STRIDE } from '../../utils/waveformPeaks';
 import { getClipSourceSpan, getClipWaveformLayout } from '../../utils/clipAudio';
-import type { StretchMode } from '../../types/project';
+import type { Clip, StretchMode } from '../../types/project';
+import { evaluateBezierFadeGain } from '../../utils/clipFade';
 
 /** Samples-per-pixel where we start blending in sample line. */
 const BLEND_START = 16;
@@ -51,6 +52,10 @@ export interface FadeEnvelope {
   fadeOutPx: number;
   fadeInCurve: 'linear' | 'exponential' | 'equal-power';
   fadeOutCurve: 'linear' | 'exponential' | 'equal-power';
+  /** Optional bezier control point overriding `fadeInCurve`. */
+  fadeInCurvePoint?: Clip['fadeInCurvePoint'];
+  /** Optional bezier control point overriding `fadeOutCurve`. */
+  fadeOutCurvePoint?: Clip['fadeOutCurvePoint'];
   /** Optional pixel offset applied before the envelope is sampled.
    *  Used by chunked canvases that draw a sub-range of the full clip. */
   offsetPx?: number;
@@ -60,17 +65,27 @@ export interface FadeEnvelope {
  * Returns the fade gain ∈ [0, 1] at a given pixel column relative to the
  * envelope's total clip width. Outside the fade-in / fade-out regions the
  * gain is exactly 1 so the rest of the clip renders at full amplitude.
+ *
+ * When a bezier curve point is present in the envelope, the bezier is the
+ * source of truth (matches what the audio engine will play); otherwise the
+ * preset curve is used.
  */
 export function fadeGainAtPixel(env: FadeEnvelope | undefined, pixelX: number): number {
   if (!env || env.totalWidthPx <= 0) return 1;
   const x = pixelX + (env.offsetPx ?? 0);
   if (env.fadeInPx > 0 && x < env.fadeInPx) {
     const progress = Math.max(0, Math.min(1, x / env.fadeInPx));
+    if (env.fadeInCurvePoint) {
+      return evaluateBezierFadeGain(env.fadeInCurvePoint, 0, 1, progress);
+    }
     return curveValue(env.fadeInCurve, 0, 1, progress);
   }
   const fadeOutStart = env.totalWidthPx - env.fadeOutPx;
   if (env.fadeOutPx > 0 && x > fadeOutStart) {
     const progress = Math.max(0, Math.min(1, (x - fadeOutStart) / env.fadeOutPx));
+    if (env.fadeOutCurvePoint) {
+      return evaluateBezierFadeGain(env.fadeOutCurvePoint, 1, 0, progress);
+    }
     return curveValue(env.fadeOutCurve, 1, 0, progress);
   }
   return 1;

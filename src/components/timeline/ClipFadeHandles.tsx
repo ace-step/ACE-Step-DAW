@@ -523,38 +523,33 @@ function buildFadePaths(
     midpointCy = 0.25 * start.y + 0.5 * presetCp.cy + 0.25 * end.y;
   }
 
-  // Catmull-Rom style smoothing through three points (start, midpoint, end).
-  // We emit TWO cubic bezier segments joined at the midpoint with C¹
-  // continuity (matching tangent), which produces a subtle S-shape that
-  // flows smoothly into both endpoints — no "kink" at the midpoint, no
-  // abrupt arrival at the box at the right edge.
+  // Two quadratic bezier segments joined at the midpoint, designed so the
+  // steepness profile matches the user's request:
+  //   "left of point: smooth then steep" — horizontal tangent at the
+  //     silenced corner, transitioning to a near-vertical tangent at the
+  //     midpoint (slope monotonically increasing in magnitude)
+  //   "right of point: steep then smooth" — near-vertical tangent at the
+  //     midpoint, transitioning to horizontal at the unity corner
   //
-  // Tangent at midpoint = (end − start) / 6 (the standard Catmull-Rom rule
-  // with tension 0.5). Tangent at endpoints points one third of the way
-  // toward the midpoint.
-  const tx = (end.x - start.x) / 6;
-  const ty = (end.y - start.y) / 6;
+  // For a quadratic bezier from P0 to P2 with control point P1, the
+  // tangent at P0 is 2·(P1 − P0) and the tangent at P2 is 2·(P2 − P1).
+  // Placing P1 at (midpoint.x, start.y) makes the start tangent purely
+  // horizontal (P1 is directly to the right of P0) and the end tangent
+  // purely vertical (P1 is directly above P2). Mirror for segment 2.
+  // The two segments share a vertical tangent at the midpoint, so the
+  // join is C¹ smooth.
+  const seg1Control = { x: midpointCx, y: start.y };
+  const seg2Control = { x: midpointCx, y: end.y };
 
-  // Segment 1: start → midpoint
-  const c1a = { x: start.x + (midpointCx - start.x) / 3, y: start.y + (midpointCy - start.y) / 3 };
-  const c2a = { x: midpointCx - tx, y: midpointCy - ty };
+  const lineSpline = `M ${fmt(start.x)},${fmt(start.y)}`
+    + ` Q ${fmt(seg1Control.x)},${fmt(seg1Control.y)} ${fmt(midpointCx)},${fmt(midpointCy)}`
+    + ` Q ${fmt(seg2Control.x)},${fmt(seg2Control.y)} ${fmt(end.x)},${fmt(end.y)}`;
 
-  // Segment 2: midpoint → end
-  const c1b = { x: midpointCx + tx, y: midpointCy + ty };
-  const c2b = { x: end.x - (end.x - midpointCx) / 3, y: end.y - (end.y - midpointCy) / 3 };
+  const linePath = lineSpline;
 
-  const cubicSpline = `M ${fmt(start.x)},${fmt(start.y)}`
-    + ` C ${fmt(c1a.x)},${fmt(c1a.y)} ${fmt(c2a.x)},${fmt(c2a.y)} ${fmt(midpointCx)},${fmt(midpointCy)}`
-    + ` C ${fmt(c1b.x)},${fmt(c1b.y)} ${fmt(c2b.x)},${fmt(c2b.y)} ${fmt(end.x)},${fmt(end.y)}`;
-
-  const linePath = cubicSpline;
-
-  // Mask closes back to (0, 0) for fade-in or (w, 0) for fade-out so it
-  // covers the upper triangle (the area where audio is being attenuated).
-  const closeToTop = direction === 'in'
-    ? `L ${fmt(w)},0 L 0,0 Z`
-    : `L ${fmt(w)},0 L 0,0 Z`;
-  const maskPath = `${cubicSpline} ${closeToTop}`;
+  // Mask closes back along the top edge so it covers the area above the
+  // gain curve (where audio is being attenuated).
+  const maskPath = `${lineSpline} L ${fmt(w)},0 L 0,0 Z`;
 
   return { linePath, maskPath, midpointCx, midpointCy };
 }

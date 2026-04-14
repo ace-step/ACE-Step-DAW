@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import {
   FADE_HANDLE_KEYBOARD_STEP,
   computeFadeFromPointer,
+  evaluateBezierFadeGain,
 } from '../../utils/clipFade';
 import { HEADER_RAIL_HEIGHT_PX } from './useClipDrag';
 import type { Clip } from '../../types/project';
@@ -13,12 +14,13 @@ const FADE_CURVE_LINE_WIDTH = 1;
 const FADE_MASK_FILL = 'rgba(0, 0, 0, 0.22)';
 const CURVE_POINT_HIT_TARGET_PX = 14;
 const CURVE_POINT_VISUAL_RADIUS_PX = 3;
-/** Tiny margin so the dot can't be dragged exactly onto a corner where the
- *  power-curve exponent becomes undefined. */
-const CURVE_POINT_X_MIN = 0.02;
-const CURVE_POINT_X_MAX = 0.98;
-const CURVE_POINT_Y_MIN = 0.02;
-const CURVE_POINT_Y_MAX = 0.98;
+/** Sub-pixel margin so s₁ / s₂ in the Hermite don't blow up when the dot is
+ *  dragged right onto a corner. The user's effective drag area is still the
+ *  full fade region — 1e-4 is well below any realistic pixel size. */
+const CURVE_POINT_X_MIN = 1e-4;
+const CURVE_POINT_X_MAX = 1 - 1e-4;
+const CURVE_POINT_Y_MIN = 1e-4;
+const CURVE_POINT_Y_MAX = 1 - 1e-4;
 
 type FadeEdge = 'in' | 'out';
 type CurvePoint = { x: number; y: number };
@@ -479,33 +481,18 @@ function FadeCurveLayer({ testId, left, width, maskPath, linePath, showLine }: F
 }
 
 /**
- * Build the line + mask SVG paths for a fade region.
+ * Build SVG paths for the fade region.
  *
- * Each curve is emitted as a **single SVG path command** — a straight line
- * for linear or one quadratic bezier for exponential / equal-power. This
- * avoids the polyline jaggies you'd see if we sampled the gain envelope into
- * many short `L` segments: SVG rasterizes a real bezier at sub-pixel
- * precision regardless of how the parent stretches it.
+ * The gain envelope is the **Fritsch–Carlson monotone cubic Hermite** curve
+ * through (0,0), the user-dragged dot, and (1,1) (mirrored for fade-out).
+ * `evaluateBezierFadeGain` in `clipFade.ts` is the single source of truth —
+ * both the audio engine and this renderer call into it, so the visible line
+ * always matches what will actually play.
  *
- * The y axis uses a 0-100 viewBox unit and the parent SVG scales to fit the
- * body height via `preserveAspectRatio="none"`. The visible curve shape is
- * the same family used by the audio engine; for linear (the default and most
- * common case) the line and the gain envelope match exactly.
- */
-/**
- * Build SVG paths for the fade region using a power-function shape.
- *
- * gain(t) = t^p (fade-in) or (1−t)^p (fade-out), where the exponent p is
- * solved from the user-dragged dot so that the curve passes EXACTLY through
- * the dot wherever it is in the body interior. Power curves are the
- * standard log/exp fade shape used by every DAW, they always stay within
- * [0, 1] for t ∈ [0, 1], and they have no clipping problems at the edges.
- *
- * The curve is rendered as a Catmull-Rom cubic bezier spline through 9
- * sample points — that's enough to look pixel-smooth with browser
- * anti-aliasing while keeping the path string short, and the cubic spline
- * preserves C¹ continuity through every sample so there are no kinks at
- * segment junctions.
+ * We sample the curve at 64 uniform t values with the dot's exact t injected
+ * as an additional sample, so the polyline visits the dragged dot pixel-
+ * perfectly. Rendering as a polyline (M + L) avoids spline-interpolation
+ * overshoot near steep curvature.
  */
 function buildFadePaths(
   direction: 'in' | 'out',
@@ -523,37 +510,21 @@ function buildFadePaths(
   let dotNormX: number;
   let dotNormY: number; // y in [0,1] where 1 = unity (gain), 0 = silence
   if (curvePoint) {
-    dotNormX = clampNumber(curvePoint.x, 0.02, 0.98);
-    dotNormY = clampNumber(curvePoint.y, 0.02, 0.98);
+    dotNormX = clampNumber(curvePoint.x, CURVE_POINT_X_MIN, CURVE_POINT_X_MAX);
+    dotNormY = clampNumber(curvePoint.y, CURVE_POINT_Y_MIN, CURVE_POINT_Y_MAX);
   } else {
     dotNormX = 0.5;
     dotNormY = presetMidGain(curve, direction);
   }
 
-  // Solve the power exponent p so that the curve passes exactly through the
-  // dot. For fade-in: gain(t) = t^p, dot is at t=dotNormX with gain=dotNormY,
-  // so dotNormY = dotNormX^p → p = ln(dotNormY) / ln(dotNormX).
-  // For fade-out: gain(t) = (1−t)^p with t = horizontal fraction; the dot
-  // sits at t=dotNormX with gain=dotNormY → dotNormY = (1−dotNormX)^p.
-  let p: number;
-  if (direction === 'in') {
-    p = Math.log(dotNormY) / Math.log(dotNormX);
-  } else {
-    p = Math.log(dotNormY) / Math.log(1 - dotNormX);
-  }
-  // Guard against pathological exponents at the corners. Clamping to a wide
-  // but finite range keeps the curve well-behaved without restricting the
-  // user's drag area meaningfully.
-  if (!Number.isFinite(p) || p <= 0) p = 1;
-  p = clampNumber(p, 0.05, 20);
+  // Fade-in: from=0, to=1; fade-out: from=1, to=0. `evaluateBezierFadeGain`
+  // handles both directions and keeps the dot exactly on the curve by
+  // construction — we still inject dotNormX as an explicit sample so the
+  // rendered polyline is guaranteed to visit the dot pixel for pixel.
+  const from = direction === 'in' ? 0 : 1;
+  const to = direction === 'in' ? 1 : 0;
+  const dot = { x: dotNormX, y: dotNormY };
 
-  // Sample the power function at uniform t values, AND include the dot's t
-  // as an explicit sample so the polyline passes exactly through the dot.
-  // Render as a polyline (M + L commands): no interpolation between samples,
-  // so no overshoot, no Catmull-Rom-style wiggles, and the curve is
-  // mathematically monotonic if the underlying function is. At ~64 samples
-  // each segment is well under a pixel of slope error and browser AA makes
-  // it indistinguishable from the true curve.
   const SAMPLES = 64;
   const tValues = new Set<number>();
   tValues.add(0);
@@ -563,7 +534,7 @@ function buildFadePaths(
   const sortedTs = Array.from(tValues).sort((a, b) => a - b);
 
   const points: Array<{ x: number; y: number }> = sortedTs.map((t) => {
-    const gain = direction === 'in' ? Math.pow(t, p) : Math.pow(1 - t, p);
+    const gain = evaluateBezierFadeGain(dot, from, to, t);
     return { x: t * w, y: h * (1 - gain) };
   });
 
@@ -575,9 +546,9 @@ function buildFadePaths(
   // above the gain curve (where audio is being attenuated).
   const maskPath = `${linePath} L ${fmt(w)},0 L 0,0 Z`;
 
-  // The dot's screen position is just the dragged location — the curve
-  // passes through it by construction, so we report it as midpointCx/Cy
-  // for the CurvePointHandle to render at exactly that spot.
+  // The dot's screen position is just the dragged location — the Hermite
+  // passes through it by construction, so midpointCx/Cy match the stored
+  // curve point exactly.
   const midpointCx = dotNormX * w;
   const midpointCy = (1 - dotNormY) * h;
 

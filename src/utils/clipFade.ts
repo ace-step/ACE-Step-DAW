@@ -198,18 +198,38 @@ function evaluateFadeShape(
 }
 
 /**
- * Evaluate a quadratic bezier fade curve at a given progress (0..1).
+ * Evaluate a user-shaped fade curve at a given progress (0..1) using a
+ * **Fritsch–Carlson monotone cubic Hermite** interpolator through three
+ * anchor points: (0, 0), the user-dragged control point, and (1, 1).
  *
- * The bezier's "midpoint" lives at the user-dragged control point, which is
- * stored in normalized {x, y} space where x runs along the fade duration and
- * y is the normalized gain (0 = silence, 1 = unity). For fade-in the curve
- * goes from gain 0 → 1; for fade-out from 1 → 0.
+ * Why not a quadratic bezier through the midpoint? Bezier-through-midpoint
+ * degenerates near the corners of the [0,1]² box — the derived control
+ * point P1 swings outside the box and the visible curve gets clipped or
+ * "feels floaty" under drag. Why not `y = x^p`? Power curves have
+ * unbounded endpoint slope at extreme exponents (shoulder glues to the
+ * axis) and the drag response is highly nonlinear in (x, y).
  *
- * Internally we convert the user's "midpoint at (x, y)" intent into a bezier
- * control point P1, then solve the quadratic x(t) = progress for t and
- * evaluate y(t). The control point is offset so that B(0.5) lands exactly on
- * the user-dragged position — this matches the standard DAW UX where the
- * dragged dot lies on the curve, not above it.
+ * Fritsch–Carlson Hermite:
+ *   - passes through the dot **exactly** (dot-on-curve by construction)
+ *   - provably monotone (Fritsch & Carlson 1980, SIAM J. Numer. Anal.)
+ *   - C¹-continuous across the dot
+ *   - stays inside [0, 1]² for any (x₀, y₀) ∈ (0, 1)²
+ *   - degenerates to linear when the dot is at (0.5, 0.5)
+ *   - drag response is **locally linear** in dot position — this is the
+ *     kinesthetic root of "direct manipulation" feel
+ *
+ * The curve is built as two cubic Hermite segments:
+ *   left:  (0,0) → (x₀,y₀)   with slopes (s₁, d_dot)
+ *   right: (x₀,y₀) → (1,1)   with slopes (d_dot, s₂)
+ * where s₁ = y₀/x₀, s₂ = (1−y₀)/(1−x₀), and the slope at the dot is the
+ * harmonic mean d_dot = 2·s₁·s₂ / (s₁ + s₂). Boundary slopes take the
+ * segment secants (s₁ and s₂), which guarantees α = slope/secant = 1 at
+ * the boundary end and α ≤ 2 at the dot end — well within Fritsch–Carlson's
+ * monotonicity envelope of [0, 3] on each segment.
+ *
+ * For fade-out the same math is used by mirroring the y-endpoint: we
+ * compute a fade-in passing through (x₀, 1−y₀) and return 1 minus the
+ * result. This keeps the dot exactly on the displayed fade-out curve.
  */
 export function evaluateBezierFadeGain(
   midpoint: FadeCurvePoint,
@@ -220,45 +240,60 @@ export function evaluateBezierFadeGain(
   const t = clampNumber(progress, 0, 1);
   const isFadeIn = from < to;
 
-  // Both fade-in and fade-out use a bezier whose x runs along [0, 1] of the
-  // fade duration; only the y endpoints differ. The control point P1 is
-  // derived so that the bezier passes through `midpoint` at parameter t=0.5
-  // — that's the standard "drag the midpoint" UX. The x formula is the same
-  // for both directions:
-  //   B(0.5).x = 0.5·cpx + 0.25 = midpoint.x  →  cpx = 2·midpoint.x − 0.5
-  const cpx = 2 * midpoint.x - 0.5;
+  // Tiny margin so s₁/s₂ don't blow up when the user drags exactly onto a
+  // corner. 1e-4 is well below one pixel for any realistic clip width and
+  // produces slopes bounded by ~10⁴ which are still numerically safe.
+  const x0 = clampNumber(midpoint.x, 1e-4, 1 - 1e-4);
+  const yDot = clampNumber(midpoint.y, 1e-4, 1 - 1e-4);
+  // For fade-out, the stored y is the gain at that x on a curve that goes
+  // from 1 → 0. Mirror it into fade-in space (0 → 1 curve through
+  // (x₀, 1−y)), evaluate, then invert the result.
+  const y0 = isFadeIn ? yDot : 1 - yDot;
 
-  // Invert x(t) = (1 − 2cpx)·t² + 2cpx·t for t. When cpx ≈ 0.5 the quadratic
-  // degenerates to x(t) = t (linear in t).
-  let bezierT: number;
-  if (Math.abs(1 - 2 * cpx) < 1e-9) {
-    bezierT = t;
-  } else {
-    const a = 1 - 2 * cpx;
-    const b = 2 * cpx;
-    const c = -t;
-    const disc = Math.max(0, b * b - 4 * a * c);
-    bezierT = clampNumber((-b + Math.sqrt(disc)) / (2 * a), 0, 1);
+  const gainFadeIn = monotoneHermiteFadeIn(x0, y0, t);
+  return clampNumber(isFadeIn ? gainFadeIn : 1 - gainFadeIn, 0, 1);
+}
+
+/**
+ * Monotone cubic Hermite through (0,0), (x₀,y₀), (1,1). Returns the gain
+ * for a fade-in curve; fade-out callers should invert the result.
+ */
+function monotoneHermiteFadeIn(x0: number, y0: number, x: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+
+  const s1 = y0 / x0;
+  const s2 = (1 - y0) / (1 - x0);
+  const dDot = (2 * s1 * s2) / (s1 + s2);
+
+  if (x <= x0) {
+    return cubicHermite(0, y0, s1, dDot, 0, x0, x);
   }
+  return cubicHermite(y0, 1, dDot, s2, x0, 1, x);
+}
 
-  // y(t) depends on direction. For fade-in (P0.y=0, P2.y=1):
-  //   B(0.5).y = 0.5·cpy + 0.25 = midpoint.y  →  cpy = 2·midpoint.y − 0.5
-  //   y(t) = 2(1−t)t·cpy + t²
-  // For fade-out (P0.y=1, P2.y=0):
-  //   B(0.5).y = 0.25 + 0.5·cpy = midpoint.y  →  cpy = 2·midpoint.y − 0.5
-  //   y(t) = (1−t)² + 2(1−t)t·cpy
-  // The control-point formula collapses to the same expression in both cases.
-  const cpy = 2 * midpoint.y - 0.5;
-  const oneMinusT = 1 - bezierT;
-
-  let gain: number;
-  if (isFadeIn) {
-    gain = 2 * oneMinusT * bezierT * cpy + bezierT * bezierT;
-  } else {
-    gain = oneMinusT * oneMinusT + 2 * oneMinusT * bezierT * cpy;
-  }
-
-  return clampNumber(gain, 0, 1);
+/**
+ * Evaluate a cubic Hermite segment parameterized by values (ya, yb) and
+ * **derivatives with respect to x** (dya, dyb) on the interval [a, b].
+ */
+function cubicHermite(
+  ya: number,
+  yb: number,
+  dya: number,
+  dyb: number,
+  a: number,
+  b: number,
+  x: number,
+): number {
+  const h = b - a;
+  const u = (x - a) / h;
+  const u2 = u * u;
+  const u3 = u2 * u;
+  const h00 = 2 * u3 - 3 * u2 + 1;
+  const h10 = u3 - 2 * u2 + u;
+  const h01 = -2 * u3 + 3 * u2;
+  const h11 = u3 - u2;
+  return h00 * ya + h10 * h * dya + h01 * yb + h11 * h * dyb;
 }
 
 /**

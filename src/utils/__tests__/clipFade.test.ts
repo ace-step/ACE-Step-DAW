@@ -278,6 +278,68 @@ describe('evaluateBezierFadeGain', () => {
       prev = cur;
     }
   });
+
+  it('keeps the dot exactly on the curve at the classic log-fade corner (0.1, 0.9)', () => {
+    // Near-corner position — previous power-curve impl had exploding
+    // endpoint slope here; Fritsch–Carlson Hermite handles it smoothly.
+    const gain = evaluateBezierFadeGain({ x: 0.1, y: 0.9 }, 0, 1, 0.1);
+    expect(gain).toBeCloseTo(0.9, 3);
+  });
+
+  it('keeps the dot exactly on the curve at the classic exp-fade corner (0.9, 0.1)', () => {
+    const gain = evaluateBezierFadeGain({ x: 0.9, y: 0.1 }, 0, 1, 0.9);
+    expect(gain).toBeCloseTo(0.1, 3);
+  });
+
+  it('stays monotonically increasing even at extreme dot positions', () => {
+    // Dense sampling at a near-corner dot — the previous power-curve +
+    // Catmull-Rom polyline could wiggle visibly here.
+    const point = { x: 0.05, y: 0.95 };
+    let prev = evaluateBezierFadeGain(point, 0, 1, 0);
+    for (let i = 1; i <= 200; i++) {
+      const cur = evaluateBezierFadeGain(point, 0, 1, i / 200);
+      expect(cur).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = cur;
+    }
+  });
+
+  it('stays monotonically decreasing for fade-out at extreme dot positions', () => {
+    const point = { x: 0.05, y: 0.95 };
+    let prev = evaluateBezierFadeGain(point, 1, 0, 0);
+    for (let i = 1; i <= 200; i++) {
+      const cur = evaluateBezierFadeGain(point, 1, 0, i / 200);
+      expect(cur).toBeLessThanOrEqual(prev + 1e-9);
+      prev = cur;
+    }
+  });
+
+  it('never overshoots [0, 1] on either direction', () => {
+    for (const point of [
+      { x: 0.1, y: 0.9 },
+      { x: 0.9, y: 0.1 },
+      { x: 0.2, y: 0.8 },
+      { x: 0.8, y: 0.2 },
+      { x: 0.5, y: 0.99 },
+      { x: 0.5, y: 0.01 },
+    ]) {
+      for (let i = 0; i <= 40; i++) {
+        const t = i / 40;
+        const inGain = evaluateBezierFadeGain(point, 0, 1, t);
+        const outGain = evaluateBezierFadeGain(point, 1, 0, t);
+        expect(inGain).toBeGreaterThanOrEqual(0);
+        expect(inGain).toBeLessThanOrEqual(1);
+        expect(outGain).toBeGreaterThanOrEqual(0);
+        expect(outGain).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('fade-out dot sits exactly on the fade-out curve', () => {
+    // Stored y is the gain value at that x. At t = dot.x the returned
+    // gain should equal dot.y (classic fade-out through (0.3, 0.8)).
+    const gain = evaluateBezierFadeGain({ x: 0.3, y: 0.8 }, 1, 0, 0.3);
+    expect(gain).toBeCloseTo(0.8, 3);
+  });
 });
 
 describe('sampleBezierFadeCurve', () => {

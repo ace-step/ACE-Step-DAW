@@ -190,6 +190,8 @@ export function useTransport() {
       fadeOutDuration?: number;
       fadeInCurve?: import('../types/project').Clip['fadeInCurve'];
       fadeOutCurve?: import('../types/project').Clip['fadeOutCurve'];
+      fadeInCurvePoint?: import('../types/project').Clip['fadeInCurvePoint'];
+      fadeOutCurvePoint?: import('../types/project').Clip['fadeOutCurvePoint'];
       timeStretchRate?: number;
       pitchShift?: number;
       stretchMode?: import('../types/project').StretchMode;
@@ -295,6 +297,12 @@ export function useTransport() {
               buffer,
               audioOffset: loopAudioOffset,
               clipDuration: loopClipDuration,
+              fadeInDuration: clip.fadeInDuration,
+              fadeOutDuration: clip.fadeOutDuration,
+              fadeInCurve: clip.fadeInCurve,
+              fadeOutCurve: clip.fadeOutCurve,
+              fadeInCurvePoint: clip.fadeInCurvePoint,
+              fadeOutCurvePoint: clip.fadeOutCurvePoint,
               timeStretchRate: clip.timeStretchRate,
               pitchShift: clip.pitchShift,
               stretchMode: clip.stretchMode,
@@ -316,6 +324,8 @@ export function useTransport() {
           fadeOutDuration: clip.fadeOutDuration,
           fadeInCurve: clip.fadeInCurve,
           fadeOutCurve: clip.fadeOutCurve,
+          fadeInCurvePoint: clip.fadeInCurvePoint,
+          fadeOutCurvePoint: clip.fadeOutCurvePoint,
           timeStretchRate: clip.timeStretchRate,
           pitchShift: clip.pitchShift,
           stretchMode: clip.stretchMode,

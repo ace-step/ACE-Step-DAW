@@ -47,6 +47,11 @@ export interface ClipScheduleInfo {
   fadeOutDuration?: number;
   fadeInCurve?: 'linear' | 'exponential' | 'equal-power';
   fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
+  /** User-dragged bezier control point for the fade-in curve, overriding
+   *  `fadeInCurve` when set. Must be propagated here so the audio engine
+   *  plays the same envelope the renderer draws. */
+  fadeInCurvePoint?: { x: number; y: number };
+  fadeOutCurvePoint?: { x: number; y: number };
   timeStretchRate?: number; // playback rate (1 = normal, 0.5 = half speed, 2 = double)
   pitchShift?: number; // pitch shift in semitones (0 = original pitch)
   gainEnvelope?: GainEnvelopePoint[]; // per-clip volume automation
@@ -1106,6 +1111,8 @@ export class AudioEngine {
       fadeOutDuration: clip.fadeOutDuration,
       fadeInCurve: clip.fadeInCurve,
       fadeOutCurve: clip.fadeOutCurve,
+      fadeInCurvePoint: clip.fadeInCurvePoint,
+      fadeOutCurvePoint: clip.fadeOutCurvePoint,
     }, this.ctx.currentTime, fromTime);
   }
 

@@ -523,27 +523,23 @@ function buildFadePaths(
     midpointCy = 0.25 * start.y + 0.5 * presetCp.cy + 0.25 * end.y;
   }
 
-  // Two quadratic bezier segments joined at the midpoint, designed so the
-  // steepness profile matches the user's request:
-  //   "left of point: smooth then steep" — horizontal tangent at the
-  //     silenced corner, transitioning to a near-vertical tangent at the
-  //     midpoint (slope monotonically increasing in magnitude)
-  //   "right of point: steep then smooth" — near-vertical tangent at the
-  //     midpoint, transitioning to horizontal at the unity corner
+  // ONE smooth quadratic bezier from corner to corner. We solve for the
+  // control point P1 such that the bezier passes exactly through the
+  // user-dragged midpoint at its geometric center (t = 0.5):
   //
-  // For a quadratic bezier from P0 to P2 with control point P1, the
-  // tangent at P0 is 2·(P1 − P0) and the tangent at P2 is 2·(P2 − P1).
-  // Placing P1 at (midpoint.x, start.y) makes the start tangent purely
-  // horizontal (P1 is directly to the right of P0) and the end tangent
-  // purely vertical (P1 is directly above P2). Mirror for segment 2.
-  // The two segments share a vertical tangent at the midpoint, so the
-  // join is C¹ smooth.
-  const seg1Control = { x: midpointCx, y: start.y };
-  const seg2Control = { x: midpointCx, y: end.y };
+  //   B(0.5) = 0.25·P0 + 0.5·P1 + 0.25·P2 = midpoint
+  //   →  P1 = 2·midpoint − 0.5·(P0 + P2)
+  //
+  // A single quadratic is C∞ smooth — there is no joint, no kink, and the
+  // dot sits naturally on the curve. The curve shape (logarithmic rise,
+  // straight line, or exponential rise) is determined entirely by where
+  // the user drags the dot, and SVG rasterizes the bezier at sub-pixel
+  // precision so there are no visible polyline artifacts.
+  const cpx = 2 * midpointCx - 0.5 * (start.x + end.x);
+  const cpy = 2 * midpointCy - 0.5 * (start.y + end.y);
 
   const lineSpline = `M ${fmt(start.x)},${fmt(start.y)}`
-    + ` Q ${fmt(seg1Control.x)},${fmt(seg1Control.y)} ${fmt(midpointCx)},${fmt(midpointCy)}`
-    + ` Q ${fmt(seg2Control.x)},${fmt(seg2Control.y)} ${fmt(end.x)},${fmt(end.y)}`;
+    + ` Q ${fmt(cpx)},${fmt(cpy)} ${fmt(end.x)},${fmt(end.y)}`;
 
   const linePath = lineSpline;
 

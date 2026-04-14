@@ -122,20 +122,33 @@ describe('Clip resize handle width and fade visuals', () => {
     expect(fadeInMask!.getAttribute('fill')).toMatch(/rgba\(/);
   });
 
-  it('reveals the black curve line on hover when a fade exists', () => {
+  it('reveals the black curve line only during an active drag', () => {
     useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 1 });
     const { container } = renderClip();
     const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
+    clipBlock.getBoundingClientRect = () => ({
+      x: 0, y: 0, left: 0, top: 0,
+      right: 200, bottom: 80,
+      width: 200, height: 80,
+      toJSON: () => ({}),
+    });
 
-    // Without hover: only the mask is rendered (no stroked line)
+    // Hover alone: only the mask is rendered, no stroked line
+    fireEvent.mouseEnter(clipBlock);
     let fadeIn = container.querySelector('[data-testid="fade-in-overlay"]')!;
     expect(fadeIn.querySelector('path[stroke]')).toBeNull();
 
-    // With hover: the curve line appears as a stroked path
-    fireEvent.mouseEnter(clipBlock);
+    // Active drag of the fade-in handle: line appears
+    const handle = screen.getByLabelText('Fade in handle for clip clip-1');
+    fireEvent.mouseDown(handle, { button: 0, clientX: 50 });
     fadeIn = container.querySelector('[data-testid="fade-in-overlay"]')!;
     const linePath = fadeIn.querySelector('path[stroke]');
     expect(linePath).not.toBeNull();
     expect(linePath!.getAttribute('stroke')).toBe('#000');
+
+    // After mouseup the line is hidden again
+    fireEvent.mouseUp(window);
+    fadeIn = container.querySelector('[data-testid="fade-in-overlay"]')!;
+    expect(fadeIn.querySelector('path[stroke]')).toBeNull();
   });
 });

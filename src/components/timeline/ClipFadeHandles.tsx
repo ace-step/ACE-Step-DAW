@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import {
   FADE_HANDLE_KEYBOARD_STEP,
@@ -9,7 +9,7 @@ import type { Clip } from '../../types/project';
 
 const FADE_HANDLE_SIZE_PX = 8;
 const FADE_CURVE_LINE_COLOR = '#000';
-const FADE_CURVE_LINE_WIDTH = 0.5;
+const FADE_CURVE_LINE_WIDTH = 1;
 const FADE_MASK_FILL = 'rgba(0, 0, 0, 0.22)';
 const CURVE_POINT_HIT_TARGET_PX = 14;
 const CURVE_POINT_VISUAL_RADIUS_PX = 4;
@@ -79,6 +79,13 @@ export function ClipFadeHandles({
   onCurvePointReset,
 }: ClipFadeHandlesProps) {
   const setClipFade = useProjectStore((s) => s.setClipFade);
+  // The black curve line should only appear during an active drag (either of
+  // a fade box or the curve point). At rest we only show the translucent mask
+  // — the mask alone tells the user a fade exists.
+  const [draggingEdges, setDraggingEdges] = useState<{ in: boolean; out: boolean }>({ in: false, out: false });
+  const setDragging = useCallback((edge: FadeEdge, value: boolean) => {
+    setDraggingEdges((prev) => (prev[edge] === value ? prev : { ...prev, [edge]: value }));
+  }, []);
 
   // The most recent value computed from the pointer. We recompute every frame
   // and forward it to the parent via onFadeDragLive — no Zustand mutation
@@ -108,6 +115,7 @@ export function ClipFadeHandles({
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
+    setDragging(edge, true);
 
     // Apply the click position immediately so a click-without-movement still works.
     const initial = computeNext(edge, e.clientX);
@@ -143,6 +151,7 @@ export function ClipFadeHandles({
         rafIdRef.current = null;
       }
       pendingPointerRef.current = null;
+      setDragging(edge, false);
     };
 
     const onMouseUp = () => {
@@ -165,7 +174,7 @@ export function ClipFadeHandles({
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('keydown', onKeyDown);
-  }, [computeNext, onFadeDragLive, onFadeDragCommit, onFadeDragCancel]);
+  }, [computeNext, onFadeDragLive, onFadeDragCommit, onFadeDragCancel, setDragging]);
 
   const handleFadeKeyDown = useCallback((edge: FadeEdge) => (e: React.KeyboardEvent<HTMLButtonElement>) => {
     const growKey = edge === 'in' ? 'ArrowRight' : 'ArrowLeft';
@@ -245,6 +254,7 @@ export function ClipFadeHandles({
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
+    setDragging(edge, true);
 
     const initial = computeCurvePoint(edge, e.clientX, e.clientY);
     livePointRef.current = initial;
@@ -278,6 +288,7 @@ export function ClipFadeHandles({
         cpRafIdRef.current = null;
       }
       cpPendingRef.current = null;
+      setDragging(edge, false);
     };
 
     const onMouseUp = () => {
@@ -298,7 +309,7 @@ export function ClipFadeHandles({
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('keydown', onKeyDown);
-  }, [computeCurvePoint, onCurvePointDragLive, onCurvePointDragCommit, onCurvePointDragCancel]);
+  }, [computeCurvePoint, onCurvePointDragLive, onCurvePointDragCommit, onCurvePointDragCancel, setDragging]);
 
   const handleCurvePointDoubleClick = useCallback((edge: FadeEdge) => (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -315,7 +326,7 @@ export function ClipFadeHandles({
           width={fadeInWidthPx}
           maskPath={fadeInPaths.maskPath}
           linePath={fadeInPaths.linePath}
-          showLine={showFadeInHandle}
+          showLine={draggingEdges.in}
         />
       )}
       {fadeOutPaths && (
@@ -325,7 +336,7 @@ export function ClipFadeHandles({
           width={fadeOutWidthPx}
           maskPath={fadeOutPaths.maskPath}
           linePath={fadeOutPaths.linePath}
-          showLine={showFadeOutHandle}
+          showLine={draggingEdges.out}
         />
       )}
       {fadeInPaths && showFadeInHandle && (
@@ -486,59 +497,64 @@ function buildFadePaths(
   const w = widthPx;
   const h = VIEWBOX_HEIGHT;
 
-  // When a user-dragged curve point exists, derive the bezier control point
-  // P1 from "B(0.5) = midpoint" → P1 = 2·midpoint − 0.5·(P0 + P2). The
-  // control point lives in viewBox space; midpointCx / midpointCy is the
-  // visible circle position (always on the curve at t=0.5).
-  let cp: { cx: number; cy: number };
+  // Endpoints depend on direction. For both we trace the visible curve from
+  // the silenced corner to the unity corner; the mask is the same path
+  // closed back along the top edge.
+  const start = direction === 'in' ? { x: 0, y: h } : { x: 0, y: 0 };
+  const end = direction === 'in' ? { x: w, y: 0 } : { x: w, y: h };
+
+  // Where the orange dot sits on the curve. Defaults to the visual midpoint
+  // of a straight line for unset curves; for preset curves we move it so
+  // the dot lies on the preset bezier; for user-dragged curves we use the
+  // explicit midpoint.
   let midpointCx: number;
   let midpointCy: number;
 
   if (curvePoint) {
     midpointCx = clampNumber(curvePoint.x, 0, 1) * w;
     midpointCy = (1 - clampNumber(curvePoint.y, 0, 1)) * h;
-    if (direction === 'in') {
-      // P0 = (0, h) silence, P2 = (w, 0) unity → 0.5·(P0 + P2) = (w/2, h/2)
-      cp = { cx: 2 * midpointCx - w / 2, cy: 2 * midpointCy - h / 2 };
-    } else {
-      // P0 = (0, 0) unity, P2 = (w, h) silence → 0.5·(P0 + P2) = (w/2, h/2)
-      cp = { cx: 2 * midpointCx - w / 2, cy: 2 * midpointCy - h / 2 };
-    }
   } else {
-    cp = direction === 'in'
+    const presetCp = direction === 'in'
       ? controlPointForFadeIn(curve, w, h)
       : controlPointForFadeOut(curve, w, h);
-    // For preset curves we still expose a midpoint dot at the bezier's
-    // geometric midpoint so the user can grab it and start shaping.
-    if (direction === 'in') {
-      midpointCx = 0.25 * 0 + 0.5 * cp.cx + 0.25 * w; // 0.25·P0.x + 0.5·P1.x + 0.25·P2.x
-      midpointCy = 0.25 * h + 0.5 * cp.cy + 0.25 * 0;
-    } else {
-      midpointCx = 0.25 * 0 + 0.5 * cp.cx + 0.25 * w;
-      midpointCy = 0.25 * 0 + 0.5 * cp.cy + 0.25 * h;
-    }
+    // Geometric midpoint of a quadratic bezier P0, P1, P2 is at t=0.5:
+    //   B(0.5) = 0.25·P0 + 0.5·P1 + 0.25·P2
+    midpointCx = 0.25 * start.x + 0.5 * presetCp.cx + 0.25 * end.x;
+    midpointCy = 0.25 * start.y + 0.5 * presetCp.cy + 0.25 * end.y;
   }
 
-  let linePath: string;
-  let maskPath: string;
+  // Catmull-Rom style smoothing through three points (start, midpoint, end).
+  // We emit TWO cubic bezier segments joined at the midpoint with C¹
+  // continuity (matching tangent), which produces a subtle S-shape that
+  // flows smoothly into both endpoints — no "kink" at the midpoint, no
+  // abrupt arrival at the box at the right edge.
+  //
+  // Tangent at midpoint = (end − start) / 6 (the standard Catmull-Rom rule
+  // with tension 0.5). Tangent at endpoints points one third of the way
+  // toward the midpoint.
+  const tx = (end.x - start.x) / 6;
+  const ty = (end.y - start.y) / 6;
 
-  if (direction === 'in') {
-    if (curve === 'linear' && !curvePoint) {
-      linePath = `M 0,${fmt(h)} L ${fmt(w)},0`;
-      maskPath = `M 0,0 L ${fmt(w)},0 L 0,${fmt(h)} Z`;
-    } else {
-      linePath = `M 0,${fmt(h)} Q ${fmt(cp.cx)},${fmt(cp.cy)} ${fmt(w)},0`;
-      maskPath = `M 0,0 L ${fmt(w)},0 Q ${fmt(cp.cx)},${fmt(cp.cy)} 0,${fmt(h)} Z`;
-    }
-  } else {
-    if (curve === 'linear' && !curvePoint) {
-      linePath = `M 0,0 L ${fmt(w)},${fmt(h)}`;
-      maskPath = `M 0,0 L ${fmt(w)},${fmt(h)} L ${fmt(w)},0 Z`;
-    } else {
-      linePath = `M 0,0 Q ${fmt(cp.cx)},${fmt(cp.cy)} ${fmt(w)},${fmt(h)}`;
-      maskPath = `M 0,0 Q ${fmt(cp.cx)},${fmt(cp.cy)} ${fmt(w)},${fmt(h)} L ${fmt(w)},0 Z`;
-    }
-  }
+  // Segment 1: start → midpoint
+  const c1a = { x: start.x + (midpointCx - start.x) / 3, y: start.y + (midpointCy - start.y) / 3 };
+  const c2a = { x: midpointCx - tx, y: midpointCy - ty };
+
+  // Segment 2: midpoint → end
+  const c1b = { x: midpointCx + tx, y: midpointCy + ty };
+  const c2b = { x: end.x - (end.x - midpointCx) / 3, y: end.y - (end.y - midpointCy) / 3 };
+
+  const cubicSpline = `M ${fmt(start.x)},${fmt(start.y)}`
+    + ` C ${fmt(c1a.x)},${fmt(c1a.y)} ${fmt(c2a.x)},${fmt(c2a.y)} ${fmt(midpointCx)},${fmt(midpointCy)}`
+    + ` C ${fmt(c1b.x)},${fmt(c1b.y)} ${fmt(c2b.x)},${fmt(c2b.y)} ${fmt(end.x)},${fmt(end.y)}`;
+
+  const linePath = cubicSpline;
+
+  // Mask closes back to (0, 0) for fade-in or (w, 0) for fade-out so it
+  // covers the upper triangle (the area where audio is being attenuated).
+  const closeToTop = direction === 'in'
+    ? `L ${fmt(w)},0 L 0,0 Z`
+    : `L ${fmt(w)},0 L 0,0 Z`;
+  const maskPath = `${cubicSpline} ${closeToTop}`;
 
   return { linePath, maskPath, midpointCx, midpointCy };
 }

@@ -468,6 +468,8 @@ function FadeCurveLayer({ testId, left, width, maskPath, linePath, showLine }: F
             fill="none"
             stroke={FADE_CURVE_LINE_COLOR}
             strokeWidth={FADE_CURVE_LINE_WIDTH}
+            strokeLinejoin="round"
+            strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
           />
         )}
@@ -545,19 +547,29 @@ function buildFadePaths(
   if (!Number.isFinite(p) || p <= 0) p = 1;
   p = clampNumber(p, 0.05, 20);
 
-  // Sample 9 points (8 segments) along the curve in viewBox coordinates.
-  // y in screen space: y=0 at top (unity), y=h at bottom (silence).
-  const SAMPLES = 9;
-  const points: Array<{ x: number; y: number }> = [];
-  for (let i = 0; i < SAMPLES; i++) {
-    const t = i / (SAMPLES - 1);
-    const gain = direction === 'in' ? Math.pow(t, p) : Math.pow(1 - t, p);
-    points.push({ x: t * w, y: h * (1 - gain) });
-  }
+  // Sample the power function at uniform t values, AND include the dot's t
+  // as an explicit sample so the polyline passes exactly through the dot.
+  // Render as a polyline (M + L commands): no interpolation between samples,
+  // so no overshoot, no Catmull-Rom-style wiggles, and the curve is
+  // mathematically monotonic if the underlying function is. At ~64 samples
+  // each segment is well under a pixel of slope error and browser AA makes
+  // it indistinguishable from the true curve.
+  const SAMPLES = 64;
+  const tValues = new Set<number>();
+  tValues.add(0);
+  tValues.add(1);
+  tValues.add(dotNormX);
+  for (let i = 1; i < SAMPLES - 1; i++) tValues.add(i / (SAMPLES - 1));
+  const sortedTs = Array.from(tValues).sort((a, b) => a - b);
 
-  // Catmull-Rom cubic spline through the samples. The endpoints use mirrored
-  // virtual neighbors to derive their tangents.
-  const linePath = catmullRomToBezierPath(points);
+  const points: Array<{ x: number; y: number }> = sortedTs.map((t) => {
+    const gain = direction === 'in' ? Math.pow(t, p) : Math.pow(1 - t, p);
+    return { x: t * w, y: h * (1 - gain) };
+  });
+
+  const linePath = points
+    .map((pt, i) => `${i === 0 ? 'M' : 'L'} ${fmt(pt.x)},${fmt(pt.y)}`)
+    .join(' ');
 
   // Mask closes back along the top edge of the body so it covers the area
   // above the gain curve (where audio is being attenuated).
@@ -570,30 +582,6 @@ function buildFadePaths(
   const midpointCy = (1 - dotNormY) * h;
 
   return { linePath, maskPath, midpointCx, midpointCy };
-}
-
-function catmullRomToBezierPath(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return '';
-  if (points.length === 1) return `M ${fmt(points[0].x)},${fmt(points[0].y)}`;
-
-  let path = `M ${fmt(points[0].x)},${fmt(points[0].y)}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = i === 0
-      ? { x: 2 * points[0].x - points[1].x, y: 2 * points[0].y - points[1].y }
-      : points[i - 1];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = i === points.length - 2
-      ? { x: 2 * points[i + 1].x - points[i].x, y: 2 * points[i + 1].y - points[i].y }
-      : points[i + 2];
-
-    // Catmull-Rom (tension 0) → cubic bezier control points
-    const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
-    const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
-
-    path += ` C ${fmt(c1.x)},${fmt(c1.y)} ${fmt(c2.x)},${fmt(c2.y)} ${fmt(p2.x)},${fmt(p2.y)}`;
-  }
-  return path;
 }
 
 /** The gain at the geometric midpoint of each preset curve, used to place

@@ -20,11 +20,17 @@
 
 pub mod audio_io;
 pub mod config;
+pub mod graph;
+pub mod mixer;
+pub mod slot;
 
 pub use config::{
     AudioDeviceInfo, ConfigError, EngineConfig, EngineStatus, VALID_BUFFER_SIZES,
     VALID_SAMPLE_RATES,
 };
+pub use graph::{AudioGraph, Track, MAX_TRACKS};
+pub use mixer::{equal_power_pan, is_audible};
+pub use slot::SlotAllocator;
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 use serde::Serialize;

@@ -1,4 +1,12 @@
+pub mod commands;
+pub mod engine;
+
 use tauri::Manager;
+
+use crate::commands::audio::{
+    audio_get_default_device, audio_get_engine_status, audio_list_devices,
+    audio_start_engine, audio_stop_engine, EngineState,
+};
 
 /// Greet command — placeholder to verify IPC works.
 #[tauri::command]
@@ -14,7 +22,16 @@ fn is_desktop() -> bool {
 
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![greet, is_desktop])
+        .manage(EngineState::new())
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            is_desktop,
+            audio_list_devices,
+            audio_get_default_device,
+            audio_start_engine,
+            audio_stop_engine,
+            audio_get_engine_status,
+        ])
         .setup(|app| {
             // Focus main window on startup
             if let Some(window) = app.get_webview_window("main") {

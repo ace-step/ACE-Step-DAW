@@ -114,3 +114,55 @@ export interface AudioBridge {
   // ── Sample Rate ─────────────────────────────────────────────────
   readonly sampleRate: number;
 }
+
+// ── Native Audio Engine (Tauri / Phase 2A) ──────────────────────────
+//
+// These types mirror the Rust `EngineConfig` / `AudioDeviceInfo` /
+// `EngineStatus` structs in `src-tauri/src/engine/config.rs`. The
+// serde `rename_all = "camelCase"` attribute on the Rust side guarantees
+// the JSON wire format matches these field names exactly.
+//
+// Only the TypeScript types are added in Phase 2A — no calls are wired
+// into `TauriBackend` yet. That wiring lands in Phase 2B alongside the
+// processing graph and metering work.
+
+export const VALID_SAMPLE_RATES: readonly number[] = [44100, 48000, 96000];
+export const VALID_BUFFER_SIZES: readonly number[] = [32, 64, 128, 256, 512, 1024];
+
+export type ValidSampleRate = 44100 | 48000 | 96000;
+export type ValidBufferSize = 32 | 64 | 128 | 256 | 512 | 1024;
+
+export interface NativeEngineConfig {
+  sampleRate: ValidSampleRate;
+  bufferSize: ValidBufferSize;
+  /** `null` / omitted means "system default output device". */
+  deviceName?: string | null;
+}
+
+export interface NativeAudioDeviceInfo {
+  name: string;
+  isDefault: boolean;
+  maxChannels: number;
+  supportedSampleRates: number[];
+  /** `[min, max]` in frames, or `null` if the driver did not report. */
+  bufferSizeRange: [number, number] | null;
+}
+
+export type NativeEngineStatus =
+  | { state: 'stopped' }
+  | {
+      state: 'running';
+      activeConfig: NativeEngineConfig;
+      deviceName: string;
+      channels: number;
+    };
+
+/**
+ * Shape of Rust `EngineError` when surfaced through Tauri `invoke`. Serde
+ * serializes it as `{ kind: "alreadyRunning" | "config" | "open" | "openTimeout", message?: ... }`.
+ */
+export type NativeEngineError =
+  | { kind: 'alreadyRunning' }
+  | { kind: 'config'; message: { kind: 'invalidSampleRate' | 'invalidBufferSize'; message: number } }
+  | { kind: 'open'; message: string }
+  | { kind: 'openTimeout'; message: { secs: number; nanos: number } };

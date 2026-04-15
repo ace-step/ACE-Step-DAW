@@ -19,7 +19,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use ace_step_daw_lib::engine::{
-    audio_io, Engine, EngineConfig, EngineStatus,
+    audio_io, Engine, EngineCommand, EngineConfig, EngineStatus, SlotAllocator, TrackParams,
 };
 
 /// Smoke test 1 — device enumeration returns at least one device on a
@@ -138,7 +138,95 @@ fn real_engine_rejects_double_start() {
     engine.stop();
 }
 
-/// Smoke test 5 — starting with an unknown device name surfaces a
+/// Smoke test — commands flow from the main thread through the
+/// bounded `Sender<EngineCommand>` into the CPAL callback's
+/// `try_recv` drain loop during live playback.
+///
+/// This is the end-to-end proof that Phase 2B-1c actually plumbed
+/// the queue into the audio thread: we start a real engine, send a
+/// handful of `AddTrack` / `SetTrackParams` / `SetMasterVolume`
+/// commands, hold the stream open long enough for the audio callback
+/// to fire several times, then stop. The assertions cover that
+/// `send_command` returns `Ok` for commands within the queue's
+/// capacity — full graph-state observability is deferred to Phase
+/// 2B-2 which adds the metering ring buffer.
+#[test]
+#[ignore]
+fn real_engine_accepts_commands_during_live_playback() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    let mut alloc = SlotAllocator::with_default_capacity();
+    let h0 = alloc.acquire().unwrap();
+    let h1 = alloc.acquire().unwrap();
+    let h2 = alloc.acquire().unwrap();
+
+    // First burst — every command variant.
+    engine
+        .send_command(EngineCommand::AddTrack {
+            handle: h0,
+            params: TrackParams::unity(),
+        })
+        .expect("AddTrack h0");
+    engine
+        .send_command(EngineCommand::AddTrack {
+            handle: h1,
+            params: TrackParams {
+                volume: 0.7,
+                pan: -0.3,
+                mute: false,
+                solo: false,
+            },
+        })
+        .expect("AddTrack h1");
+    engine
+        .send_command(EngineCommand::AddTrack {
+            handle: h2,
+            params: TrackParams {
+                volume: 0.5,
+                pan: 0.6,
+                mute: false,
+                solo: true,
+            },
+        })
+        .expect("AddTrack h2");
+    engine
+        .send_command(EngineCommand::SetTrackParams {
+            handle: h0,
+            params: TrackParams {
+                volume: 0.25,
+                pan: 0.0,
+                mute: false,
+                solo: false,
+            },
+        })
+        .expect("SetTrackParams h0");
+    engine
+        .send_command(EngineCommand::SetMasterVolume { volume: 0.8 })
+        .expect("SetMasterVolume 0.8");
+
+    // Let the audio callback drain the first burst — at 256 frames /
+    // 48 kHz that's ~5.3 ms per callback, so 200 ms gives ~37
+    // iterations, far more than DRAIN_BUDGET can need to clear 5
+    // commands.
+    sleep(Duration::from_millis(200));
+
+    // Second burst — proves commands keep flowing after the first
+    // drain completes.
+    engine
+        .send_command(EngineCommand::RemoveTrack { handle: h2 })
+        .expect("RemoveTrack h2");
+    engine
+        .send_command(EngineCommand::SetMasterVolume { volume: 1.0 })
+        .expect("SetMasterVolume 1.0");
+
+    sleep(Duration::from_millis(100));
+
+    engine.stop();
+    assert_eq!(engine.status(), EngineStatus::Stopped);
+}
+
+/// Smoke test — starting with an unknown device name surfaces a
 /// human-readable error via the Open variant.
 #[test]
 #[ignore]

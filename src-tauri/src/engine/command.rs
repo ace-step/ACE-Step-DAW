@@ -6,20 +6,25 @@
 //! [`super::graph::AudioGraph::apply`]; they are never reflected back
 //! to the main thread.
 //!
-//! # Invariants relied on by callers
+//! # Generation-checked slot targeting
 //!
-//! - **Do not reuse a slot** until any outstanding commands that
-//!   reference it have been processed by the audio thread. In practice
-//!   the command latency is one audio buffer (~5 ms at 256 frames /
-//!   48 kHz), so the main thread can safely assume a command is
-//!   applied after this much time. Reusing a slot immediately would
-//!   risk an in-flight `SetTrackParams` from the old occupant
-//!   mutating the new occupant's state.
+//! Targeted commands carry a [`super::slot::SlotHandle`] (slot index
+//! plus generation counter) rather than a bare `usize`. The audio
+//! thread validates the generation against the live value stored on
+//! the track before mutating, so a stale command from a previous
+//! owner — for example a `SetTrackParams` queued just before the
+//! main thread released and re-acquired the same slot for a new
+//! track — is silently dropped instead of overwriting the new
+//! owner's state. Found by codex review on PR #1696.
+//!
+//! # Caller invariants
 //!
 //! - Commands targeting an out-of-range slot index are silently
 //!   ignored by `apply` — tolerant of stale UI state.
 
 use serde::{Deserialize, Serialize};
+
+use super::slot::SlotHandle;
 
 /// Per-track parameters that the main thread can push at any time.
 /// This is the full mutable state of a `Track`; finer-grained commands
@@ -61,24 +66,36 @@ impl Default for TrackParams {
 /// cache-friendly constant.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EngineCommand {
-    /// Mark a slot as occupied and seed its parameters. Out-of-range
-    /// slots are ignored. Idempotent: applying twice to the same slot
-    /// with the same params produces the same state.
-    AddTrack { slot: usize, params: TrackParams },
+    /// Seed a slot: mark it occupied, store the handle's generation,
+    /// and write the initial params. `AddTrack` is the *first* command
+    /// for a new owner so it does not validate the existing state —
+    /// it *establishes* the generation that subsequent commands will
+    /// be checked against.
+    AddTrack {
+        handle: SlotHandle,
+        params: TrackParams,
+    },
 
     /// Clear a slot back to `Track::default()` (occupied=false,
-    /// volume=1, pan=0, mute=false, solo=false). Crucially this also
-    /// clears the `solo` flag, so `any_solo()` cannot be left stuck on
-    /// a stale bit after the soloed track is removed.
-    RemoveTrack { slot: usize },
+    /// generation=0, volume=1, pan=0, mute=false, solo=false).
+    /// Applied only if the handle's generation matches the live
+    /// value on the track — a stale remove from a previous owner
+    /// is silently dropped.
+    RemoveTrack { handle: SlotHandle },
 
-    /// Replace the parameters of an **already occupied** slot. Applied
-    /// only if the slot is currently occupied — a command that arrives
-    /// after the track was removed is silently dropped, which is the
-    /// safer default when commands can race with remove-then-re-add.
-    SetTrackParams { slot: usize, params: TrackParams },
+    /// Replace the parameters of an already-occupied slot.
+    /// Generation-checked: a `SetTrackParams` whose handle's
+    /// generation no longer matches the live track is silently
+    /// dropped. This protects against a race where the main thread
+    /// releases a slot and the next track acquires it before an
+    /// in-flight `SetTrackParams` from the previous owner has been
+    /// drained.
+    SetTrackParams {
+        handle: SlotHandle,
+        params: TrackParams,
+    },
 
-    /// Master-bus linear gain.
+    /// Master-bus linear gain. Unconditional — no slot targeting.
     SetMasterVolume { volume: f32 },
 }
 
@@ -106,10 +123,10 @@ mod tests {
         assert_copy::<EngineCommand>();
 
         // Regression guard: keep the enum from growing unboundedly as
-        // new variants are added. `AddTrack` is currently the largest
-        // variant (usize + f32*2 + bool*2 + discriminant). 64 bytes is
-        // a generous ceiling that still fits comfortably in a single
-        // cache line.
+        // new variants are added. `AddTrack` carries a `SlotHandle`
+        // (usize + u32) + `TrackParams` (f32 × 2 + bool × 2) +
+        // discriminant. 64 bytes is a generous ceiling that still
+        // fits in one cache line on every reasonable target.
         assert!(
             std::mem::size_of::<EngineCommand>() <= 64,
             "EngineCommand grew to {} bytes",

@@ -1,4 +1,4 @@
-//! Audio processing graph — pure data structures.
+//! Audio processing graph — data structures and command application.
 //!
 //! # Why a fixed-capacity slab?
 //!
@@ -13,12 +13,14 @@
 //!
 //! # What's NOT in this module
 //!
-//! - The command queue (`EngineCommand`) that mutates tracks → 2B-1b
-//! - `AudioGraph::apply(cmd)` → 2B-1b
+//! - Channel / `Sender<EngineCommand>` wiring → 2B-1c
 //! - Integration with the CPAL audio callback → 2B-1c
 //!
-//! This file is intentionally leaf data: `Track`, `AudioGraph`, and
-//! simple queries. Nothing here is real-time sensitive yet.
+//! This file exposes leaf data (`Track`, `AudioGraph`) plus the pure
+//! `apply` mutator that the audio thread will call once the channel is
+//! plumbed in 2B-1c. Nothing here touches real-time audio yet.
+
+use super::command::{EngineCommand, TrackParams};
 
 /// Maximum number of simultaneously active tracks. Increase only after
 /// a memory / cache-line audit — contiguous iteration over the full
@@ -140,6 +142,60 @@ impl AudioGraph {
             *t = Track::default();
         }
     }
+
+    /// Apply a command to the graph in place.
+    ///
+    /// This is the **only** way the audio thread mutates the graph once
+    /// 2B-1c plumbs the channel — the main thread sends commands, the
+    /// audio callback drains them, and this method performs the actual
+    /// mutation. For now it is invoked directly by tests.
+    ///
+    /// # Command semantics
+    ///
+    /// - [`EngineCommand::AddTrack`] sets `occupied = true` and copies
+    ///   the params. Out-of-range slots are ignored.
+    /// - [`EngineCommand::RemoveTrack`] resets the slot to
+    ///   [`Track::default`]. Crucially this also clears `solo`, which
+    ///   guarantees [`Self::any_solo`] cannot report stale state after
+    ///   a soloed track is removed.
+    /// - [`EngineCommand::SetTrackParams`] updates params **only if**
+    ///   the slot is currently occupied. A command that arrives after
+    ///   the track was removed is silently dropped — safer than
+    ///   forcing a re-occupation that would surprise the main thread.
+    /// - [`EngineCommand::SetMasterVolume`] writes the master-bus gain.
+    pub fn apply(&mut self, cmd: EngineCommand) {
+        match cmd {
+            EngineCommand::AddTrack { slot, params } => {
+                if let Some(t) = self.tracks.get_mut(slot) {
+                    t.occupied = true;
+                    copy_params(t, &params);
+                }
+            }
+            EngineCommand::RemoveTrack { slot } => {
+                // Delegate to clear_slot so the full reset logic
+                // (including the stale-solo guard) stays in one place.
+                self.clear_slot(slot);
+            }
+            EngineCommand::SetTrackParams { slot, params } => {
+                if let Some(t) = self.tracks.get_mut(slot) {
+                    if t.occupied {
+                        copy_params(t, &params);
+                    }
+                }
+            }
+            EngineCommand::SetMasterVolume { volume } => {
+                self.master_volume = volume;
+            }
+        }
+    }
+}
+
+#[inline]
+fn copy_params(track: &mut Track, params: &TrackParams) {
+    track.volume = params.volume;
+    track.pan = params.pan;
+    track.mute = params.mute;
+    track.solo = params.solo;
 }
 
 impl Default for AudioGraph {
@@ -217,6 +273,8 @@ mod tests {
         assert!(g.track_mut(MAX_TRACKS + 1).is_none());
     }
 
+    // ── clear_slot() ────────────────────────────────────────────────
+
     #[test]
     fn clear_slot_wipes_all_fields_including_solo_and_pan() {
         // Regression guard for codex finding #2 on PR #1694.
@@ -269,14 +327,195 @@ mod tests {
             t.volume = 0.1;
         }
         g.clear_slot(0);
-        // Simulate a fresh "add" by re-flipping occupied (what
-        // 2B-1b's EngineCommand::AddTrack will do via apply()).
+        // Simulate a fresh "add" by re-flipping occupied.
         g.track_mut(0).unwrap().occupied = true;
         let t = g.track(0).unwrap();
         assert_eq!(t.volume, 1.0);
         assert_eq!(t.pan, 0.0);
         assert!(!t.mute);
         assert!(!t.solo);
+    }
+
+    // ── apply() semantics ───────────────────────────────────────────
+
+    fn solo_params() -> TrackParams {
+        TrackParams {
+            volume: 0.5,
+            pan: -0.25,
+            mute: false,
+            solo: true,
+        }
+    }
+
+    #[test]
+    fn apply_add_track_marks_slot_occupied_with_params() {
+        let mut g = AudioGraph::new();
+        g.apply(EngineCommand::AddTrack {
+            slot: 3,
+            params: solo_params(),
+        });
+        let t = g.track(3).unwrap();
+        assert!(t.occupied);
+        assert_eq!(t.volume, 0.5);
+        assert_eq!(t.pan, -0.25);
+        assert!(!t.mute);
+        assert!(t.solo);
+        assert_eq!(g.active_count(), 1);
+        assert!(g.any_solo());
+    }
+
+    #[test]
+    fn apply_add_track_out_of_range_is_noop() {
+        let mut g = AudioGraph::new();
+        g.apply(EngineCommand::AddTrack {
+            slot: MAX_TRACKS,
+            params: TrackParams::unity(),
+        });
+        assert_eq!(g.active_count(), 0);
+    }
+
+    #[test]
+    fn apply_remove_track_clears_all_fields_including_solo() {
+        // Regression guard for the `any_solo` stale-bit edge case from
+        // 2B-1a. After removing a soloed track, any_solo() must be
+        // false — i.e. RemoveTrack must zero the solo bit, not just
+        // the occupied bit.
+        let mut g = AudioGraph::new();
+        g.apply(EngineCommand::AddTrack {
+            slot: 0,
+            params: solo_params(),
+        });
+        assert!(g.any_solo());
+
+        g.apply(EngineCommand::RemoveTrack { slot: 0 });
+        assert!(!g.any_solo());
+        assert_eq!(g.active_count(), 0);
+        let t = g.track(0).unwrap();
+        assert_eq!(*t, Track::default());
+    }
+
+    #[test]
+    fn apply_set_track_params_updates_occupied_slot() {
+        let mut g = AudioGraph::new();
+        g.apply(EngineCommand::AddTrack {
+            slot: 5,
+            params: TrackParams::unity(),
+        });
+        g.apply(EngineCommand::SetTrackParams {
+            slot: 5,
+            params: TrackParams {
+                volume: 0.1,
+                pan: 0.9,
+                mute: true,
+                solo: false,
+            },
+        });
+        let t = g.track(5).unwrap();
+        assert_eq!(t.volume, 0.1);
+        assert_eq!(t.pan, 0.9);
+        assert!(t.mute);
+        assert!(!t.solo);
+        assert!(t.occupied, "SetTrackParams must not clear occupancy");
+    }
+
+    #[test]
+    fn apply_set_track_params_on_unoccupied_slot_is_dropped() {
+        // A SetTrackParams racing against a just-processed RemoveTrack
+        // must not silently re-occupy the slot. Otherwise a removed
+        // track would pop back into the mix after the user expected it
+        // gone.
+        let mut g = AudioGraph::new();
+        g.apply(EngineCommand::SetTrackParams {
+            slot: 7,
+            params: TrackParams {
+                volume: 2.0,
+                pan: 0.5,
+                mute: false,
+                solo: true,
+            },
+        });
+        let t = g.track(7).unwrap();
+        assert_eq!(*t, Track::default(), "slot must stay pristine");
+        assert!(!g.any_solo());
+    }
+
+    #[test]
+    fn apply_set_master_volume_writes_master_bus_gain() {
+        let mut g = AudioGraph::new();
+        g.apply(EngineCommand::SetMasterVolume { volume: 0.25 });
+        assert_eq!(g.master_volume, 0.25);
+
+        g.apply(EngineCommand::SetMasterVolume { volume: 1.5 });
+        assert_eq!(g.master_volume, 1.5);
+    }
+
+    #[test]
+    fn apply_sequence_add_remove_readd_is_clean() {
+        // End-to-end simulation: add track, mutate params, remove,
+        // re-add at the same slot with different params. Final state
+        // must reflect only the second add; no leakage from the first.
+        let mut g = AudioGraph::new();
+        g.apply(EngineCommand::AddTrack {
+            slot: 10,
+            params: solo_params(),
+        });
+        g.apply(EngineCommand::SetTrackParams {
+            slot: 10,
+            params: TrackParams {
+                volume: 0.8,
+                pan: 0.6,
+                mute: true,
+                solo: true,
+            },
+        });
+        g.apply(EngineCommand::RemoveTrack { slot: 10 });
+
+        g.apply(EngineCommand::AddTrack {
+            slot: 10,
+            params: TrackParams::unity(),
+        });
+        let t = g.track(10).unwrap();
+        assert!(t.occupied);
+        assert_eq!(t.volume, 1.0);
+        assert_eq!(t.pan, 0.0);
+        assert!(!t.mute);
+        assert!(!t.solo);
+        assert_eq!(g.active_count(), 1);
+        assert!(!g.any_solo());
+    }
+
+    #[test]
+    fn apply_does_not_allocate_on_hot_path() {
+        // Proxy check for allocation-free: `apply` is pure mutation on
+        // a pre-allocated slab, so the graph's storage pointer must be
+        // stable before and after a burst of commands.
+        let mut g = AudioGraph::new();
+        let ptr_before = g.all_tracks().as_ptr();
+        for slot in 0..128 {
+            g.apply(EngineCommand::AddTrack {
+                slot,
+                params: TrackParams::unity(),
+            });
+        }
+        for slot in 0..128 {
+            g.apply(EngineCommand::SetTrackParams {
+                slot,
+                params: TrackParams {
+                    volume: 0.5,
+                    pan: 0.1,
+                    mute: false,
+                    solo: false,
+                },
+            });
+        }
+        for slot in 0..128 {
+            g.apply(EngineCommand::RemoveTrack { slot });
+        }
+        g.apply(EngineCommand::SetMasterVolume { volume: 0.75 });
+        let ptr_after = g.all_tracks().as_ptr();
+        assert_eq!(ptr_before, ptr_after);
+        assert_eq!(g.active_count(), 0);
+        assert_eq!(g.master_volume, 0.75);
     }
 
     #[test]

@@ -19,11 +19,13 @@
 //! tests drive the full state machine without any audio hardware.
 
 pub mod audio_io;
+pub mod command;
 pub mod config;
 pub mod graph;
 pub mod mixer;
 pub mod slot;
 
+pub use command::{EngineCommand, TrackParams};
 pub use config::{
     AudioDeviceInfo, ConfigError, EngineConfig, EngineStatus, VALID_BUFFER_SIZES,
     VALID_SAMPLE_RATES,

@@ -123,6 +123,23 @@ impl AudioGraph {
     pub fn active_count(&self) -> usize {
         self.tracks.iter().filter(|t| t.occupied).count()
     }
+
+    /// Reset a slot back to [`Track::default`].
+    ///
+    /// This is the **only** supported way to remove a track: it
+    /// clears `occupied`, `volume`, `pan`, `mute`, **and** `solo` in a
+    /// single step. Callers that flip `occupied = false` directly and
+    /// leave the other fields stale risk leaking that state into the
+    /// next track that reuses the slot — e.g. the new track would
+    /// start out muted, soloed, or hard-panned because the previous
+    /// track was. Found by codex review on PR #1694.
+    ///
+    /// Out-of-range slots are ignored.
+    pub fn clear_slot(&mut self, slot: usize) {
+        if let Some(t) = self.tracks.get_mut(slot) {
+            *t = Track::default();
+        }
+    }
 }
 
 impl Default for AudioGraph {
@@ -198,6 +215,68 @@ mod tests {
         let mut g = AudioGraph::new();
         assert!(g.track(MAX_TRACKS).is_none());
         assert!(g.track_mut(MAX_TRACKS + 1).is_none());
+    }
+
+    #[test]
+    fn clear_slot_wipes_all_fields_including_solo_and_pan() {
+        // Regression guard for codex finding #2 on PR #1694.
+        //
+        // Directly toggling `occupied = false` leaves volume / pan /
+        // mute / solo dirty on the slab entry, so the next track
+        // added to that slot would inherit stale state. `clear_slot`
+        // is the supported "remove" primitive — it must zero every
+        // field so slot reuse is safe without callers having to
+        // manually remember which fields to reset.
+        let mut g = AudioGraph::new();
+        {
+            let t = g.track_mut(3).unwrap();
+            t.occupied = true;
+            t.volume = 0.2;
+            t.pan = 0.8;
+            t.mute = true;
+            t.solo = true;
+        }
+        assert_eq!(g.active_count(), 1);
+        assert!(g.any_solo());
+
+        g.clear_slot(3);
+
+        assert_eq!(g.active_count(), 0);
+        assert!(!g.any_solo());
+        let t = g.track(3).unwrap();
+        assert_eq!(*t, Track::default(), "every field must be reset");
+    }
+
+    #[test]
+    fn clear_slot_out_of_range_is_noop() {
+        let mut g = AudioGraph::new();
+        g.clear_slot(MAX_TRACKS);
+        g.clear_slot(usize::MAX);
+        assert_eq!(g.active_count(), 0);
+    }
+
+    #[test]
+    fn clear_slot_then_reuse_has_no_leakage() {
+        // End-to-end: create a soloed muted track, clear the slot,
+        // re-mark it occupied with default params, verify no bleed.
+        let mut g = AudioGraph::new();
+        {
+            let t = g.track_mut(0).unwrap();
+            t.occupied = true;
+            t.mute = true;
+            t.solo = true;
+            t.pan = -0.9;
+            t.volume = 0.1;
+        }
+        g.clear_slot(0);
+        // Simulate a fresh "add" by re-flipping occupied (what
+        // 2B-1b's EngineCommand::AddTrack will do via apply()).
+        g.track_mut(0).unwrap().occupied = true;
+        let t = g.track(0).unwrap();
+        assert_eq!(t.volume, 1.0);
+        assert_eq!(t.pan, 0.0);
+        assert!(!t.mute);
+        assert!(!t.solo);
     }
 
     #[test]

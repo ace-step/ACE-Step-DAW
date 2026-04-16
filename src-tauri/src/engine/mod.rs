@@ -108,8 +108,10 @@ pub enum EngineError {
 /// user would accept as "instant" stop.
 const STOP_GRACE_PERIOD: Duration = Duration::from_millis(100);
 
-/// Errors returned from the command-sending API.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+/// Errors returned from the command-sending API. Serializable for
+/// Tauri IPC error responses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, thiserror::Error)]
+#[serde(rename_all = "camelCase", tag = "kind", content = "message")]
 pub enum CommandError {
     #[error("engine is not running; start it before sending commands")]
     NotRunning,

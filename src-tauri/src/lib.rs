@@ -4,8 +4,10 @@ pub mod engine;
 use tauri::Manager;
 
 use crate::commands::audio::{
-    audio_get_default_device, audio_get_engine_status, audio_list_devices,
-    audio_start_engine, audio_stop_engine, EngineState,
+    audio_add_track, audio_get_default_device, audio_get_engine_status,
+    audio_list_devices, audio_remove_track, audio_set_master_volume,
+    audio_set_track_params, audio_start_engine, audio_stop_engine,
+    EngineState,
 };
 
 /// Greet command — placeholder to verify IPC works.
@@ -31,6 +33,10 @@ pub fn run() {
             audio_start_engine,
             audio_stop_engine,
             audio_get_engine_status,
+            audio_add_track,
+            audio_remove_track,
+            audio_set_track_params,
+            audio_set_master_volume,
         ])
         .setup(|app| {
             // Focus main window on startup

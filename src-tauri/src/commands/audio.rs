@@ -9,8 +9,10 @@ use std::sync::Mutex;
 use tauri::State;
 
 use crate::engine::{
-    audio_io, AudioDeviceInfo, Engine, EngineConfig, EngineError, EngineStatus,
+    audio_io, AudioDeviceInfo, CommandError, Engine, EngineConfig, EngineError,
+    EngineStatus, TrackParams,
 };
+use crate::engine::slot::SlotHandle;
 
 /// State wrapper around the engine. Tauri requires `Send + Sync`, and
 /// `Engine` itself is `!Sync` because it holds a channel sender; the
@@ -30,6 +32,8 @@ impl Default for EngineState {
     }
 }
 
+// ── Device enumeration ──────────────────────────────────────────────
+
 #[tauri::command]
 pub fn audio_list_devices() -> Vec<AudioDeviceInfo> {
     audio_io::list_output_devices()
@@ -39,6 +43,8 @@ pub fn audio_list_devices() -> Vec<AudioDeviceInfo> {
 pub fn audio_get_default_device() -> Option<AudioDeviceInfo> {
     audio_io::get_default_output_device_info()
 }
+
+// ── Engine lifecycle ────────────────────────────────────────────────
 
 #[tauri::command]
 pub fn audio_start_engine(
@@ -71,6 +77,57 @@ pub fn audio_get_engine_status(
         .lock()
         .map_err(|_| EngineError::Open("engine mutex poisoned".into()))?;
     Ok(engine.status())
+}
+
+// ── Track management (2B-1d) ────────────────────────────────────────
+
+#[tauri::command]
+pub fn audio_add_track(
+    params: TrackParams,
+    state: State<'_, EngineState>,
+) -> Result<SlotHandle, CommandError> {
+    let mut engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.add_track(params)
+}
+
+#[tauri::command]
+pub fn audio_remove_track(
+    handle: SlotHandle,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let mut engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.remove_track(handle)
+}
+
+#[tauri::command]
+pub fn audio_set_track_params(
+    handle: SlotHandle,
+    params: TrackParams,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_track_params(handle, params)
+}
+
+#[tauri::command]
+pub fn audio_set_master_volume(
+    volume: f32,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_master_volume(volume)
 }
 
 #[cfg(test)]

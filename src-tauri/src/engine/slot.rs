@@ -32,7 +32,7 @@ use super::graph::MAX_TRACKS;
 ///
 /// Handles are `Copy` so they can be stored alongside track metadata
 /// without shared-ownership concerns.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SlotHandle {
     slot: usize,
     generation: u32,

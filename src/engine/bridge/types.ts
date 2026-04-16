@@ -166,3 +166,37 @@ export type NativeEngineError =
   | { kind: 'config'; message: { kind: 'invalidSampleRate' | 'invalidBufferSize'; message: number } }
   | { kind: 'open'; message: string }
   | { kind: 'openTimeout'; message: { secs: number; nanos: number } };
+
+// ── Track management (Tauri / Phase 2B-1d) ──────────────────────────
+
+/**
+ * Opaque handle to a track slot in the native audio engine. Returned
+ * by `audio_add_track` and passed back to `audio_remove_track` /
+ * `audio_set_track_params`. Contains a slot index + generation counter
+ * so stale handles from a previous owner are silently rejected by the
+ * audio thread.
+ */
+export interface NativeSlotHandle {
+  slot: number;
+  generation: number;
+}
+
+/**
+ * Per-track parameters for the native mixer. Mirrors Rust `TrackParams`
+ * with serde `camelCase` field names.
+ */
+export interface NativeTrackParams {
+  volume: number;
+  pan: number;
+  mute: boolean;
+  solo: boolean;
+}
+
+/**
+ * Shape of Rust `CommandError` when surfaced through Tauri `invoke`.
+ */
+export type NativeCommandError =
+  | { kind: 'notRunning' }
+  | { kind: 'queueFull'; message: number }
+  | { kind: 'disconnected' }
+  | { kind: 'slotAllocatorFull'; message: number };

@@ -1,26 +1,28 @@
 /**
  * TauriBackend — delegates audio operations to the Rust engine via Tauri IPC.
  *
- * This is a stub implementation for Phase 1. Methods are wired to
- * `invoke()` and `listen()` calls but the Rust handlers do not exist yet.
- * The backend will be fleshed out in Phase 2 (Rust audio engine core)
- * and Phase 3 (native transport + clip scheduling).
+ * Phase 2B-1d: track management and master volume are now wired to
+ * the real Rust audio engine. The backend maintains an internal
+ * `trackId → SlotHandle` map to bridge the AudioBridge's string-based
+ * track IDs to the native engine's slot-generation handles.
  *
- * Until the Rust engine is ready, the WebAudioBackend is used instead.
+ * Remaining stubs (metering, clip scheduling, transport callbacks)
+ * will be fleshed out in Phase 2B-2, Phase 3, etc.
+ *
+ * Until the full Rust engine is ready, the WebAudioBackend is the
+ * default in browser mode.
  */
+import { invoke } from '@tauri-apps/api/core';
 import type {
   AudioBridge,
   BridgeClipInfo,
   MasterMeterData,
   MeterData,
+  NativeSlotHandle,
+  NativeTrackParams,
   TrackParams,
 } from './types';
 import type { MasteringState } from '../../types/project';
-
-// Placeholder — will use @tauri-apps/api/core when Rust handlers exist
-async function invoke<T>(_cmd: string, _args?: Record<string, unknown>): Promise<T> {
-  throw new Error('TauriBackend: Rust audio engine not yet implemented');
-}
 
 const ZERO_METER: MeterData = { level: -Infinity, leftLevel: -Infinity, rightLevel: -Infinity, clipped: false };
 const ZERO_MASTER: MasterMeterData = { level: -Infinity, clipped: false };
@@ -32,14 +34,24 @@ export class TauriBackend implements AudioBridge {
   private _timeUpdateCb: ((time: number) => void) | null = null;
   private _onEndedCb: (() => void) | null = null;
 
+  /**
+   * Maps the AudioBridge's string `trackId` to the native engine's
+   * `SlotHandle`. Populated by `ensureTrack`, consumed by
+   * `removeTrack` / `setTrackParams`.
+   */
+  private _trackHandles = new Map<string, NativeSlotHandle>();
+
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   async resume(): Promise<void> {
-    await invoke('audio_resume');
+    await invoke('audio_start_engine', {
+      config: { sampleRate: 48000, bufferSize: 256, deviceName: null },
+    });
   }
 
   dispose(): void {
-    invoke('audio_dispose').catch(() => {});
+    invoke('audio_stop_engine').catch(() => {});
+    this._trackHandles.clear();
   }
 
   // ── Transport ─────────────────────────────────────────────────────
@@ -69,23 +81,56 @@ export class TauriBackend implements AudioBridge {
   // ── Track Management ──────────────────────────────────────────────
 
   ensureTrack(trackId: string): void {
-    invoke('track_ensure', { trackId }).catch(() => {});
+    if (this._trackHandles.has(trackId)) return;
+    // Fire-and-forget: the bridge interface is synchronous but the
+    // IPC is async. We store a pending promise result in the map
+    // once it resolves.
+    const defaultParams: NativeTrackParams = {
+      volume: 1,
+      pan: 0,
+      mute: false,
+      solo: false,
+    };
+    invoke<NativeSlotHandle>('audio_add_track', { params: defaultParams })
+      .then((handle) => {
+        this._trackHandles.set(trackId, handle);
+      })
+      .catch(() => {});
   }
 
   removeTrack(trackId: string): void {
-    invoke('track_remove', { trackId }).catch(() => {});
+    const handle = this._trackHandles.get(trackId);
+    if (!handle) return;
+    this._trackHandles.delete(trackId);
+    invoke('audio_remove_track', { handle }).catch(() => {});
   }
 
   setTrackParams(trackId: string, params: TrackParams): void {
-    invoke('track_set_params', { trackId, params }).catch(() => {});
+    const handle = this._trackHandles.get(trackId);
+    if (!handle) return;
+    // Extract only the fields the Rust mixer supports (volume,
+    // pan, mute, solo). Effect parameters (EQ, compressor, reverb)
+    // will be forwarded once the effect chain lands in 2B-3.
+    const nativeParams: NativeTrackParams = {
+      volume: params.volume ?? 1,
+      pan: params.pan ?? 0,
+      mute: params.muted ?? false,
+      solo: params.soloed ?? false,
+    };
+    invoke('audio_set_track_params', { handle, params: nativeParams }).catch(() => {});
   }
 
   setTrackGroupRouting(trackId: string, groupId: string | null): void {
-    invoke('track_set_group', { trackId, groupId }).catch(() => {});
+    // Group routing will be wired in Phase 2B-4 (send/return).
+    void trackId;
+    void groupId;
   }
 
   updateSoloState(): void {
-    invoke('tracks_update_solo').catch(() => {});
+    // Solo state is resolved per-buffer inside the audio callback
+    // via `AudioGraph::any_solo()`. No explicit command needed — the
+    // individual `setTrackParams` calls with `solo: true/false`
+    // already propagate through the command queue.
   }
 
   // ── Metering ──────────────────────────────────────────────────────
@@ -98,8 +143,8 @@ export class TauriBackend implements AudioBridge {
     return -Infinity;
   }
 
-  resetTrackClip(trackId: string): void {
-    invoke('track_reset_clip', { trackId }).catch(() => {});
+  resetTrackClip(_trackId: string): void {
+    // Will be wired in Phase 2B-2 (metering)
   }
 
   getTrackSpectrum(_trackId: string): Float32Array | null {
@@ -114,8 +159,8 @@ export class TauriBackend implements AudioBridge {
     return -Infinity;
   }
 
-  resetMasterClip(stage: 'input' | 'output'): void {
-    invoke('master_reset_clip', { stage }).catch(() => {});
+  resetMasterClip(_stage: 'input' | 'output'): void {
+    // Will be wired in Phase 2B-2 (metering)
   }
 
   getMasterSpectrum(): Float32Array {
@@ -129,11 +174,11 @@ export class TauriBackend implements AudioBridge {
   }
 
   setMasterVolume(volume: number): void {
-    invoke('master_set_volume', { volume }).catch(() => {});
+    invoke('audio_set_master_volume', { volume }).catch(() => {});
   }
 
-  applyMastering(mastering: MasteringState | null | undefined): void {
-    invoke('master_apply_mastering', { mastering }).catch(() => {});
+  applyMastering(_mastering: MasteringState | null | undefined): void {
+    // Will invoke Rust command when effect chain lands (2B-3)
   }
 
   // ── Clip Scheduling ───────────────────────────────────────────────
@@ -147,13 +192,13 @@ export class TauriBackend implements AudioBridge {
   }
 
   stopAllSources(): void {
-    invoke('transport_stop_sources').catch(() => {});
+    // Will invoke Rust command in Phase 3
   }
 
   // ── Audio Data ────────────────────────────────────────────────────
 
   async decodeAudioData(_blob: Blob): Promise<AudioBuffer> {
-    // Rust backend will decode audio natively; for now throw
+    // Rust backend will decode audio natively in Phase 2C
     throw new Error('TauriBackend: decodeAudioData not yet implemented');
   }
 

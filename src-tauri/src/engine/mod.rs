@@ -8,15 +8,22 @@
 //! owns the stream end-to-end: it opens the stream, blocks waiting for a
 //! stop signal, then drops the stream to close it.
 //!
-//! Communication between the main (Tauri) thread and the audio owner
-//! thread uses lock-free `crossbeam-channel`s — the same primitive we will
-//! use in Phase 2B for the real-time command queue into the audio callback.
+//! # Command queue (added in 2B-1c)
+//!
+//! The main thread drives the mixer via a lock-free
+//! `crossbeam_channel::Sender<EngineCommand>`. The matching receiver is
+//! owned by the CPAL audio callback, which drains up to
+//! [`audio_io::COMMAND_DRAIN_BUDGET`] commands per buffer before rendering.
+//! Every mutation of the [`AudioGraph`] happens on the audio thread via
+//! `graph.apply(cmd)` — the main thread never touches the graph directly.
 //!
 //! # Testability
 //!
 //! [`Engine::start`] is the production entry point using CPAL.
 //! [`Engine::start_with`] accepts an injected runner closure, letting unit
-//! tests drive the full state machine without any audio hardware.
+//! tests drive the full state machine without any audio hardware. The
+//! runner receives a [`RuntimeContext`] bundling the config, graph,
+//! command receiver, ready signal, and stop signal.
 
 pub mod audio_io;
 pub mod command;
@@ -32,9 +39,9 @@ pub use config::{
 };
 pub use graph::{AudioGraph, Track, MAX_TRACKS};
 pub use mixer::{equal_power_pan, is_audible};
-pub use slot::SlotAllocator;
+pub use slot::{SlotAllocator, SlotHandle};
 
-use crossbeam_channel::{bounded, Receiver, Sender};
+use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
 use serde::Serialize;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -44,6 +51,15 @@ use std::time::Duration;
 /// surprising amount of time on first launch (permission prompts, driver
 /// cold-start); 5 s is conservative but forgiving.
 const OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Capacity of the main → audio command queue.
+///
+/// Bounded so the main thread gets backpressure via `try_send` rather
+/// than allocating unbounded memory on a runaway automation loop. At
+/// 1024 × `sizeof::<EngineCommand>` (≲ 64 B) that's ~64 KiB per
+/// channel, which is cheap and absorbs multi-second bursts of
+/// automation even at 60 Hz UI tick rate.
+pub const COMMAND_QUEUE_CAPACITY: usize = 1024;
 
 /// Metadata returned by the audio owner thread once the stream is live.
 /// The active config may differ from the requested config if CPAL fell
@@ -57,6 +73,18 @@ pub struct OpenInfo {
 
 /// Result the audio owner thread reports back at startup.
 pub type OpenResult = Result<OpenInfo, String>;
+
+/// Everything a `StreamRunner` needs to take ownership of the audio
+/// path. Bundled into a struct so future additions (metering ring
+/// buffers in 2B-2, effect chain in 2B-3) extend one type instead of
+/// mutating the runner signature repeatedly.
+pub struct RuntimeContext {
+    pub config: EngineConfig,
+    pub graph: AudioGraph,
+    pub cmd_rx: Receiver<EngineCommand>,
+    pub ready_tx: Sender<OpenResult>,
+    pub stop_rx: Receiver<()>,
+}
 
 /// Errors surfaced to Tauri command handlers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, thiserror::Error)]
@@ -72,36 +100,92 @@ pub enum EngineError {
     OpenTimeout(Duration),
 }
 
+/// Grace period the main thread waits for the audio callback to drain
+/// in-flight commands before tearing down the stream. Under normal load
+/// the audio callback drains `COMMAND_DRAIN_BUDGET` commands per ~5 ms
+/// buffer, so a full 1024-command queue takes ~40 ms to flush. 100 ms
+/// covers that with headroom while staying well inside the range a
+/// user would accept as "instant" stop.
+const STOP_GRACE_PERIOD: Duration = Duration::from_millis(100);
+
+/// Errors returned from the command-sending API.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum CommandError {
+    #[error("engine is not running; start it before sending commands")]
+    NotRunning,
+    #[error("command queue is full (capacity {0}); back off and retry")]
+    QueueFull(usize),
+    #[error("command queue is disconnected (audio thread has exited)")]
+    Disconnected,
+    #[error("track slot allocator is full (capacity {0}); cannot add more tracks")]
+    SlotAllocatorFull(usize),
+}
+
 /// Contract for the function that owns a CPAL stream.
 ///
 /// Implementations must:
-///  1. Try to open the stream and send the result on `ready_tx` (at most once).
-///  2. On success, keep the stream alive until `stop_rx` fires or is dropped.
-///  3. Drop the stream (which closes CPAL) and return.
+///  1. Take ownership of the supplied [`RuntimeContext`].
+///  2. Try to open the stream and send the result on `ctx.ready_tx`
+///     (at most once).
+///  3. On success, keep the stream alive — draining commands from
+///     `ctx.cmd_rx` into `ctx.graph` inside the audio callback —
+///     until `ctx.stop_rx` fires or is dropped.
+///  4. Drop the stream (which closes CPAL) and return.
 ///
-/// A real production runner lives in [`audio_io::run_cpal_output_stream`].
+/// The real production runner lives in
+/// [`audio_io::run_cpal_output_stream`].
 pub trait StreamRunner: Send + 'static {
-    fn run(self: Box<Self>, config: EngineConfig, ready_tx: Sender<OpenResult>, stop_rx: Receiver<()>);
+    fn run(self: Box<Self>, ctx: RuntimeContext);
 }
 
 impl<F> StreamRunner for F
 where
-    F: FnOnce(EngineConfig, Sender<OpenResult>, Receiver<()>) + Send + 'static,
+    F: FnOnce(RuntimeContext) + Send + 'static,
 {
-    fn run(self: Box<Self>, config: EngineConfig, ready_tx: Sender<OpenResult>, stop_rx: Receiver<()>) {
-        (*self)(config, ready_tx, stop_rx)
+    fn run(self: Box<Self>, ctx: RuntimeContext) {
+        (*self)(ctx)
     }
 }
 
 /// Live-stream state. When `None`, the engine is stopped.
+///
+/// `slot_alloc` is the single source of truth for track slot
+/// indices. Callers never construct their own [`SlotAllocator`] —
+/// they go through [`Engine::add_track`] / [`Engine::remove_track`]
+/// so every live handle comes from one place. Found by codex review
+/// on PR #1698: two callers each running
+/// `SlotAllocator::with_default_capacity()` would both mint slot 0 /
+/// generation 1, letting one caller's `SetTrackParams` target
+/// another caller's live track.
 struct RunningEngine {
     stop_tx: Sender<()>,
+    cmd_tx: Sender<EngineCommand>,
+    slot_alloc: SlotAllocator,
     thread: Option<JoinHandle<()>>,
     status: EngineStatus,
 }
 
 impl RunningEngine {
     fn shutdown(mut self) {
+        // Grace period: give the audio callback a chance to drain
+        // any in-flight commands before we tear down the stream.
+        // Without this, a burst followed by an immediate stop can
+        // silently lose the tail of the queue — every send_command
+        // returned Ok, but the commands never reached the graph
+        // because the stream was dropped mid-drain. Found by codex
+        // review on PR #1698.
+        //
+        // Poll `cmd_tx.is_empty()` rather than sleeping a flat
+        // duration so well-behaved flows shut down quickly and only
+        // pathological ones pay the full ceiling.
+        let grace_deadline = std::time::Instant::now() + STOP_GRACE_PERIOD;
+        while !self.cmd_tx.is_empty() && std::time::Instant::now() < grace_deadline {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+
+        // Dropping cmd_tx closes the channel so the audio thread's
+        // try_recv sees Disconnected on the next buffer.
+        drop(self.cmd_tx);
         // Tell the owner thread to drop the stream. A full channel means
         // an earlier stop is still queued — either way the thread will
         // see exactly one Stop and exit, so we ignore SendError.
@@ -130,7 +214,11 @@ impl Engine {
 
     /// Start the engine with a custom runner — used by unit tests and by
     /// any future backend (e.g. JACK) that wants to reuse the lifecycle.
-    pub fn start_with<R>(&mut self, config: EngineConfig, runner: R) -> Result<EngineStatus, EngineError>
+    pub fn start_with<R>(
+        &mut self,
+        config: EngineConfig,
+        runner: R,
+    ) -> Result<EngineStatus, EngineError>
     where
         R: StreamRunner,
     {
@@ -141,13 +229,21 @@ impl Engine {
 
         let (ready_tx, ready_rx) = bounded::<OpenResult>(1);
         let (stop_tx, stop_rx) = bounded::<()>(1);
+        let (cmd_tx, cmd_rx) = bounded::<EngineCommand>(COMMAND_QUEUE_CAPACITY);
+
+        let ctx = RuntimeContext {
+            config: config.clone(),
+            graph: AudioGraph::new(),
+            cmd_rx,
+            ready_tx,
+            stop_rx,
+        };
 
         let boxed: Box<dyn StreamRunner> = Box::new(runner);
-        let config_for_thread = config.clone();
         let thread = std::thread::Builder::new()
             .name("ace-audio-owner".into())
             .spawn(move || {
-                boxed.run(config_for_thread, ready_tx, stop_rx);
+                boxed.run(ctx);
             })
             .expect("spawn audio owner thread");
 
@@ -160,6 +256,8 @@ impl Engine {
                 };
                 self.running = Some(RunningEngine {
                     stop_tx,
+                    cmd_tx,
+                    slot_alloc: SlotAllocator::with_default_capacity(),
                     thread: Some(thread),
                     status: status.clone(),
                 });
@@ -173,15 +271,16 @@ impl Engine {
                 // ignores the extra signal; a blocked runner unblocks.
                 let _ = stop_tx.send(());
                 drop(stop_tx);
+                drop(cmd_tx);
                 let _ = thread.join();
                 Err(EngineError::Open(msg))
             }
             Err(_) => {
                 // Timeout or channel closed with no message — treat as
-                // hard failure. Signal stop so the runner can unwind if
-                // it's still alive, then best-effort join.
+                // hard failure.
                 let _ = stop_tx.send(());
                 drop(stop_tx);
+                drop(cmd_tx);
                 let _ = thread.join();
                 Err(EngineError::OpenTimeout(OPEN_TIMEOUT))
             }
@@ -189,7 +288,7 @@ impl Engine {
     }
 
     /// Stop the engine. Idempotent — a second call on a stopped engine is
-    /// a no-op and returns `Ok(())`.
+    /// a no-op.
     pub fn stop(&mut self) {
         if let Some(running) = self.running.take() {
             running.shutdown();
@@ -205,6 +304,79 @@ impl Engine {
 
     pub fn is_running(&self) -> bool {
         self.running.is_some()
+    }
+
+    /// Allocate a track slot and seed it on the audio thread with
+    /// the given params. Returns the allocator handle so subsequent
+    /// `set_track_params` / `remove_track` calls can address the
+    /// same track safely.
+    ///
+    /// This is the **only** supported way to add a track — callers
+    /// must not construct their own [`SlotAllocator`]. Two parallel
+    /// allocators would both mint `slot 0 / generation 1` and let
+    /// one caller's commands target another caller's live track.
+    pub fn add_track(&mut self, params: TrackParams) -> Result<SlotHandle, CommandError> {
+        let running = self.running.as_mut().ok_or(CommandError::NotRunning)?;
+        let handle = running
+            .slot_alloc
+            .acquire()
+            .ok_or(CommandError::SlotAllocatorFull(MAX_TRACKS))?;
+        match running
+            .cmd_tx
+            .try_send(EngineCommand::AddTrack { handle, params })
+        {
+            Ok(()) => Ok(handle),
+            Err(e) => {
+                // Reclaim the slot so a transient queue-full does not
+                // leak an allocator slot until the next stop.
+                running.slot_alloc.release(handle);
+                Err(match e {
+                    TrySendError::Full(_) => CommandError::QueueFull(COMMAND_QUEUE_CAPACITY),
+                    TrySendError::Disconnected(_) => CommandError::Disconnected,
+                })
+            }
+        }
+    }
+
+    /// Remove a previously-added track. Sends `RemoveTrack` to the
+    /// audio thread and releases the slot back to the allocator.
+    /// Stale handles (from a previous generation) are harmless —
+    /// `AudioGraph::apply` generation-checks them out.
+    pub fn remove_track(&mut self, handle: SlotHandle) -> Result<(), CommandError> {
+        let running = self.running.as_mut().ok_or(CommandError::NotRunning)?;
+        match running.cmd_tx.try_send(EngineCommand::RemoveTrack { handle }) {
+            Ok(()) => {
+                running.slot_alloc.release(handle);
+                Ok(())
+            }
+            Err(TrySendError::Full(_)) => Err(CommandError::QueueFull(COMMAND_QUEUE_CAPACITY)),
+            Err(TrySendError::Disconnected(_)) => Err(CommandError::Disconnected),
+        }
+    }
+
+    /// Update the parameters of an already-added track.
+    pub fn set_track_params(
+        &self,
+        handle: SlotHandle,
+        params: TrackParams,
+    ) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::SetTrackParams { handle, params })
+    }
+
+    /// Set the master-bus output gain.
+    pub fn set_master_volume(&self, volume: f32) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::SetMasterVolume { volume })
+    }
+
+    /// Send a raw command to the audio thread. Kept `pub(crate)` so
+    /// that internal tests can drive commands directly while external
+    /// callers are routed through the higher-level API above.
+    pub(crate) fn send_command(&self, cmd: EngineCommand) -> Result<(), CommandError> {
+        let running = self.running.as_ref().ok_or(CommandError::NotRunning)?;
+        running.cmd_tx.try_send(cmd).map_err(|e| match e {
+            TrySendError::Full(_) => CommandError::QueueFull(COMMAND_QUEUE_CAPACITY),
+            TrySendError::Disconnected(_) => CommandError::Disconnected,
+        })
     }
 }
 
@@ -223,8 +395,8 @@ impl Drop for Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
 
     /// Build a runner that immediately reports success, then blocks on
     /// stop_rx. Shared counters let tests observe lifecycle transitions.
@@ -232,11 +404,11 @@ mod tests {
         ready: OpenResult,
         started: Arc<AtomicBool>,
         stopped: Arc<AtomicBool>,
-    ) -> impl FnOnce(EngineConfig, Sender<OpenResult>, Receiver<()>) + Send + 'static {
-        move |_config, ready_tx, stop_rx| {
+    ) -> impl FnOnce(RuntimeContext) + Send + 'static {
+        move |ctx: RuntimeContext| {
             started.store(true, Ordering::SeqCst);
-            let _ = ready_tx.send(ready);
-            let _ = stop_rx.recv();
+            let _ = ctx.ready_tx.send(ready);
+            let _ = ctx.stop_rx.recv();
             stopped.store(true, Ordering::SeqCst);
         }
     }
@@ -286,8 +458,6 @@ mod tests {
         assert!(!stopped.load(Ordering::SeqCst), "stop should not fire yet");
 
         engine.stop();
-        // Give the owner thread a moment to observe stop. stop() joins
-        // the thread so by the time it returns, stopped must be true.
         assert!(stopped.load(Ordering::SeqCst));
         assert!(!engine.is_running());
     }
@@ -324,8 +494,8 @@ mod tests {
     #[test]
     fn stop_is_idempotent() {
         let mut engine = Engine::new();
-        engine.stop(); // stopped → stopped
-        engine.stop(); // still stopped
+        engine.stop();
+        engine.stop();
 
         engine
             .start_with(
@@ -338,7 +508,7 @@ mod tests {
             )
             .unwrap();
         engine.stop();
-        engine.stop(); // second stop after start
+        engine.stop();
         assert!(!engine.is_running());
     }
 
@@ -417,11 +587,11 @@ mod tests {
     }
 
     #[test]
-    fn stream_runner_trait_is_object_safe_via_closures() {
-        // Compile-time guard: FnOnce should satisfy StreamRunner so we can
-        // keep the call-site ergonomic.
+    fn stream_runner_trait_accepts_closures_over_runtime_context() {
+        // Compile-time guard: FnOnce(RuntimeContext) should satisfy
+        // StreamRunner so call sites stay ergonomic.
         fn accept<R: StreamRunner>(_: R) {}
-        accept(|_cfg: EngineConfig, _tx: Sender<OpenResult>, _rx: Receiver<()>| {});
+        accept(|_ctx: RuntimeContext| {});
     }
 
     #[test]
@@ -439,27 +609,380 @@ mod tests {
                     ),
                 )
                 .unwrap();
-            // Engine dropped at end of this block — should clean up.
         }
         assert!(stopped.load(Ordering::SeqCst));
     }
 
     #[test]
     fn runner_that_never_reports_ready_times_out() {
-        // Sanity check: if a runner hangs forever waiting on stop_rx
-        // without sending a ready signal, start() must give up via
-        // OPEN_TIMEOUT rather than block forever. We use a very short
-        // override by shadowing the production timeout via a custom
-        // runner that holds the stop_rx but sends no ready message.
-        //
-        // We do NOT actually wait OPEN_TIMEOUT here (5s) — instead we
-        // verify the *mechanism*: the runner must be send+static and
-        // the error variant must exist. Real timeout behavior is
-        // exercised by the OPEN_TIMEOUT constant being non-zero.
-        //
-        // (A full-speed blocking test would add 5s to CI. Not worth it.)
         assert!(OPEN_TIMEOUT.as_secs() > 0);
-        // Error variant is constructible:
         let _ = EngineError::OpenTimeout(OPEN_TIMEOUT);
+    }
+
+    // ── 2B-1c: command queue plumbing ───────────────────────────────
+
+    /// Runner that records every command it drains off `cmd_rx` into a
+    /// shared vec so tests can assert the audio thread saw exactly the
+    /// commands the main thread sent. Parks on `stop_rx` until the
+    /// engine asks to stop.
+    fn recording_runner(
+        drained: Arc<Mutex<Vec<EngineCommand>>>,
+        drain_started: Arc<AtomicBool>,
+    ) -> impl FnOnce(RuntimeContext) + Send + 'static {
+        move |ctx: RuntimeContext| {
+            let _ = ctx.ready_tx.send(Ok(OpenInfo {
+                active_config: ctx.config.clone(),
+                device_name: "Recording Mock".into(),
+                channels: 2,
+            }));
+            drain_started.store(true, Ordering::SeqCst);
+            // Pull commands until stop fires or the channel disconnects.
+            // When stop fires first, drain the remaining buffered
+            // commands before exiting — otherwise the select! might
+            // pick stop before a still-queued send, losing it.
+            'outer: loop {
+                crossbeam_channel::select! {
+                    recv(ctx.cmd_rx) -> msg => match msg {
+                        Ok(cmd) => drained.lock().unwrap().push(cmd),
+                        Err(_) => break 'outer, // sender dropped
+                    },
+                    recv(ctx.stop_rx) -> _ => {
+                        while let Ok(cmd) = ctx.cmd_rx.try_recv() {
+                            drained.lock().unwrap().push(cmd);
+                        }
+                        break 'outer;
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn add_track_before_start_fails_with_not_running() {
+        let mut engine = Engine::new();
+        assert_eq!(
+            engine.add_track(TrackParams::unity()),
+            Err(CommandError::NotRunning)
+        );
+    }
+
+    #[test]
+    fn set_master_volume_before_start_fails_with_not_running() {
+        let engine = Engine::new();
+        assert_eq!(engine.set_master_volume(0.5), Err(CommandError::NotRunning));
+    }
+
+    #[test]
+    fn add_track_and_remove_track_round_trip_through_audio_thread() {
+        let mut engine = Engine::new();
+        let drained = Arc::new(Mutex::new(Vec::new()));
+        let drain_started = Arc::new(AtomicBool::new(false));
+
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                recording_runner(drained.clone(), drain_started.clone()),
+            )
+            .unwrap();
+
+        // Wait for the runner to enter its drain loop before sending —
+        // otherwise a command sent before the runner is ready could sit
+        // in the channel until the stop fires, which still works but
+        // makes the assertion order fragile.
+        while !drain_started.load(Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+
+        // Centralized allocator — callers never build their own.
+        let h0 = engine.add_track(TrackParams::unity()).unwrap();
+        let h1 = engine
+            .add_track(TrackParams {
+                volume: 0.5,
+                pan: 0.3,
+                mute: false,
+                solo: true,
+            })
+            .unwrap();
+        engine.set_master_volume(0.8).unwrap();
+        engine.remove_track(h0).unwrap();
+
+        engine.stop();
+
+        let got = drained.lock().unwrap();
+        assert_eq!(got.len(), 4, "four commands should have arrived");
+        match got[0] {
+            EngineCommand::AddTrack { handle, params } => {
+                assert_eq!(handle.index(), h0.index());
+                assert_eq!(params, TrackParams::unity());
+            }
+            _ => panic!("expected AddTrack at [0]"),
+        }
+        match got[1] {
+            EngineCommand::AddTrack { handle, params } => {
+                assert_eq!(handle.index(), h1.index());
+                assert!(params.solo);
+            }
+            _ => panic!("expected AddTrack at [1]"),
+        }
+        match got[2] {
+            EngineCommand::SetMasterVolume { volume } => assert_eq!(volume, 0.8),
+            _ => panic!("expected SetMasterVolume at [2]"),
+        }
+        match got[3] {
+            EngineCommand::RemoveTrack { handle } => assert_eq!(handle.index(), h0.index()),
+            _ => panic!("expected RemoveTrack at [3]"),
+        }
+    }
+
+    #[test]
+    fn add_track_hands_out_distinct_slots_through_centralized_allocator() {
+        // Regression guard for codex finding #1 on PR #1698: two
+        // parallel allocators would both mint slot 0 / generation 1,
+        // aliasing commands onto the wrong track. The engine now
+        // owns the single authoritative allocator, so two successive
+        // add_track calls must return distinct slots.
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                recording_runner(
+                    Arc::new(Mutex::new(Vec::new())),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+        let h0 = engine.add_track(TrackParams::unity()).unwrap();
+        let h1 = engine.add_track(TrackParams::unity()).unwrap();
+        let h2 = engine.add_track(TrackParams::unity()).unwrap();
+        assert_ne!(h0.index(), h1.index());
+        assert_ne!(h1.index(), h2.index());
+        assert_ne!(h0.index(), h2.index());
+        engine.stop();
+    }
+
+    #[test]
+    fn remove_track_frees_slot_for_reuse_with_new_generation() {
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                recording_runner(
+                    Arc::new(Mutex::new(Vec::new())),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+        let h0 = engine.add_track(TrackParams::unity()).unwrap();
+        engine.remove_track(h0).unwrap();
+        let h0_again = engine.add_track(TrackParams::unity()).unwrap();
+        assert_eq!(
+            h0.index(),
+            h0_again.index(),
+            "slot index should be reused"
+        );
+        assert_ne!(
+            h0.generation(),
+            h0_again.generation(),
+            "generation should advance so stale commands cannot match"
+        );
+        engine.stop();
+    }
+
+    #[test]
+    fn send_command_returns_queue_full_when_channel_is_saturated() {
+        // Runner that reports ready but then parks on stop_rx WITHOUT
+        // draining any commands, so the channel fills up.
+        fn blocking_runner(ctx: RuntimeContext) {
+            let _ = ctx.ready_tx.send(Ok(OpenInfo {
+                active_config: ctx.config.clone(),
+                device_name: "Blocker".into(),
+                channels: 2,
+            }));
+            let _ = ctx.stop_rx.recv();
+            // ctx.cmd_rx dropped here at return
+        }
+
+        let mut engine = Engine::new();
+        engine
+            .start_with(EngineConfig::default_48k(), blocking_runner)
+            .unwrap();
+
+        // Fill the channel exactly to capacity via set_master_volume
+        // (doesn't consume allocator slots, so the test doesn't spill
+        // into SlotAllocatorFull territory).
+        for _ in 0..COMMAND_QUEUE_CAPACITY {
+            engine.set_master_volume(0.5).unwrap();
+        }
+        // The next send must bounce with QueueFull.
+        match engine.set_master_volume(0.5) {
+            Err(CommandError::QueueFull(cap)) => assert_eq!(cap, COMMAND_QUEUE_CAPACITY),
+            other => panic!("expected QueueFull, got {other:?}"),
+        }
+
+        engine.stop();
+    }
+
+    #[test]
+    fn send_command_after_stop_fails_with_not_running() {
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                fake_runner(
+                    Ok(ok_info()),
+                    Arc::new(AtomicBool::new(false)),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+        engine.stop();
+
+        assert_eq!(
+            engine.set_master_volume(0.5),
+            Err(CommandError::NotRunning)
+        );
+        let mut engine2 = engine;
+        assert_eq!(
+            engine2.add_track(TrackParams::unity()),
+            Err(CommandError::NotRunning)
+        );
+    }
+
+    /// Runner that drains commands slowly (mimicking a throttled
+    /// audio callback) and EXITS CLEAN on stop without draining any
+    /// remaining commands. Used to test that the engine's stop grace
+    /// period flushes the queue before tearing down.
+    fn slow_lossy_runner(
+        drained: Arc<Mutex<Vec<EngineCommand>>>,
+        drain_started: Arc<AtomicBool>,
+        throttle: Duration,
+    ) -> impl FnOnce(RuntimeContext) + Send + 'static {
+        move |ctx: RuntimeContext| {
+            let _ = ctx.ready_tx.send(Ok(OpenInfo {
+                active_config: ctx.config.clone(),
+                device_name: "Slow Lossy".into(),
+                channels: 2,
+            }));
+            drain_started.store(true, Ordering::SeqCst);
+            loop {
+                crossbeam_channel::select! {
+                    recv(ctx.cmd_rx) -> msg => match msg {
+                        Ok(cmd) => {
+                            drained.lock().unwrap().push(cmd);
+                            std::thread::sleep(throttle);
+                        }
+                        Err(_) => return, // sender dropped
+                    },
+                    // Deliberately exit WITHOUT draining remaining
+                    // commands — this mimics the real CPAL stream
+                    // being dropped mid-buffer, where any commands
+                    // still in the channel are lost. The engine's
+                    // stop grace period must flush the queue before
+                    // this branch fires.
+                    recv(ctx.stop_rx) -> _ => return,
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stop_grace_period_drains_pending_commands() {
+        // Regression guard for codex finding #2 on PR #1698: without
+        // a grace period, shutdown signals stop immediately and the
+        // tail of the queue is discarded silently even though every
+        // send_command returned Ok.
+        //
+        // With the 100 ms grace period, a small burst of commands
+        // that drains in under 100 ms must all arrive before the
+        // lossy runner's stop branch fires.
+        let mut engine = Engine::new();
+        let drained = Arc::new(Mutex::new(Vec::new()));
+        let drain_started = Arc::new(AtomicBool::new(false));
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                slow_lossy_runner(
+                    drained.clone(),
+                    drain_started.clone(),
+                    Duration::from_millis(3),
+                ),
+            )
+            .unwrap();
+        while !drain_started.load(Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+
+        // 10 commands × 3 ms throttle = 30 ms to drain, well under
+        // the 100 ms grace period.
+        for i in 0..10 {
+            engine.set_master_volume(i as f32 * 0.1).unwrap();
+        }
+        engine.stop();
+
+        let got = drained.lock().unwrap();
+        assert_eq!(
+            got.len(),
+            10,
+            "grace period must let the runner drain all 10 commands before stop"
+        );
+    }
+
+    #[test]
+    fn slot_allocator_full_returns_distinct_error() {
+        // Build an engine with a mocked allocator that's already
+        // full — this exercises the SlotAllocatorFull error variant
+        // without actually adding 256 tracks one at a time.
+        //
+        // We can't easily mock the internal allocator, so instead
+        // add MAX_TRACKS real tracks and assert the next add_track
+        // bounces with SlotAllocatorFull. This is slow-ish (~256
+        // channel sends) but finishes in under a millisecond.
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                recording_runner(
+                    Arc::new(Mutex::new(Vec::new())),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+
+        // Fill every slot.
+        let mut handles = Vec::with_capacity(MAX_TRACKS);
+        for _ in 0..MAX_TRACKS {
+            handles.push(engine.add_track(TrackParams::unity()).unwrap());
+        }
+
+        // The next add_track must bounce with SlotAllocatorFull.
+        match engine.add_track(TrackParams::unity()) {
+            Err(CommandError::SlotAllocatorFull(cap)) => assert_eq!(cap, MAX_TRACKS),
+            other => panic!("expected SlotAllocatorFull, got {other:?}"),
+        }
+
+        engine.stop();
+    }
+
+    #[test]
+    fn runtime_context_exposes_all_fields() {
+        // Compile-time check: a runner can take ownership of every
+        // field of RuntimeContext. Doubles as smoke test for the
+        // bundled struct shape.
+        let runner = |ctx: RuntimeContext| {
+            let _ = ctx.config;
+            let _ = ctx.graph;
+            let _ = ctx.cmd_rx;
+            let _ = ctx.ready_tx;
+            let _ = ctx.stop_rx;
+        };
+        fn assert_runner<R: StreamRunner>(_: R) {}
+        assert_runner(runner);
+    }
+
+    // Silence unused import warnings in the AtomicUsize test path —
+    // 2B-2 will use AtomicUsize for metering state.
+    #[allow(dead_code)]
+    fn _silence_unused_atomic_usize() {
+        let _ = AtomicUsize::new(0);
     }
 }

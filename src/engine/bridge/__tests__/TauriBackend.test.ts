@@ -108,8 +108,12 @@ describe('TauriBackend', () => {
 
   // ── Methods that should throw (not yet implemented) ───────────────
 
-  it('resume throws (Rust engine not ready)', async () => {
-    await expect(backend.resume()).rejects.toThrow('not yet implemented');
+  it('resume rejects without Tauri runtime', async () => {
+    // resume() now calls invoke('audio_start_engine', ...) which
+    // rejects in a test environment because no Tauri webview
+    // context is available. The specific error message depends on
+    // the @tauri-apps/api internals — we only assert it rejects.
+    await expect(backend.resume()).rejects.toThrow();
   });
 
   it('decodeAudioData throws (Rust engine not ready)', async () => {

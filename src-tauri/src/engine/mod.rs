@@ -29,6 +29,7 @@ pub mod audio_io;
 pub mod command;
 pub mod config;
 pub mod graph;
+pub mod meter;
 pub mod mixer;
 pub mod slot;
 
@@ -38,6 +39,7 @@ pub use config::{
     VALID_SAMPLE_RATES,
 };
 pub use graph::{AudioGraph, Track, MAX_TRACKS};
+pub use meter::{generate_sine, Meter, MeterReading};
 pub use mixer::{equal_power_pan, is_audible};
 pub use slot::{SlotAllocator, SlotHandle};
 

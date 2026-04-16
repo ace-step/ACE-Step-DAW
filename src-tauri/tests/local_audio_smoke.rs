@@ -19,7 +19,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use ace_step_daw_lib::engine::{
-    audio_io, Engine, EngineCommand, EngineConfig, EngineStatus, SlotAllocator, TrackParams,
+    audio_io, Engine, EngineConfig, EngineStatus, TrackParams,
 };
 
 /// Smoke test 1 — device enumeration returns at least one device on a
@@ -156,69 +156,47 @@ fn real_engine_accepts_commands_during_live_playback() {
     let mut engine = Engine::new();
     engine.start(EngineConfig::default_48k()).unwrap();
 
-    let mut alloc = SlotAllocator::with_default_capacity();
-    let h0 = alloc.acquire().unwrap();
-    let h1 = alloc.acquire().unwrap();
-    let h2 = alloc.acquire().unwrap();
-
-    // First burst — every command variant.
-    engine
-        .send_command(EngineCommand::AddTrack {
-            handle: h0,
-            params: TrackParams::unity(),
+    // Centralized allocator — everything goes through Engine::add_track
+    // so handles are unique per running engine.
+    let h0 = engine.add_track(TrackParams::unity()).expect("add h0");
+    let h1 = engine
+        .add_track(TrackParams {
+            volume: 0.7,
+            pan: -0.3,
+            mute: false,
+            solo: false,
         })
-        .expect("AddTrack h0");
-    engine
-        .send_command(EngineCommand::AddTrack {
-            handle: h1,
-            params: TrackParams {
-                volume: 0.7,
-                pan: -0.3,
-                mute: false,
-                solo: false,
-            },
+        .expect("add h1");
+    let h2 = engine
+        .add_track(TrackParams {
+            volume: 0.5,
+            pan: 0.6,
+            mute: false,
+            solo: true,
         })
-        .expect("AddTrack h1");
+        .expect("add h2");
     engine
-        .send_command(EngineCommand::AddTrack {
-            handle: h2,
-            params: TrackParams {
-                volume: 0.5,
-                pan: 0.6,
-                mute: false,
-                solo: true,
-            },
-        })
-        .expect("AddTrack h2");
-    engine
-        .send_command(EngineCommand::SetTrackParams {
-            handle: h0,
-            params: TrackParams {
+        .set_track_params(
+            h0,
+            TrackParams {
                 volume: 0.25,
                 pan: 0.0,
                 mute: false,
                 solo: false,
             },
-        })
-        .expect("SetTrackParams h0");
-    engine
-        .send_command(EngineCommand::SetMasterVolume { volume: 0.8 })
-        .expect("SetMasterVolume 0.8");
+        )
+        .expect("set params h0");
+    engine.set_master_volume(0.8).expect("master 0.8");
 
     // Let the audio callback drain the first burst — at 256 frames /
     // 48 kHz that's ~5.3 ms per callback, so 200 ms gives ~37
-    // iterations, far more than DRAIN_BUDGET can need to clear 5
-    // commands.
+    // iterations.
     sleep(Duration::from_millis(200));
 
     // Second burst — proves commands keep flowing after the first
     // drain completes.
-    engine
-        .send_command(EngineCommand::RemoveTrack { handle: h2 })
-        .expect("RemoveTrack h2");
-    engine
-        .send_command(EngineCommand::SetMasterVolume { volume: 1.0 })
-        .expect("SetMasterVolume 1.0");
+    engine.remove_track(h2).expect("remove h2");
+    engine.set_master_volume(1.0).expect("master 1.0");
 
     sleep(Duration::from_millis(100));
 

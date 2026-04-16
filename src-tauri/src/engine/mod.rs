@@ -100,7 +100,15 @@ pub enum EngineError {
     OpenTimeout(Duration),
 }
 
-/// Errors returned from [`Engine::send_command`].
+/// Grace period the main thread waits for the audio callback to drain
+/// in-flight commands before tearing down the stream. Under normal load
+/// the audio callback drains `COMMAND_DRAIN_BUDGET` commands per ~5 ms
+/// buffer, so a full 1024-command queue takes ~40 ms to flush. 100 ms
+/// covers that with headroom while staying well inside the range a
+/// user would accept as "instant" stop.
+const STOP_GRACE_PERIOD: Duration = Duration::from_millis(100);
+
+/// Errors returned from the command-sending API.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CommandError {
     #[error("engine is not running; start it before sending commands")]
@@ -109,6 +117,8 @@ pub enum CommandError {
     QueueFull(usize),
     #[error("command queue is disconnected (audio thread has exited)")]
     Disconnected,
+    #[error("track slot allocator is full (capacity {0}); cannot add more tracks")]
+    SlotAllocatorFull(usize),
 }
 
 /// Contract for the function that owns a CPAL stream.
@@ -138,19 +148,43 @@ where
 }
 
 /// Live-stream state. When `None`, the engine is stopped.
+///
+/// `slot_alloc` is the single source of truth for track slot
+/// indices. Callers never construct their own [`SlotAllocator`] —
+/// they go through [`Engine::add_track`] / [`Engine::remove_track`]
+/// so every live handle comes from one place. Found by codex review
+/// on PR #1698: two callers each running
+/// `SlotAllocator::with_default_capacity()` would both mint slot 0 /
+/// generation 1, letting one caller's `SetTrackParams` target
+/// another caller's live track.
 struct RunningEngine {
     stop_tx: Sender<()>,
     cmd_tx: Sender<EngineCommand>,
+    slot_alloc: SlotAllocator,
     thread: Option<JoinHandle<()>>,
     status: EngineStatus,
 }
 
 impl RunningEngine {
     fn shutdown(mut self) {
+        // Grace period: give the audio callback a chance to drain
+        // any in-flight commands before we tear down the stream.
+        // Without this, a burst followed by an immediate stop can
+        // silently lose the tail of the queue — every send_command
+        // returned Ok, but the commands never reached the graph
+        // because the stream was dropped mid-drain. Found by codex
+        // review on PR #1698.
+        //
+        // Poll `cmd_tx.is_empty()` rather than sleeping a flat
+        // duration so well-behaved flows shut down quickly and only
+        // pathological ones pay the full ceiling.
+        let grace_deadline = std::time::Instant::now() + STOP_GRACE_PERIOD;
+        while !self.cmd_tx.is_empty() && std::time::Instant::now() < grace_deadline {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+
         // Dropping cmd_tx closes the channel so the audio thread's
-        // try_recv sees Disconnected on the next buffer — matches
-        // the contract that main-thread drop-on-stop is the clean
-        // shutdown path for in-flight commands.
+        // try_recv sees Disconnected on the next buffer.
         drop(self.cmd_tx);
         // Tell the owner thread to drop the stream. A full channel means
         // an earlier stop is still queued — either way the thread will
@@ -223,6 +257,7 @@ impl Engine {
                 self.running = Some(RunningEngine {
                     stop_tx,
                     cmd_tx,
+                    slot_alloc: SlotAllocator::with_default_capacity(),
                     thread: Some(thread),
                     status: status.clone(),
                 });
@@ -271,11 +306,72 @@ impl Engine {
         self.running.is_some()
     }
 
-    /// Send a command to the running audio thread. Non-blocking — if
-    /// the bounded channel is full the command is dropped and
-    /// [`CommandError::QueueFull`] is returned so the caller can decide
-    /// whether to back off or drop the update.
-    pub fn send_command(&self, cmd: EngineCommand) -> Result<(), CommandError> {
+    /// Allocate a track slot and seed it on the audio thread with
+    /// the given params. Returns the allocator handle so subsequent
+    /// `set_track_params` / `remove_track` calls can address the
+    /// same track safely.
+    ///
+    /// This is the **only** supported way to add a track — callers
+    /// must not construct their own [`SlotAllocator`]. Two parallel
+    /// allocators would both mint `slot 0 / generation 1` and let
+    /// one caller's commands target another caller's live track.
+    pub fn add_track(&mut self, params: TrackParams) -> Result<SlotHandle, CommandError> {
+        let running = self.running.as_mut().ok_or(CommandError::NotRunning)?;
+        let handle = running
+            .slot_alloc
+            .acquire()
+            .ok_or(CommandError::SlotAllocatorFull(MAX_TRACKS))?;
+        match running
+            .cmd_tx
+            .try_send(EngineCommand::AddTrack { handle, params })
+        {
+            Ok(()) => Ok(handle),
+            Err(e) => {
+                // Reclaim the slot so a transient queue-full does not
+                // leak an allocator slot until the next stop.
+                running.slot_alloc.release(handle);
+                Err(match e {
+                    TrySendError::Full(_) => CommandError::QueueFull(COMMAND_QUEUE_CAPACITY),
+                    TrySendError::Disconnected(_) => CommandError::Disconnected,
+                })
+            }
+        }
+    }
+
+    /// Remove a previously-added track. Sends `RemoveTrack` to the
+    /// audio thread and releases the slot back to the allocator.
+    /// Stale handles (from a previous generation) are harmless —
+    /// `AudioGraph::apply` generation-checks them out.
+    pub fn remove_track(&mut self, handle: SlotHandle) -> Result<(), CommandError> {
+        let running = self.running.as_mut().ok_or(CommandError::NotRunning)?;
+        match running.cmd_tx.try_send(EngineCommand::RemoveTrack { handle }) {
+            Ok(()) => {
+                running.slot_alloc.release(handle);
+                Ok(())
+            }
+            Err(TrySendError::Full(_)) => Err(CommandError::QueueFull(COMMAND_QUEUE_CAPACITY)),
+            Err(TrySendError::Disconnected(_)) => Err(CommandError::Disconnected),
+        }
+    }
+
+    /// Update the parameters of an already-added track.
+    pub fn set_track_params(
+        &self,
+        handle: SlotHandle,
+        params: TrackParams,
+    ) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::SetTrackParams { handle, params })
+    }
+
+    /// Set the master-bus output gain.
+    pub fn set_master_volume(&self, volume: f32) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::SetMasterVolume { volume })
+    }
+
+    /// Send a raw command to the audio thread. Kept `pub(crate)` so
+    /// that internal tests can drive commands directly while external
+    /// callers are routed through the higher-level API above.
+    pub(crate) fn send_command(&self, cmd: EngineCommand) -> Result<(), CommandError> {
         let running = self.running.as_ref().ok_or(CommandError::NotRunning)?;
         running.cmd_tx.try_send(cmd).map_err(|e| match e {
             TrySendError::Full(_) => CommandError::QueueFull(COMMAND_QUEUE_CAPACITY),
@@ -562,18 +658,22 @@ mod tests {
     }
 
     #[test]
-    fn send_command_before_start_fails_with_not_running() {
-        let engine = Engine::new();
-        let handle = SlotAllocator::with_default_capacity().acquire().unwrap();
-        let cmd = EngineCommand::AddTrack {
-            handle,
-            params: TrackParams::unity(),
-        };
-        assert_eq!(engine.send_command(cmd), Err(CommandError::NotRunning));
+    fn add_track_before_start_fails_with_not_running() {
+        let mut engine = Engine::new();
+        assert_eq!(
+            engine.add_track(TrackParams::unity()),
+            Err(CommandError::NotRunning)
+        );
     }
 
     #[test]
-    fn send_command_is_drained_by_audio_thread() {
+    fn set_master_volume_before_start_fails_with_not_running() {
+        let engine = Engine::new();
+        assert_eq!(engine.set_master_volume(0.5), Err(CommandError::NotRunning));
+    }
+
+    #[test]
+    fn add_track_and_remove_track_round_trip_through_audio_thread() {
         let mut engine = Engine::new();
         let drained = Arc::new(Mutex::new(Vec::new()));
         let drain_started = Arc::new(AtomicBool::new(false));
@@ -593,53 +693,99 @@ mod tests {
             std::thread::yield_now();
         }
 
-        let mut alloc = SlotAllocator::with_default_capacity();
-        let h0 = alloc.acquire().unwrap();
-        let h1 = alloc.acquire().unwrap();
-
-        engine
-            .send_command(EngineCommand::AddTrack {
-                handle: h0,
-                params: TrackParams::unity(),
+        // Centralized allocator — callers never build their own.
+        let h0 = engine.add_track(TrackParams::unity()).unwrap();
+        let h1 = engine
+            .add_track(TrackParams {
+                volume: 0.5,
+                pan: 0.3,
+                mute: false,
+                solo: true,
             })
             .unwrap();
-        engine
-            .send_command(EngineCommand::AddTrack {
-                handle: h1,
-                params: TrackParams {
-                    volume: 0.5,
-                    pan: 0.3,
-                    mute: false,
-                    solo: true,
-                },
-            })
-            .unwrap();
-        engine
-            .send_command(EngineCommand::SetMasterVolume { volume: 0.8 })
-            .unwrap();
+        engine.set_master_volume(0.8).unwrap();
+        engine.remove_track(h0).unwrap();
 
         engine.stop();
 
         let got = drained.lock().unwrap();
-        assert_eq!(got.len(), 3);
+        assert_eq!(got.len(), 4, "four commands should have arrived");
         match got[0] {
             EngineCommand::AddTrack { handle, params } => {
                 assert_eq!(handle.index(), h0.index());
                 assert_eq!(params, TrackParams::unity());
             }
-            _ => panic!("expected AddTrack"),
+            _ => panic!("expected AddTrack at [0]"),
         }
         match got[1] {
             EngineCommand::AddTrack { handle, params } => {
                 assert_eq!(handle.index(), h1.index());
                 assert!(params.solo);
             }
-            _ => panic!("expected AddTrack"),
+            _ => panic!("expected AddTrack at [1]"),
         }
         match got[2] {
             EngineCommand::SetMasterVolume { volume } => assert_eq!(volume, 0.8),
-            _ => panic!("expected SetMasterVolume"),
+            _ => panic!("expected SetMasterVolume at [2]"),
         }
+        match got[3] {
+            EngineCommand::RemoveTrack { handle } => assert_eq!(handle.index(), h0.index()),
+            _ => panic!("expected RemoveTrack at [3]"),
+        }
+    }
+
+    #[test]
+    fn add_track_hands_out_distinct_slots_through_centralized_allocator() {
+        // Regression guard for codex finding #1 on PR #1698: two
+        // parallel allocators would both mint slot 0 / generation 1,
+        // aliasing commands onto the wrong track. The engine now
+        // owns the single authoritative allocator, so two successive
+        // add_track calls must return distinct slots.
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                recording_runner(
+                    Arc::new(Mutex::new(Vec::new())),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+        let h0 = engine.add_track(TrackParams::unity()).unwrap();
+        let h1 = engine.add_track(TrackParams::unity()).unwrap();
+        let h2 = engine.add_track(TrackParams::unity()).unwrap();
+        assert_ne!(h0.index(), h1.index());
+        assert_ne!(h1.index(), h2.index());
+        assert_ne!(h0.index(), h2.index());
+        engine.stop();
+    }
+
+    #[test]
+    fn remove_track_frees_slot_for_reuse_with_new_generation() {
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                recording_runner(
+                    Arc::new(Mutex::new(Vec::new())),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+        let h0 = engine.add_track(TrackParams::unity()).unwrap();
+        engine.remove_track(h0).unwrap();
+        let h0_again = engine.add_track(TrackParams::unity()).unwrap();
+        assert_eq!(
+            h0.index(),
+            h0_again.index(),
+            "slot index should be reused"
+        );
+        assert_ne!(
+            h0.generation(),
+            h0_again.generation(),
+            "generation should advance so stale commands cannot match"
+        );
+        engine.stop();
     }
 
     #[test]
@@ -661,17 +807,14 @@ mod tests {
             .start_with(EngineConfig::default_48k(), blocking_runner)
             .unwrap();
 
-        let handle = SlotAllocator::with_default_capacity().acquire().unwrap();
-        let cmd = EngineCommand::AddTrack {
-            handle,
-            params: TrackParams::unity(),
-        };
-        // Fill the channel exactly to capacity.
+        // Fill the channel exactly to capacity via set_master_volume
+        // (doesn't consume allocator slots, so the test doesn't spill
+        // into SlotAllocatorFull territory).
         for _ in 0..COMMAND_QUEUE_CAPACITY {
-            engine.send_command(cmd).unwrap();
+            engine.set_master_volume(0.5).unwrap();
         }
         // The next send must bounce with QueueFull.
-        match engine.send_command(cmd) {
+        match engine.set_master_volume(0.5) {
             Err(CommandError::QueueFull(cap)) => assert_eq!(cap, COMMAND_QUEUE_CAPACITY),
             other => panic!("expected QueueFull, got {other:?}"),
         }
@@ -694,14 +837,130 @@ mod tests {
             .unwrap();
         engine.stop();
 
-        let handle = SlotAllocator::with_default_capacity().acquire().unwrap();
-        let err = engine
-            .send_command(EngineCommand::AddTrack {
-                handle,
-                params: TrackParams::unity(),
-            })
-            .unwrap_err();
-        assert_eq!(err, CommandError::NotRunning);
+        assert_eq!(
+            engine.set_master_volume(0.5),
+            Err(CommandError::NotRunning)
+        );
+        let mut engine2 = engine;
+        assert_eq!(
+            engine2.add_track(TrackParams::unity()),
+            Err(CommandError::NotRunning)
+        );
+    }
+
+    /// Runner that drains commands slowly (mimicking a throttled
+    /// audio callback) and EXITS CLEAN on stop without draining any
+    /// remaining commands. Used to test that the engine's stop grace
+    /// period flushes the queue before tearing down.
+    fn slow_lossy_runner(
+        drained: Arc<Mutex<Vec<EngineCommand>>>,
+        drain_started: Arc<AtomicBool>,
+        throttle: Duration,
+    ) -> impl FnOnce(RuntimeContext) + Send + 'static {
+        move |ctx: RuntimeContext| {
+            let _ = ctx.ready_tx.send(Ok(OpenInfo {
+                active_config: ctx.config.clone(),
+                device_name: "Slow Lossy".into(),
+                channels: 2,
+            }));
+            drain_started.store(true, Ordering::SeqCst);
+            loop {
+                crossbeam_channel::select! {
+                    recv(ctx.cmd_rx) -> msg => match msg {
+                        Ok(cmd) => {
+                            drained.lock().unwrap().push(cmd);
+                            std::thread::sleep(throttle);
+                        }
+                        Err(_) => return, // sender dropped
+                    },
+                    // Deliberately exit WITHOUT draining remaining
+                    // commands — this mimics the real CPAL stream
+                    // being dropped mid-buffer, where any commands
+                    // still in the channel are lost. The engine's
+                    // stop grace period must flush the queue before
+                    // this branch fires.
+                    recv(ctx.stop_rx) -> _ => return,
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stop_grace_period_drains_pending_commands() {
+        // Regression guard for codex finding #2 on PR #1698: without
+        // a grace period, shutdown signals stop immediately and the
+        // tail of the queue is discarded silently even though every
+        // send_command returned Ok.
+        //
+        // With the 100 ms grace period, a small burst of commands
+        // that drains in under 100 ms must all arrive before the
+        // lossy runner's stop branch fires.
+        let mut engine = Engine::new();
+        let drained = Arc::new(Mutex::new(Vec::new()));
+        let drain_started = Arc::new(AtomicBool::new(false));
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                slow_lossy_runner(
+                    drained.clone(),
+                    drain_started.clone(),
+                    Duration::from_millis(3),
+                ),
+            )
+            .unwrap();
+        while !drain_started.load(Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+
+        // 10 commands × 3 ms throttle = 30 ms to drain, well under
+        // the 100 ms grace period.
+        for i in 0..10 {
+            engine.set_master_volume(i as f32 * 0.1).unwrap();
+        }
+        engine.stop();
+
+        let got = drained.lock().unwrap();
+        assert_eq!(
+            got.len(),
+            10,
+            "grace period must let the runner drain all 10 commands before stop"
+        );
+    }
+
+    #[test]
+    fn slot_allocator_full_returns_distinct_error() {
+        // Build an engine with a mocked allocator that's already
+        // full — this exercises the SlotAllocatorFull error variant
+        // without actually adding 256 tracks one at a time.
+        //
+        // We can't easily mock the internal allocator, so instead
+        // add MAX_TRACKS real tracks and assert the next add_track
+        // bounces with SlotAllocatorFull. This is slow-ish (~256
+        // channel sends) but finishes in under a millisecond.
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                recording_runner(
+                    Arc::new(Mutex::new(Vec::new())),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+
+        // Fill every slot.
+        let mut handles = Vec::with_capacity(MAX_TRACKS);
+        for _ in 0..MAX_TRACKS {
+            handles.push(engine.add_track(TrackParams::unity()).unwrap());
+        }
+
+        // The next add_track must bounce with SlotAllocatorFull.
+        match engine.add_track(TrackParams::unity()) {
+            Err(CommandError::SlotAllocatorFull(cap)) => assert_eq!(cap, MAX_TRACKS),
+            other => panic!("expected SlotAllocatorFull, got {other:?}"),
+        }
+
+        engine.stop();
     }
 
     #[test]

@@ -36,10 +36,16 @@ export class TauriBackend implements AudioBridge {
 
   /**
    * Maps the AudioBridge's string `trackId` to the native engine's
-   * `SlotHandle`. Populated by `ensureTrack`, consumed by
-   * `removeTrack` / `setTrackParams`.
+   * `SlotHandle` + last-known mixer params. The handle may be `null`
+   * while the `audio_add_track` IPC is in-flight — this sentinel
+   * prevents double-allocation if `ensureTrack` is called twice
+   * before the first invoke resolves. Found by codex review on
+   * PR #1700.
    */
-  private _trackHandles = new Map<string, NativeSlotHandle>();
+  private _trackEntries = new Map<string, {
+    handle: NativeSlotHandle | null;
+    params: NativeTrackParams;
+  }>();
 
   // ── Lifecycle ─────────────────────────────────────────────────────
 
@@ -51,7 +57,7 @@ export class TauriBackend implements AudioBridge {
 
   dispose(): void {
     invoke('audio_stop_engine').catch(() => {});
-    this._trackHandles.clear();
+    this._trackEntries.clear();
   }
 
   // ── Transport ─────────────────────────────────────────────────────
@@ -81,43 +87,65 @@ export class TauriBackend implements AudioBridge {
   // ── Track Management ──────────────────────────────────────────────
 
   ensureTrack(trackId: string): void {
-    if (this._trackHandles.has(trackId)) return;
-    // Fire-and-forget: the bridge interface is synchronous but the
-    // IPC is async. We store a pending promise result in the map
-    // once it resolves.
+    if (this._trackEntries.has(trackId)) return;
+    // Insert a sentinel entry synchronously so a second ensureTrack
+    // call before the IPC resolves sees it and returns early — codex
+    // found that without this, two rapid calls would allocate two
+    // native slots for the same logical track. PR #1700.
     const defaultParams: NativeTrackParams = {
       volume: 1,
       pan: 0,
       mute: false,
       solo: false,
     };
+    this._trackEntries.set(trackId, { handle: null, params: defaultParams });
     invoke<NativeSlotHandle>('audio_add_track', { params: defaultParams })
       .then((handle) => {
-        this._trackHandles.set(trackId, handle);
+        const entry = this._trackEntries.get(trackId);
+        if (entry) {
+          entry.handle = handle;
+        }
+        // If removeTrack was called while the IPC was in-flight, the
+        // entry has already been deleted — send a compensating remove
+        // so the native side doesn't leak the slot.
+        if (!this._trackEntries.has(trackId)) {
+          invoke('audio_remove_track', { handle }).catch(() => {});
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        // IPC failed — remove the sentinel so the caller can retry.
+        this._trackEntries.delete(trackId);
+      });
   }
 
   removeTrack(trackId: string): void {
-    const handle = this._trackHandles.get(trackId);
-    if (!handle) return;
-    this._trackHandles.delete(trackId);
-    invoke('audio_remove_track', { handle }).catch(() => {});
+    const entry = this._trackEntries.get(trackId);
+    if (!entry) return;
+    this._trackEntries.delete(trackId);
+    // If the handle hasn't resolved yet (null), the then() handler
+    // above will detect the missing entry and send a compensating
+    // remove. If it has resolved, we remove immediately.
+    if (entry.handle) {
+      invoke('audio_remove_track', { handle: entry.handle }).catch(() => {});
+    }
   }
 
   setTrackParams(trackId: string, params: TrackParams): void {
-    const handle = this._trackHandles.get(trackId);
-    if (!handle) return;
-    // Extract only the fields the Rust mixer supports (volume,
-    // pan, mute, solo). Effect parameters (EQ, compressor, reverb)
-    // will be forwarded once the effect chain lands in 2B-3.
-    const nativeParams: NativeTrackParams = {
-      volume: params.volume ?? 1,
-      pan: params.pan ?? 0,
-      mute: params.muted ?? false,
-      solo: params.soloed ?? false,
-    };
-    invoke('audio_set_track_params', { handle, params: nativeParams }).catch(() => {});
+    const entry = this._trackEntries.get(trackId);
+    if (!entry || !entry.handle) return;
+    // Merge incoming partial params into the cached full state so
+    // omitted fields preserve their existing values — codex found
+    // that defaulting omitted fields to 1/0/false clobbers prior
+    // user settings (e.g. `{ muted: true }` would reset volume to
+    // 1.0 and pan to center). PR #1700.
+    if (params.volume !== undefined) entry.params.volume = params.volume;
+    if (params.pan !== undefined) entry.params.pan = params.pan;
+    if (params.muted !== undefined) entry.params.mute = params.muted;
+    if (params.soloed !== undefined) entry.params.solo = params.soloed;
+    invoke('audio_set_track_params', {
+      handle: entry.handle,
+      params: entry.params,
+    }).catch(() => {});
   }
 
   setTrackGroupRouting(trackId: string, groupId: string | null): void {

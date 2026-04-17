@@ -34,39 +34,49 @@ pub struct MeterProducers {
     pub master_producer: HeapProd<MeterReading>,
 }
 
-/// Main-thread half: owns the ring buffer consumers.
-/// Held by `RunningEngine` so Tauri commands can poll meters.
+/// Main-thread half: owns the ring buffer consumers + a cached
+/// "last known" reading per slot so polls between audio callbacks
+/// return the most recent value rather than silence. Found by codex
+/// review on PR #1703: at 48 kHz / 1024 frames the callback runs at
+/// ~47 Hz while the UI polls at ~60 Hz, causing inter-callback polls
+/// to see zero and making a steady meter flicker.
 pub struct MeterConsumers {
     pub track_consumers: Vec<HeapCons<MeterReading>>,
+    track_cache: Vec<MeterReading>,
     pub master_consumer: HeapCons<MeterReading>,
+    master_cache: MeterReading,
 }
 
 impl MeterConsumers {
-    /// Read the latest meter reading for a track slot. Returns the
-    /// most recent entry in the ring buffer, discarding older ones.
-    /// Returns `MeterReading::default()` (silence) if the buffer is
-    /// empty or the slot is out of range.
+    /// Read the latest meter reading for a track slot. Drains any new
+    /// entries from the ring buffer and caches the most recent. If no
+    /// new entries are available, returns the cached value (the last
+    /// value the audio thread pushed). Out-of-range slots return
+    /// default (silence).
     pub fn read_track(&mut self, slot: usize) -> MeterReading {
-        self.track_consumers
-            .get_mut(slot)
-            .map(drain_latest)
-            .unwrap_or_default()
+        if let Some(cons) = self.track_consumers.get_mut(slot) {
+            let cached = &mut self.track_cache[slot];
+            drain_into(cons, cached);
+            *cached
+        } else {
+            MeterReading::default()
+        }
     }
 
     /// Read the latest master meter reading.
     pub fn read_master(&mut self) -> MeterReading {
-        drain_latest(&mut self.master_consumer)
+        drain_into(&mut self.master_consumer, &mut self.master_cache);
+        self.master_cache
     }
 }
 
-/// Drain the ring buffer and return the last (most recent) entry.
-/// If the buffer is empty, returns `MeterReading::default()`.
-fn drain_latest(consumer: &mut HeapCons<MeterReading>) -> MeterReading {
-    let mut latest = MeterReading::default();
+/// Drain the ring buffer into a cached value. If new entries exist,
+/// the cache is updated to the most recent; if the buffer is empty,
+/// the cache retains its previous value.
+fn drain_into(consumer: &mut HeapCons<MeterReading>, cache: &mut MeterReading) {
     while let Some(reading) = consumer.try_pop() {
-        latest = reading;
+        *cache = reading;
     }
-    latest
 }
 
 /// Create a matched pair of (producers, consumers) pre-allocated for
@@ -97,7 +107,9 @@ pub fn create_meter_pair(sample_rate: f32) -> (MeterProducers, MeterConsumers) {
         },
         MeterConsumers {
             track_consumers,
+            track_cache: vec![MeterReading::default(); MAX_TRACKS],
             master_consumer: master_cons,
+            master_cache: MeterReading::default(),
         },
     )
 }

@@ -287,6 +287,10 @@ fn make_audio_callback(
         for slot in 0..super::graph::MAX_TRACKS {
             let track = &mut graph.all_tracks_mut()[slot];
             if !track.occupied {
+                // Reset stale meter state so a newly-added track at
+                // this slot doesn't inherit the previous occupant's
+                // RMS/peak/clip. Found by codex review on PR #1703.
+                meters.track_meters[slot].reset();
                 continue;
             }
 

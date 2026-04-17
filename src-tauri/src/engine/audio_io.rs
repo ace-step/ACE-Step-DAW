@@ -154,6 +154,7 @@ pub fn run_cpal_output_stream(ctx: RuntimeContext) {
         stop_rx,
         meter_producers,
         track_effects,
+        routing,
     } = ctx;
 
     // Attempt to open the stream. Any error path short-circuits to
@@ -188,7 +189,7 @@ pub fn run_cpal_output_stream(ctx: RuntimeContext) {
         let stream = device
             .build_output_stream(
                 &stream_config,
-                make_audio_callback(graph, cmd_rx, meter_producers, track_effects, config.sample_rate as f32, channels),
+                make_audio_callback(graph, cmd_rx, meter_producers, track_effects, routing, config.sample_rate as f32, channels),
                 err_fn,
                 None,
             )
@@ -250,6 +251,7 @@ fn make_audio_callback(
     cmd_rx: Receiver<EngineCommand>,
     mut meters: MeterProducers,
     mut effects: Vec<super::effect_chain::TrackEffects>,
+    mut routing: super::routing::RoutingState,
     sample_rate: f32,
     channels: u16,
 ) -> impl FnMut(&mut [f32], &cpal::OutputCallbackInfo) + Send + 'static {
@@ -300,17 +302,36 @@ fn make_audio_callback(
                             );
                         }
                     }
+                    // Routing commands — route to RoutingState.
+                    EngineCommand::SetTrackSendLevel {
+                        handle,
+                        bus_index,
+                        level,
+                    } => {
+                        if graph.handle_matches(handle) {
+                            routing.set_send_level(handle.index(), bus_index as usize, level);
+                        }
+                    }
+                    EngineCommand::SetAuxBusVolume { bus_index, volume } => {
+                        if let Some(bus) = routing.buses.get_mut(bus_index as usize) {
+                            bus.volume = volume;
+                        }
+                    }
+                    EngineCommand::SetAuxBusEnabled { bus_index, enabled } => {
+                        if let Some(bus) = routing.buses.get_mut(bus_index as usize) {
+                            bus.enabled = enabled;
+                        }
+                    }
                     other => {
-                        // Reset effects + meter eagerly on RemoveTrack
-                        // so that if AddTrack for the same slot follows
-                        // in the same drain batch, the new track starts
-                        // clean. Without this, the per-track loop finds
-                        // occupied=true (from the re-add) and skips the
-                        // reset. Found by codex review on PR #1705.
+                        // Reset effects + meter + sends eagerly on
+                        // RemoveTrack so that if AddTrack for the same
+                        // slot follows in the same drain batch, the new
+                        // track starts clean.
                         if let EngineCommand::RemoveTrack { handle } = other {
                             if graph.handle_matches(handle) {
                                 effects[handle.index()].reset();
                                 meters.track_meters[handle.index()].reset();
+                                routing.reset_track_sends(handle.index());
                             }
                         }
                         graph.apply(other);
@@ -324,9 +345,10 @@ fn make_audio_callback(
         let frames = if ch > 0 { data.len() / ch } else { data.len() };
         let frames = frames.min(max_frames);
 
-        // Zero the master accumulators for this buffer.
+        // Zero the master accumulators + aux bus buffers for this buffer.
         master_l[..frames].fill(0.0);
         master_r[..frames].fill(0.0);
+        routing.clear_buses(frames);
 
         let any_solo = graph.any_solo();
         let master_vol = graph.master_volume;
@@ -378,14 +400,33 @@ fn make_audio_callback(
             }
 
             // Apply volume + pan and accumulate into master L/R.
+            // Also compute per-frame track L/R for post-fader sends.
             let vol = track.volume;
             let (pan_l, pan_r) = mixer::equal_power_pan(track.pan);
             for i in 0..frames {
                 let s = scratch[i] * vol;
-                master_l[i] += s * pan_l;
-                master_r[i] += s * pan_r;
+                let l = s * pan_l;
+                let r = s * pan_r;
+                master_l[i] += l;
+                master_r[i] += r;
+                // Reuse scratch for the L channel and master_l
+                // contains the running sum, so we can't easily
+                // extract per-track L/R. Instead, compute the
+                // track's L/R contribution in scratch[i] and use
+                // a second pass for sends. (See below.)
             }
+
+            // Post-fader sends: tap the track's panned output and
+            // route to aux buses. We recompute the per-sample
+            // contribution rather than storing a separate buffer to
+            // avoid an extra MAX_FRAMES allocation per track.
+            // Since the send loop only runs for tracks with non-zero
+            // send levels and enabled buses, the cost is bounded.
+            routing.send_from_track_computed(slot, &scratch[..frames], vol, pan_l, pan_r, frames);
         }
+
+        // Mix aux return buses into master BEFORE master volume.
+        routing.mix_into_master(&mut master_l[..frames], &mut master_r[..frames], frames);
 
         // Apply master volume.
         for i in 0..frames {
@@ -474,7 +515,10 @@ mod tests {
         let (_cmd_tx, cmd_rx) = crossbeam_channel::bounded::<EngineCommand>(8);
         let (meter_prods, _meter_cons) = crate::engine::meter_bank::create_meter_pair(48_000.0);
         let track_fx = crate::engine::effect_chain::create_effect_chains(48_000.0);
-        let mut cb = make_audio_callback(graph, cmd_rx, meter_prods, track_fx, 48_000.0, 2);
+        let routing = crate::engine::routing::RoutingState::new(
+            crate::engine::graph::MAX_TRACKS, 1024,
+        );
+        let mut cb = make_audio_callback(graph, cmd_rx, meter_prods, track_fx, routing, 48_000.0, 2);
 
         // We can't easily synthesize a real `OutputCallbackInfo` — its
         // constructor is private inside cpal. The return type of

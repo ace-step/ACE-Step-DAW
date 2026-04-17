@@ -127,6 +127,20 @@ pub enum EngineCommand {
         threshold_db: f32,
         ratio: f32,
     },
+
+    /// Set the send level from a track to an aux bus.
+    /// Generation-checked on the track handle.
+    SetTrackSendLevel {
+        handle: SlotHandle,
+        bus_index: u8,
+        level: f32,
+    },
+
+    /// Set the volume of an aux return bus.
+    SetAuxBusVolume { bus_index: u8, volume: f32 },
+
+    /// Enable or disable an aux return bus.
+    SetAuxBusEnabled { bus_index: u8, enabled: bool },
 }
 
 #[cfg(test)]

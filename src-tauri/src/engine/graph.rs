@@ -242,11 +242,16 @@ impl AudioGraph {
                     t.test_signal = None;
                 }
             }
-            // Effect commands are handled by the audio callback's
-            // command router (which routes them to TrackEffects) rather
-            // than by AudioGraph::apply. They arrive here only if
-            // called directly in tests — ignore them.
-            EngineCommand::SetEqParams { .. } | EngineCommand::SetCompressorParams { .. } => {}
+            // Effect + routing commands are handled by the audio
+            // callback's command router (which routes them to
+            // TrackEffects / RoutingState) rather than by
+            // AudioGraph::apply. They arrive here only if called
+            // directly in tests — ignore them.
+            EngineCommand::SetEqParams { .. }
+            | EngineCommand::SetCompressorParams { .. }
+            | EngineCommand::SetTrackSendLevel { .. }
+            | EngineCommand::SetAuxBusVolume { .. }
+            | EngineCommand::SetAuxBusEnabled { .. } => {}
         }
     }
 

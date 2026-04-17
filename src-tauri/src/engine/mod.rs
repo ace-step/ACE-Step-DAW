@@ -33,6 +33,7 @@ pub mod graph;
 pub mod meter;
 pub mod meter_bank;
 pub mod mixer;
+pub mod routing;
 pub mod slot;
 
 pub use command::{EngineCommand, TrackParams};
@@ -92,6 +93,8 @@ pub struct RuntimeContext {
     pub meter_producers: MeterProducers,
     /// Pre-allocated per-track effect chains.
     pub track_effects: Vec<effect_chain::TrackEffects>,
+    /// Pre-allocated aux send/return routing state.
+    pub routing: routing::RoutingState,
 }
 
 /// Errors surfaced to Tauri command handlers.
@@ -252,6 +255,7 @@ impl Engine {
             stop_rx,
             meter_producers: meter_prods,
             track_effects: effect_chain::create_effect_chains(config.sample_rate as f32),
+            routing: routing::RoutingState::new(MAX_TRACKS, 1024),
         };
 
         let boxed: Box<dyn StreamRunner> = Box::new(runner);

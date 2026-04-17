@@ -153,6 +153,7 @@ pub fn run_cpal_output_stream(ctx: RuntimeContext) {
         ready_tx,
         stop_rx,
         meter_producers,
+        track_effects,
     } = ctx;
 
     // Attempt to open the stream. Any error path short-circuits to
@@ -187,7 +188,7 @@ pub fn run_cpal_output_stream(ctx: RuntimeContext) {
         let stream = device
             .build_output_stream(
                 &stream_config,
-                make_audio_callback(graph, cmd_rx, meter_producers, config.sample_rate as f32, channels),
+                make_audio_callback(graph, cmd_rx, meter_producers, track_effects, config.sample_rate as f32, channels),
                 err_fn,
                 None,
             )
@@ -248,6 +249,7 @@ fn make_audio_callback(
     mut graph: AudioGraph,
     cmd_rx: Receiver<EngineCommand>,
     mut meters: MeterProducers,
+    mut effects: Vec<super::effect_chain::TrackEffects>,
     sample_rate: f32,
     channels: u16,
 ) -> impl FnMut(&mut [f32], &cpal::OutputCallbackInfo) + Send + 'static {
@@ -263,10 +265,43 @@ fn make_audio_callback(
     let ch = channels as usize;
 
     move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
-        // 1. Drain up to COMMAND_DRAIN_BUDGET commands.
+        // 1. Drain up to COMMAND_DRAIN_BUDGET commands. Effect
+        //    commands are routed to the per-track effect chain rather
+        //    than to AudioGraph::apply, because effect state lives
+        //    outside the graph (in the pre-allocated Vec<TrackEffects>).
         for _ in 0..COMMAND_DRAIN_BUDGET {
             match cmd_rx.try_recv() {
-                Ok(cmd) => graph.apply(cmd),
+                Ok(cmd) => match cmd {
+                    EngineCommand::SetEqParams {
+                        handle,
+                        low_gain_db,
+                        mid_gain_db,
+                        high_gain_db,
+                    } => {
+                        if graph.handle_matches(handle) {
+                            effects[handle.index()].set_eq_params(
+                                low_gain_db,
+                                mid_gain_db,
+                                high_gain_db,
+                            );
+                        }
+                    }
+                    EngineCommand::SetCompressorParams {
+                        handle,
+                        enabled,
+                        threshold_db,
+                        ratio,
+                    } => {
+                        if graph.handle_matches(handle) {
+                            effects[handle.index()].set_compressor_params(
+                                enabled,
+                                threshold_db,
+                                ratio,
+                            );
+                        }
+                    }
+                    other => graph.apply(other),
+                },
                 Err(_) => break,
             }
         }
@@ -287,10 +322,11 @@ fn make_audio_callback(
         for slot in 0..super::graph::MAX_TRACKS {
             let track = &mut graph.all_tracks_mut()[slot];
             if !track.occupied {
-                // Reset stale meter state so a newly-added track at
-                // this slot doesn't inherit the previous occupant's
-                // RMS/peak/clip. Found by codex review on PR #1703.
+                // Reset stale meter + effect state so a newly-added
+                // track at this slot doesn't inherit the previous
+                // occupant's RMS/peak/clip or effect parameters.
                 meters.track_meters[slot].reset();
+                effects[slot].reset();
                 continue;
             }
 
@@ -304,9 +340,15 @@ fn make_audio_callback(
                 false
             };
 
-            // Feed per-track meter BEFORE volume/pan/mute so the
-            // meter shows the "raw" signal level, which is the
-            // standard DAW convention (pre-fader metering).
+            // Run per-track effect chain (EQ → Compressor) on the
+            // scratch buffer. Effects are post-signal, pre-fader —
+            // the standard DAW insert chain order.
+            if has_signal {
+                effects[slot].process(&mut scratch[..frames]);
+            }
+
+            // Feed per-track meter AFTER effects but BEFORE volume/pan
+            // (post-effect, pre-fader metering — standard DAW convention).
             if has_signal {
                 meters.track_meters[slot].process(&scratch[..frames]);
             }
@@ -417,7 +459,8 @@ mod tests {
         let graph = AudioGraph::new();
         let (_cmd_tx, cmd_rx) = crossbeam_channel::bounded::<EngineCommand>(8);
         let (meter_prods, _meter_cons) = crate::engine::meter_bank::create_meter_pair(48_000.0);
-        let mut cb = make_audio_callback(graph, cmd_rx, meter_prods, 48_000.0, 2);
+        let track_fx = crate::engine::effect_chain::create_effect_chains(48_000.0);
+        let mut cb = make_audio_callback(graph, cmd_rx, meter_prods, track_fx, 48_000.0, 2);
 
         // We can't easily synthesize a real `OutputCallbackInfo` — its
         // constructor is private inside cpal. The return type of

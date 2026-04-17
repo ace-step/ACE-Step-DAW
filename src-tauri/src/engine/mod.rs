@@ -28,6 +28,7 @@
 pub mod audio_io;
 pub mod command;
 pub mod config;
+pub mod effect_chain;
 pub mod graph;
 pub mod meter;
 pub mod meter_bank;
@@ -89,6 +90,8 @@ pub struct RuntimeContext {
     pub stop_rx: Receiver<()>,
     /// Audio-thread half of the metering ring buffers.
     pub meter_producers: MeterProducers,
+    /// Pre-allocated per-track effect chains.
+    pub track_effects: Vec<effect_chain::TrackEffects>,
 }
 
 /// Errors surfaced to Tauri command handlers.
@@ -248,6 +251,7 @@ impl Engine {
             ready_tx,
             stop_rx,
             meter_producers: meter_prods,
+            track_effects: effect_chain::create_effect_chains(config.sample_rate as f32),
         };
 
         let boxed: Box<dyn StreamRunner> = Box::new(runner);

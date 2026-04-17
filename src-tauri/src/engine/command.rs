@@ -110,6 +110,23 @@ pub enum EngineCommand {
 
     /// Stop any active test signal on a track. Generation-checked.
     StopTestSignal { handle: SlotHandle },
+
+    /// Set the 3-band EQ gains for a track. Generation-checked.
+    /// Gains are in dB: 0 = flat, positive = boost, negative = cut.
+    SetEqParams {
+        handle: SlotHandle,
+        low_gain_db: f32,
+        mid_gain_db: f32,
+        high_gain_db: f32,
+    },
+
+    /// Set compressor parameters for a track. Generation-checked.
+    SetCompressorParams {
+        handle: SlotHandle,
+        enabled: bool,
+        threshold_db: f32,
+        ratio: f32,
+    },
 }
 
 #[cfg(test)]

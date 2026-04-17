@@ -242,6 +242,11 @@ impl AudioGraph {
                     t.test_signal = None;
                 }
             }
+            // Effect commands are handled by the audio callback's
+            // command router (which routes them to TrackEffects) rather
+            // than by AudioGraph::apply. They arrive here only if
+            // called directly in tests — ignore them.
+            EngineCommand::SetEqParams { .. } | EngineCommand::SetCompressorParams { .. } => {}
         }
     }
 
@@ -249,7 +254,7 @@ impl AudioGraph {
     /// and its generation matches the live value stored on the track.
     /// Pulled into its own helper so every validating arm of `apply`
     /// shares the exact same predicate.
-    fn handle_matches(&self, handle: SlotHandle) -> bool {
+    pub fn handle_matches(&self, handle: SlotHandle) -> bool {
         match self.tracks.get(handle.index()) {
             Some(t) => t.occupied && t.generation == handle.generation(),
             None => false,

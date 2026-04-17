@@ -97,6 +97,19 @@ pub enum EngineCommand {
 
     /// Master-bus linear gain. Unconditional — no slot targeting.
     SetMasterVolume { volume: f32 },
+
+    /// Inject a continuous test signal into a track for integration
+    /// testing. The audio callback generates a sine at the given
+    /// frequency and amplitude into the track's contribution buffer.
+    /// Generation-checked like `SetTrackParams`.
+    InjectTestSignal {
+        handle: SlotHandle,
+        frequency: f32,
+        amplitude: f32,
+    },
+
+    /// Stop any active test signal on a track. Generation-checked.
+    StopTestSignal { handle: SlotHandle },
 }
 
 #[cfg(test)]

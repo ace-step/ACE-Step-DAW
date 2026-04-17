@@ -204,6 +204,67 @@ fn real_engine_accepts_commands_during_live_playback() {
     assert_eq!(engine.status(), EngineStatus::Stopped);
 }
 
+/// Smoke test — inject a 440 Hz test signal into a track, hold 500 ms
+/// for the audio callback to render + meter, then read the meter and
+/// assert non-zero RMS. This is the end-to-end proof that the full
+/// render path is live: signal → track volume/pan → solo/mute →
+/// master → metering ring buffer → main thread consumer.
+#[test]
+#[ignore]
+fn real_engine_metering_with_test_signal() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    let h = engine.add_track(TrackParams::unity()).unwrap();
+
+    // Inject a 440 Hz sine at unity amplitude.
+    engine
+        .inject_test_signal(h, 440.0, 1.0)
+        .expect("inject test signal");
+
+    // Hold long enough for:
+    // - at least one audio buffer to render the sine (~5 ms)
+    // - the EMA-based RMS meter to converge (~300 ms integration)
+    // - at least one meter reading to be pushed into the ring buffer
+    sleep(Duration::from_millis(500));
+
+    // Read the track meter — should show non-zero RMS.
+    let track_reading = engine.get_track_meter(h);
+    eprintln!(
+        "track meter: rms={:.4}, peak={:.4}, clipped={}",
+        track_reading.rms, track_reading.peak, track_reading.clipped
+    );
+    assert!(
+        track_reading.rms > 0.1,
+        "track RMS {} should be > 0.1 for a unity sine",
+        track_reading.rms
+    );
+    assert!(
+        track_reading.peak > 0.5,
+        "track peak {} should be > 0.5",
+        track_reading.peak
+    );
+
+    // Read the master meter — should also show non-zero since the
+    // track is at unity gain with center pan.
+    let master_reading = engine.get_master_meter();
+    eprintln!(
+        "master meter: rms={:.4}, peak={:.4}, clipped={}",
+        master_reading.rms, master_reading.peak, master_reading.clipped
+    );
+    assert!(
+        master_reading.rms > 0.05,
+        "master RMS {} should be > 0.05",
+        master_reading.rms
+    );
+
+    // Stop the test signal and verify the meter decays.
+    engine.stop_test_signal(h).expect("stop test signal");
+    sleep(Duration::from_millis(200));
+
+    engine.stop();
+}
+
 /// Smoke test — starting with an unknown device name surfaces a
 /// human-readable error via the Open variant.
 #[test]

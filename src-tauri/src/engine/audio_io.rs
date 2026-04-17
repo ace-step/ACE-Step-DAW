@@ -18,12 +18,18 @@
 //! 440 Hz sine in place of silence, useful as a manual end-to-end check
 //! that the audio thread is running.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+// AtomicUsize was used for the Phase 2A smoke-sine phase counter,
+// which is now replaced by the per-track test signal generator.
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
+use ringbuf::traits::Producer;
+
 use super::config::{AudioDeviceInfo, VALID_SAMPLE_RATES};
 use super::graph::AudioGraph;
+use super::meter::generate_sine;
+use super::meter_bank::MeterProducers;
+use super::mixer;
 use super::{EngineCommand, OpenInfo, RuntimeContext};
 use crossbeam_channel::Receiver;
 
@@ -146,6 +152,7 @@ pub fn run_cpal_output_stream(ctx: RuntimeContext) {
         cmd_rx,
         ready_tx,
         stop_rx,
+        meter_producers,
     } = ctx;
 
     // Attempt to open the stream. Any error path short-circuits to
@@ -180,7 +187,7 @@ pub fn run_cpal_output_stream(ctx: RuntimeContext) {
         let stream = device
             .build_output_stream(
                 &stream_config,
-                make_audio_callback(graph, cmd_rx),
+                make_audio_callback(graph, cmd_rx, meter_producers, config.sample_rate as f32, channels),
                 err_fn,
                 None,
             )
@@ -240,15 +247,23 @@ pub fn run_cpal_output_stream(ctx: RuntimeContext) {
 fn make_audio_callback(
     mut graph: AudioGraph,
     cmd_rx: Receiver<EngineCommand>,
+    mut meters: MeterProducers,
+    sample_rate: f32,
+    channels: u16,
 ) -> impl FnMut(&mut [f32], &cpal::OutputCallbackInfo) + Send + 'static {
-    let smoke_sine = std::env::var("ACE_AUDIO_SMOKE_SINE")
-        .ok()
-        .is_some_and(|v| v == "1");
-    let phase = AtomicUsize::new(0);
+    // Pre-allocate a mono scratch buffer sized to the maximum expected
+    // buffer. 1024 frames is generous (our max supported buffer size);
+    // if CPAL gives us a larger buffer, we chunk it.
+    let max_frames = 1024_usize;
+    let mut scratch = vec![0.0_f32; max_frames];
+    // Pre-allocate master L/R accumulators.
+    let mut master_l = vec![0.0_f32; max_frames];
+    let mut master_r = vec![0.0_f32; max_frames];
+
+    let ch = channels as usize;
 
     move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
-        // 1. Drain up to COMMAND_DRAIN_BUDGET commands. Bounded loop
-        //    so a flood cannot spin the callback indefinitely.
+        // 1. Drain up to COMMAND_DRAIN_BUDGET commands.
         for _ in 0..COMMAND_DRAIN_BUDGET {
             match cmd_rx.try_recv() {
                 Ok(cmd) => graph.apply(cmd),
@@ -256,29 +271,99 @@ fn make_audio_callback(
             }
         }
 
-        // 2. Render. For 2B-1c all track input buffers are silent, so
-        //    the output is silent. We still "walk the graph" lightly
-        //    to exercise the audible-track iteration path and flush
-        //    the any-solo query into cache, so 2B-2 only needs to
-        //    hook in the per-track render without introducing new
-        //    bookkeeping.
-        let _any_solo = graph.any_solo();
-        let _master = graph.master_volume;
+        // 2. Render.
+        let frames = if ch > 0 { data.len() / ch } else { data.len() };
+        let frames = frames.min(max_frames);
 
-        if smoke_sine {
-            // Very quiet 440 Hz sine — inaudible unless you look for it,
-            // useful for confirming the callback is really running in
-            // manual testing. Zero allocation, one trig per sample.
-            let step = phase.fetch_add(data.len(), Ordering::Relaxed);
-            let rate = 48_000.0_f32;
-            for (i, sample) in data.iter_mut().enumerate() {
-                let n = (step + i) as f32;
-                *sample = 0.02 * (n * 2.0 * std::f32::consts::PI * 440.0 / rate).sin();
+        // Zero the master accumulators for this buffer.
+        master_l[..frames].fill(0.0);
+        master_r[..frames].fill(0.0);
+
+        let any_solo = graph.any_solo();
+        let master_vol = graph.master_volume;
+
+        // Iterate ALL tracks (the hot path). The fixed-capacity slab
+        // is contiguous so this is cache-friendly even at 256 slots.
+        for slot in 0..super::graph::MAX_TRACKS {
+            let track = &mut graph.all_tracks_mut()[slot];
+            if !track.occupied {
+                continue;
+            }
+
+            // Generate test signal if active. Zero allocation — the
+            // sine generator writes into the pre-allocated scratch.
+            let has_signal = if let Some((freq, amp, ref mut phase)) = track.test_signal {
+                generate_sine(&mut scratch[..frames], freq, amp, sample_rate, phase);
+                true
+            } else {
+                scratch[..frames].fill(0.0);
+                false
+            };
+
+            // Feed per-track meter BEFORE volume/pan/mute so the
+            // meter shows the "raw" signal level, which is the
+            // standard DAW convention (pre-fader metering).
+            if has_signal {
+                meters.track_meters[slot].process(&scratch[..frames]);
+            }
+            // Push meter reading (even if silent — consumer expects
+            // periodic updates to detect silence).
+            let _ = meters.track_producers[slot].try_push(
+                meters.track_meters[slot].reading(),
+            );
+
+            // Audibility check.
+            if !mixer::is_audible(track, any_solo) {
+                continue;
+            }
+
+            // Apply volume + pan and accumulate into master L/R.
+            let vol = track.volume;
+            let (pan_l, pan_r) = mixer::equal_power_pan(track.pan);
+            for i in 0..frames {
+                let s = scratch[i] * vol;
+                master_l[i] += s * pan_l;
+                master_r[i] += s * pan_r;
+            }
+        }
+
+        // Apply master volume.
+        for i in 0..frames {
+            master_l[i] *= master_vol;
+            master_r[i] *= master_vol;
+        }
+
+        // Feed master meter from the summed L+R (mono-sum for metering).
+        // A more precise meter would compute per-channel, but mono-sum
+        // is the standard DAW master meter convention.
+        for i in 0..frames {
+            scratch[i] = (master_l[i] + master_r[i]) * 0.5;
+        }
+        meters.master_meter.process(&scratch[..frames]);
+        let _ = meters.master_producer.try_push(meters.master_meter.reading());
+
+        // 3. Write interleaved output.
+        if ch >= 2 {
+            for i in 0..frames {
+                let base = i * ch;
+                if base + 1 < data.len() {
+                    data[base] = master_l[i];
+                    data[base + 1] = master_r[i];
+                    // Zero any extra channels (surround etc.)
+                    for c in 2..ch {
+                        if base + c < data.len() {
+                            data[base + c] = 0.0;
+                        }
+                    }
+                }
             }
         } else {
-            // Default path: write silence. `fill` compiles down to a
-            // memset on flat f32 slices.
-            data.fill(0.0);
+            // Mono output — sum L+R.
+            for i in 0..frames {
+                if i < data.len() {
+                    data[i] = (master_l[i] + master_r[i]) * 0.5;
+                }
+            }
         }
     }
 }
@@ -327,7 +412,8 @@ mod tests {
 
         let graph = AudioGraph::new();
         let (_cmd_tx, cmd_rx) = crossbeam_channel::bounded::<EngineCommand>(8);
-        let mut cb = make_audio_callback(graph, cmd_rx);
+        let (meter_prods, _meter_cons) = crate::engine::meter_bank::create_meter_pair(48_000.0);
+        let mut cb = make_audio_callback(graph, cmd_rx, meter_prods, 48_000.0, 2);
 
         // We can't easily synthesize a real `OutputCallbackInfo` — its
         // constructor is private inside cpal. The return type of

@@ -23,10 +23,14 @@ use super::graph::MAX_TRACKS;
 
 /// Default EQ frequencies for the 3-band layout matching the Web Audio
 /// bridge's `eqLowGain` / `eqMidGain` / `eqHighGain` params.
-const EQ_LOW_FREQ: f32 = 200.0;
+/// Aligned with the Web Audio mixer's TrackNode EQ (250 / 1k / 8k Hz,
+/// Q=1.0) so the same `eqLowGain/eqMidGain/eqHighGain` values produce
+/// matching sonic results across both backends. Found by codex review
+/// on PR #1705 — original constants (200/1000/5000, Q=0.707) diverged.
+const EQ_LOW_FREQ: f32 = 250.0;
 const EQ_MID_FREQ: f32 = 1000.0;
-const EQ_HIGH_FREQ: f32 = 5000.0;
-const EQ_Q: f32 = 0.707;
+const EQ_HIGH_FREQ: f32 = 8000.0;
+const EQ_Q: f32 = 1.0;
 
 /// Per-track effect instances.
 pub struct TrackEffects {

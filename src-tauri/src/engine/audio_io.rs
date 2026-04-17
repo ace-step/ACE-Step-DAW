@@ -300,7 +300,21 @@ fn make_audio_callback(
                             );
                         }
                     }
-                    other => graph.apply(other),
+                    other => {
+                        // Reset effects + meter eagerly on RemoveTrack
+                        // so that if AddTrack for the same slot follows
+                        // in the same drain batch, the new track starts
+                        // clean. Without this, the per-track loop finds
+                        // occupied=true (from the re-add) and skips the
+                        // reset. Found by codex review on PR #1705.
+                        if let EngineCommand::RemoveTrack { handle } = other {
+                            if graph.handle_matches(handle) {
+                                effects[handle.index()].reset();
+                                meters.track_meters[handle.index()].reset();
+                            }
+                        }
+                        graph.apply(other);
+                    }
                 },
                 Err(_) => break,
             }

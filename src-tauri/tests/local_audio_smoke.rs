@@ -265,6 +265,76 @@ fn real_engine_metering_with_test_signal() {
     engine.stop();
 }
 
+/// Smoke test — transport position advances during real playback.
+///
+/// Phase 3A end-to-end proof: start the engine, call `transport_play`,
+/// let CPAL run the callback for 200 ms (~37 buffers at 256/48k), then
+/// read `transport_position`. A live stream should have advanced the
+/// counter by roughly 200 ms × 48 kHz = 9600 samples. We accept a
+/// generous window (5000..15000 samples) to absorb scheduling jitter
+/// and first-buffer warm-up without making the test fragile.
+///
+/// Also covers:
+///  - TransportStop rewinds to 0
+///  - TransportSeek jumps to an arbitrary absolute position
+///  - TransportPause preserves position across the pause/resume boundary
+#[test]
+#[ignore]
+fn real_engine_transport_advances_position() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    // Starts at 0 when stopped.
+    assert_eq!(engine.transport_position(), 0);
+
+    // Play for 200 ms — should advance ~9600 samples.
+    engine.transport_play().expect("transport_play");
+    sleep(Duration::from_millis(200));
+    let after_play = engine.transport_position();
+    eprintln!("position after 200 ms of play: {after_play} samples");
+    assert!(
+        (5_000..15_000).contains(&after_play),
+        "position {after_play} should be ~9600 samples (200 ms × 48 kHz) \
+         within a generous 5k–15k window to absorb scheduler jitter"
+    );
+
+    // Pause — position should be preserved, not zeroed.
+    engine.transport_pause().expect("transport_pause");
+    sleep(Duration::from_millis(50));
+    let after_pause = engine.transport_position();
+    eprintln!("position after pause + 50 ms: {after_pause} samples");
+    // Allow a small drift for any buffer already in flight when pause hit.
+    assert!(
+        after_pause >= after_play,
+        "paused position {after_pause} must be >= pre-pause {after_play}"
+    );
+    assert!(
+        after_pause < after_play + 5_000,
+        "paused position {after_pause} must not keep advancing \
+         (pre-pause was {after_play})"
+    );
+
+    // Stop — must rewind to 0.
+    engine.transport_stop().expect("transport_stop");
+    sleep(Duration::from_millis(20));
+    assert_eq!(
+        engine.transport_position(),
+        0,
+        "stop should rewind to 0"
+    );
+
+    // Seek — jump to an arbitrary absolute position without playing.
+    engine.transport_seek(123_456).expect("transport_seek");
+    sleep(Duration::from_millis(20));
+    assert_eq!(
+        engine.transport_position(),
+        123_456,
+        "seek should set the position exactly without drift when stopped"
+    );
+
+    engine.stop();
+}
+
 /// Smoke test — starting with an unknown device name surfaces a
 /// human-readable error via the Open variant.
 #[test]

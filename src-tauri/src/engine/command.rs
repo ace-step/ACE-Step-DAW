@@ -141,6 +141,24 @@ pub enum EngineCommand {
 
     /// Enable or disable an aux return bus.
     SetAuxBusEnabled { bus_index: u8, enabled: bool },
+
+    // ── Transport (3A) ────────────────────────────────────────────────
+
+    /// Begin playback from the current position.
+    TransportPlay,
+
+    /// Stop playback and rewind to position 0.
+    TransportStop,
+
+    /// Stop playback but keep the current position (standard DAW pause).
+    TransportPause,
+
+    /// Jump the transport to an absolute sample position.
+    TransportSeek { sample_position: u64 },
+
+    /// Set a single-BPM tempo. Clamped to the transport's valid range
+    /// (see `transport::{MIN_BPM,MAX_BPM}`). Tempo maps land in 3B.
+    TransportSetTempo { bpm: f32 },
 }
 
 #[cfg(test)]

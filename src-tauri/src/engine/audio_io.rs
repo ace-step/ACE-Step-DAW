@@ -30,6 +30,7 @@ use super::graph::AudioGraph;
 use super::meter::generate_sine;
 use super::meter_bank::MeterProducers;
 use super::mixer;
+use super::transport::Transport;
 use super::{EngineCommand, OpenInfo, RuntimeContext};
 use crossbeam_channel::Receiver;
 
@@ -155,6 +156,7 @@ pub fn run_cpal_output_stream(ctx: RuntimeContext) {
         meter_producers,
         track_effects,
         routing,
+        transport,
     } = ctx;
 
     // Attempt to open the stream. Any error path short-circuits to
@@ -189,7 +191,16 @@ pub fn run_cpal_output_stream(ctx: RuntimeContext) {
         let stream = device
             .build_output_stream(
                 &stream_config,
-                make_audio_callback(graph, cmd_rx, meter_producers, track_effects, routing, config.sample_rate as f32, channels),
+                make_audio_callback(
+                    graph,
+                    cmd_rx,
+                    meter_producers,
+                    track_effects,
+                    routing,
+                    transport,
+                    config.sample_rate as f32,
+                    channels,
+                ),
                 err_fn,
                 None,
             )
@@ -252,6 +263,7 @@ fn make_audio_callback(
     mut meters: MeterProducers,
     mut effects: Vec<super::effect_chain::TrackEffects>,
     mut routing: super::routing::RoutingState,
+    mut transport: Transport,
     sample_rate: f32,
     channels: u16,
 ) -> impl FnMut(&mut [f32], &cpal::OutputCallbackInfo) + Send + 'static {
@@ -322,6 +334,18 @@ fn make_audio_callback(
                             bus.enabled = enabled;
                         }
                     }
+                    // Transport commands (3A) — route to the audio-thread
+                    // `Transport` instance. Position advance happens at
+                    // the tail of the callback, AFTER the drain, so that
+                    // a Seek/Stop received in this buffer takes effect
+                    // before we increment.
+                    EngineCommand::TransportPlay => transport.play(),
+                    EngineCommand::TransportStop => transport.stop(),
+                    EngineCommand::TransportPause => transport.pause(),
+                    EngineCommand::TransportSeek { sample_position } => {
+                        transport.seek(sample_position);
+                    }
+                    EngineCommand::TransportSetTempo { bpm } => transport.set_tempo(bpm),
                     other => {
                         // Reset effects + meter + sends eagerly on
                         // RemoveTrack so that if AddTrack for the same
@@ -466,6 +490,13 @@ fn make_audio_callback(
                 }
             }
         }
+
+        // Advance the transport position. This is the single place in
+        // the engine that moves the timeline forward — no-op when
+        // stopped/paused, otherwise bumps the shared atomic by
+        // `frames`. Downstream phases (3C loop wrap, 3F clip
+        // scheduling) read this counter to decide what to render.
+        transport.advance_if_playing(frames as u64);
     }
 }
 
@@ -518,7 +549,10 @@ mod tests {
         let routing = crate::engine::routing::RoutingState::new(
             crate::engine::graph::MAX_TRACKS, 1024,
         );
-        let mut cb = make_audio_callback(graph, cmd_rx, meter_prods, track_fx, routing, 48_000.0, 2);
+        let transport = crate::engine::transport::Transport::new();
+        let mut cb = make_audio_callback(
+            graph, cmd_rx, meter_prods, track_fx, routing, transport, 48_000.0, 2,
+        );
 
         // We can't easily synthesize a real `OutputCallbackInfo` — its
         // constructor is private inside cpal. The return type of

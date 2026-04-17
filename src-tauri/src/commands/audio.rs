@@ -130,6 +130,71 @@ pub fn audio_set_master_volume(
     engine.set_master_volume(volume)
 }
 
+// ── Transport (3A) ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn audio_transport_play(state: State<'_, EngineState>) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.transport_play()
+}
+
+#[tauri::command]
+pub fn audio_transport_stop(state: State<'_, EngineState>) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.transport_stop()
+}
+
+#[tauri::command]
+pub fn audio_transport_pause(state: State<'_, EngineState>) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.transport_pause()
+}
+
+#[tauri::command]
+pub fn audio_transport_seek(
+    sample_position: u64,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.transport_seek(sample_position)
+}
+
+#[tauri::command]
+pub fn audio_transport_set_tempo(
+    bpm: f32,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.transport_set_tempo(bpm)
+}
+
+/// Read the current transport position in samples. Safe to call at
+/// UI frame rate — reads an atomic counter, no command round-trip.
+/// Returns 0 when the engine is stopped.
+#[tauri::command]
+pub fn audio_transport_get_position(state: State<'_, EngineState>) -> Result<u64, CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.transport_position())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -29,6 +29,8 @@ pub mod audio_io;
 pub mod command;
 pub mod config;
 pub mod graph;
+pub mod meter;
+pub mod meter_bank;
 pub mod mixer;
 pub mod slot;
 
@@ -38,6 +40,8 @@ pub use config::{
     VALID_SAMPLE_RATES,
 };
 pub use graph::{AudioGraph, Track, MAX_TRACKS};
+pub use meter::{generate_sine, Meter, MeterReading};
+pub use meter_bank::{MeterConsumers, MeterProducers};
 pub use mixer::{equal_power_pan, is_audible};
 pub use slot::{SlotAllocator, SlotHandle};
 
@@ -75,15 +79,16 @@ pub struct OpenInfo {
 pub type OpenResult = Result<OpenInfo, String>;
 
 /// Everything a `StreamRunner` needs to take ownership of the audio
-/// path. Bundled into a struct so future additions (metering ring
-/// buffers in 2B-2, effect chain in 2B-3) extend one type instead of
-/// mutating the runner signature repeatedly.
+/// path. Bundled into a struct so future additions extend one type
+/// instead of mutating the runner signature repeatedly.
 pub struct RuntimeContext {
     pub config: EngineConfig,
     pub graph: AudioGraph,
     pub cmd_rx: Receiver<EngineCommand>,
     pub ready_tx: Sender<OpenResult>,
     pub stop_rx: Receiver<()>,
+    /// Audio-thread half of the metering ring buffers.
+    pub meter_producers: MeterProducers,
 }
 
 /// Errors surfaced to Tauri command handlers.
@@ -163,6 +168,7 @@ struct RunningEngine {
     stop_tx: Sender<()>,
     cmd_tx: Sender<EngineCommand>,
     slot_alloc: SlotAllocator,
+    meter_consumers: MeterConsumers,
     thread: Option<JoinHandle<()>>,
     status: EngineStatus,
 }
@@ -232,6 +238,8 @@ impl Engine {
         let (ready_tx, ready_rx) = bounded::<OpenResult>(1);
         let (stop_tx, stop_rx) = bounded::<()>(1);
         let (cmd_tx, cmd_rx) = bounded::<EngineCommand>(COMMAND_QUEUE_CAPACITY);
+        let (meter_prods, meter_cons) =
+            meter_bank::create_meter_pair(config.sample_rate as f32);
 
         let ctx = RuntimeContext {
             config: config.clone(),
@@ -239,6 +247,7 @@ impl Engine {
             cmd_rx,
             ready_tx,
             stop_rx,
+            meter_producers: meter_prods,
         };
 
         let boxed: Box<dyn StreamRunner> = Box::new(runner);
@@ -260,6 +269,7 @@ impl Engine {
                     stop_tx,
                     cmd_tx,
                     slot_alloc: SlotAllocator::with_default_capacity(),
+                    meter_consumers: meter_cons,
                     thread: Some(thread),
                     status: status.clone(),
                 });
@@ -368,6 +378,41 @@ impl Engine {
     /// Set the master-bus output gain.
     pub fn set_master_volume(&self, volume: f32) -> Result<(), CommandError> {
         self.send_command(EngineCommand::SetMasterVolume { volume })
+    }
+
+    /// Read the latest meter reading for a track.
+    pub fn get_track_meter(&mut self, handle: SlotHandle) -> MeterReading {
+        self.running
+            .as_mut()
+            .map(|r| r.meter_consumers.read_track(handle.index()))
+            .unwrap_or_default()
+    }
+
+    /// Read the latest master bus meter reading.
+    pub fn get_master_meter(&mut self) -> MeterReading {
+        self.running
+            .as_mut()
+            .map(|r| r.meter_consumers.read_master())
+            .unwrap_or_default()
+    }
+
+    /// Inject a test signal into a track (for integration testing).
+    pub fn inject_test_signal(
+        &self,
+        handle: SlotHandle,
+        frequency: f32,
+        amplitude: f32,
+    ) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::InjectTestSignal {
+            handle,
+            frequency,
+            amplitude,
+        })
+    }
+
+    /// Stop any active test signal on a track.
+    pub fn stop_test_signal(&self, handle: SlotHandle) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::StopTestSignal { handle })
     }
 
     /// Send a raw command to the audio thread. Kept `pub(crate)` so

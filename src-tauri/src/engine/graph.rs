@@ -59,6 +59,12 @@ pub struct Track {
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
+    /// Active test signal: `Some((frequency, amplitude, phase))`.
+    /// Set by `InjectTestSignal`, cleared by `StopTestSignal` or
+    /// `RemoveTrack`. The audio callback generates a sine into the
+    /// track's contribution when this is `Some`. Phase is carried
+    /// across callbacks for waveform continuity.
+    pub test_signal: Option<(f32, f32, f32)>,
 }
 
 impl Default for Track {
@@ -70,6 +76,7 @@ impl Default for Track {
             pan: 0.0,
             mute: false,
             solo: false,
+            test_signal: None,
         }
     }
 }
@@ -218,6 +225,22 @@ impl AudioGraph {
             }
             EngineCommand::SetMasterVolume { volume } => {
                 self.master_volume = volume;
+            }
+            EngineCommand::InjectTestSignal {
+                handle,
+                frequency,
+                amplitude,
+            } => {
+                if self.handle_matches(handle) {
+                    let t = self.tracks.get_mut(handle.index()).unwrap();
+                    t.test_signal = Some((frequency, amplitude, 0.0));
+                }
+            }
+            EngineCommand::StopTestSignal { handle } => {
+                if self.handle_matches(handle) {
+                    let t = self.tracks.get_mut(handle.index()).unwrap();
+                    t.test_signal = None;
+                }
             }
         }
     }

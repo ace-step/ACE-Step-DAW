@@ -255,7 +255,8 @@ impl AudioGraph {
             | EngineCommand::TransportPlay
             | EngineCommand::TransportStop
             | EngineCommand::TransportPause
-            | EngineCommand::TransportSeek { .. } => {}
+            | EngineCommand::TransportSeek { .. }
+            | EngineCommand::TransportScrub { .. } => {}
         }
     }
 

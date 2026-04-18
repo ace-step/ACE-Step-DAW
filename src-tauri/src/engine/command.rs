@@ -155,6 +155,11 @@ pub enum EngineCommand {
 
     /// Jump the transport to an absolute sample position.
     TransportSeek { sample_position: u64 },
+
+    /// Scrub: move the playhead by a signed sample delta and put
+    /// the transport in `Scrubbing` state. Saturates at 0 and
+    /// u64::MAX rather than wrapping.
+    TransportScrub { delta_samples: i64 },
 }
 
 // Note: `TransportSetTempo` existed in 3A but was removed in 3B once

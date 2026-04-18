@@ -9,9 +9,9 @@ use std::sync::Mutex;
 use tauri::{Emitter, State};
 
 use crate::engine::{
-    audio_io, AudioDeviceInfo, ClipSchedule, ClipSource, CommandError, Engine,
+    audio_io, AudioDeviceInfo, ClipSchedule, ClipSource, CommandError, CountIn, Engine,
     EngineConfig, EngineError, EngineStatus, LoopRegion, MetronomeConfig, PositionEmitter,
-    TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap, TrackParams,
+    PunchRegion, TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap, TrackParams,
     POSITION_EVENT_DEFAULT_INTERVAL,
 };
 use crate::engine::slot::SlotHandle;
@@ -487,6 +487,84 @@ pub fn audio_clip_set_schedule(
 /// snapshot round-trips through `try_new` and hits an invariant
 /// error — prefer surfacing that over silently pretending the
 /// schedule was cleared (Copilot review on PR #1719).
+// ── Transport scrub (3G) ────────────────────────────────────────────
+
+#[tauri::command]
+pub fn audio_transport_scrub(
+    delta_samples: i64,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.transport_scrub(delta_samples)
+}
+
+// ── Punch region (3G) ──────────────────────────────────────────────
+
+#[tauri::command]
+pub fn audio_transport_set_punch_region(
+    region: PunchRegion,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_punch_region(region)
+}
+
+#[tauri::command]
+pub fn audio_transport_get_punch_region(
+    state: State<'_, EngineState>,
+) -> Result<Option<PunchRegion>, CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.punch_region_snapshot())
+}
+
+#[tauri::command]
+pub fn audio_transport_set_punch_enabled(
+    enabled: bool,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_punch_enabled(enabled)
+}
+
+// ── Count-in (3G) ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn audio_transport_set_count_in(
+    config: CountIn,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_count_in(config)
+}
+
+#[tauri::command]
+pub fn audio_transport_get_count_in(
+    state: State<'_, EngineState>,
+) -> Result<Option<CountIn>, CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.count_in_snapshot())
+}
+
+// ── Clip scheduler (3F) - continued ────────────────────────────────
+
 #[tauri::command]
 pub fn audio_clip_get_schedule(
     state: State<'_, EngineState>,

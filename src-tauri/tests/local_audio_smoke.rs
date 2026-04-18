@@ -19,8 +19,8 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use ace_step_daw_lib::engine::{
-    audio_io, ClipSource, Engine, EngineConfig, EngineStatus, LoopRegion, MetronomeConfig,
-    PositionEmitter, TempoEvent, TrackParams,
+    audio_io, ClipSource, CountIn, Engine, EngineConfig, EngineStatus, LoopRegion,
+    MetronomeConfig, PositionEmitter, TempoEvent, TrackParams,
 };
 use std::sync::{Arc, Mutex};
 
@@ -712,6 +712,124 @@ fn real_engine_clip_schedule_plays_pcm() {
     assert!(
         pos > 24_000,
         "transport should have passed sample 24_000 after 1.5s, got {pos}"
+    );
+
+    engine.stop();
+}
+
+/// Smoke test — scrub moves the playhead without auto-advance.
+///
+/// Phase 3G end-to-end proof: call `transport_scrub(delta)`,
+/// observe the position jump by exactly `delta` samples (no
+/// drift from buffer-auto-advance), and confirm the transport
+/// state transitions to Scrubbing (which is not `is_advancing`).
+#[test]
+#[ignore]
+fn real_engine_scrub_moves_playhead_by_delta_only() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    // Seek somewhere in the middle.
+    engine.transport_seek(100_000).expect("seek");
+    sleep(Duration::from_millis(50));
+
+    // Scrub +50_000 samples.
+    engine.transport_scrub(50_000).expect("scrub +");
+    // Wait longer than the audio buffer period, but verify the
+    // position did NOT continue to auto-advance (scrub is
+    // user-driven only).
+    sleep(Duration::from_millis(100));
+    let pos = engine.transport_position();
+    eprintln!("position after scrub +50k: {pos}");
+    assert_eq!(
+        pos, 150_000,
+        "scrub must set position exactly and NOT auto-advance afterwards"
+    );
+
+    // Scrub backward.
+    engine.transport_scrub(-30_000).expect("scrub -");
+    sleep(Duration::from_millis(100));
+    let pos = engine.transport_position();
+    eprintln!("position after scrub -30k: {pos}");
+    assert_eq!(pos, 120_000);
+
+    // Scrub past 0 must saturate.
+    engine.transport_scrub(-999_999_999).expect("scrub huge -");
+    sleep(Duration::from_millis(50));
+    let pos = engine.transport_position();
+    eprintln!("position after scrub -1G: {pos}");
+    assert_eq!(pos, 0, "scrub must saturate at 0, not underflow");
+
+    engine.stop();
+}
+
+/// Smoke test — count-in delays clip audible output by the
+/// configured beats.
+///
+/// Phase 3G end-to-end proof: configure 2-beat count-in at 120 BPM
+/// (= 1 s at 48 kHz = 48 000 samples), schedule a clip at
+/// transport sample 0, play. During the first 1 s of the count-in,
+/// the master should be quiet (no clip audio); after 1 s, the clip
+/// should become audible.
+#[test]
+#[ignore]
+fn real_engine_count_in_suppresses_clip_until_countdown_finishes() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    // Build a 3-second loud stereo clip at transport sample 0.
+    // The clip spans the entire count-in window (1 s) AND well
+    // past it, so we can prove both that it's suppressed during
+    // count-in and still audible after the countdown ends.
+    let frames = 48_000_usize * 3; // 3 s
+    let pcm = std::sync::Arc::new(vec![0.5_f32; frames * 2]);
+    let clip = ClipSource::new(0, frames as u64, 1.0, pcm).expect("ClipSource");
+    engine.set_clip_schedule(vec![clip]).expect("set_clip_schedule");
+
+    // 2-beat count-in at 120 BPM = 1 second.
+    engine
+        .set_count_in(CountIn::new(true, 2))
+        .expect("set_count_in");
+
+    // Go.
+    engine.transport_play().expect("play");
+
+    // Poll every 100 ms for 2 s and show the progression.
+    eprintln!("count-in progression (t_ms, rms, peak, position):");
+    let mut during_peaks: Vec<f32> = Vec::new();
+    let mut after_peaks: Vec<f32> = Vec::new();
+    for step in 1..=20 {
+        sleep(Duration::from_millis(100));
+        let m = engine.get_master_meter();
+        let pos = engine.transport_position();
+        let t = step * 100;
+        eprintln!("  t={t}ms: rms={:.4} peak={:.4} pos={pos}", m.rms, m.peak);
+        // First 1 s is count-in (should be quiet); last 1 s
+        // should be audible.
+        if t < 900 {
+            during_peaks.push(m.peak);
+        } else if t > 1100 {
+            after_peaks.push(m.peak);
+        }
+    }
+
+    let max_during = during_peaks
+        .iter()
+        .copied()
+        .fold(0.0_f32, f32::max);
+    let max_after = after_peaks
+        .iter()
+        .copied()
+        .fold(0.0_f32, f32::max);
+    eprintln!("max peak during count-in: {max_during}, after: {max_after}");
+
+    assert!(
+        max_during < 0.3,
+        "clip should be suppressed during count-in, max peak was {max_during}"
+    );
+    assert!(
+        max_after > 0.2,
+        "clip should be audible after count-in, max peak was {max_after}"
     );
 
     engine.stop();

@@ -30,6 +30,7 @@ use super::graph::AudioGraph;
 use super::meter::generate_sine;
 use super::meter_bank::MeterProducers;
 use super::clip::render_clip_segment;
+use super::count_in::CountInState;
 use super::metronome::{render_metronome_segment, ClickGenerator};
 use super::mixer;
 use super::transport::Transport;
@@ -289,6 +290,11 @@ fn make_audio_callback(
     // that starts near the end of one buffer can decay into the
     // start of the next without truncation.
     let mut click_gen = ClickGenerator::idle();
+    // Count-in countdown. Started when a TransportPlay command is
+    // received with `count_in.enabled`; clip rendering is
+    // suppressed while `remaining_samples > 0`. Metronome keeps
+    // clicking so the user hears the count.
+    let mut count_in_state = CountInState::idle();
 
     let ch = channels as usize;
 
@@ -353,11 +359,40 @@ fn make_audio_callback(
                     // the tail of the callback, AFTER the drain, so that
                     // a Seek/Stop received in this buffer takes effect
                     // before we increment.
-                    EngineCommand::TransportPlay => transport.play(),
-                    EngineCommand::TransportStop => transport.stop(),
-                    EngineCommand::TransportPause => transport.pause(),
+                    EngineCommand::TransportPlay => {
+                        transport.play();
+                        // 3G: start count-in countdown if configured.
+                        // Metronome continues during count-in (so the
+                        // user hears the clicks) but clip scheduler
+                        // is suppressed — see the render block below.
+                        let cfg = transport.count_in_snapshot();
+                        if cfg.enabled && cfg.beats > 0 {
+                            let tempo_guard = transport.tempo_map_handle().load();
+                            let duration = super::count_in::count_in_duration_samples(
+                                cfg.beats,
+                                transport.position(),
+                                &tempo_guard,
+                                sample_rate as u32,
+                            );
+                            count_in_state.start(duration);
+                        } else {
+                            count_in_state.clear();
+                        }
+                    }
+                    EngineCommand::TransportStop => {
+                        transport.stop();
+                        count_in_state.clear();
+                    }
+                    EngineCommand::TransportPause => {
+                        transport.pause();
+                        count_in_state.clear();
+                    }
                     EngineCommand::TransportSeek { sample_position } => {
                         transport.seek(sample_position);
+                    }
+                    EngineCommand::TransportScrub { delta_samples } => {
+                        transport.scrub(delta_samples);
+                        count_in_state.clear();
                     }
                     other => {
                         // Reset effects + meter + sends eagerly on
@@ -478,7 +513,12 @@ fn make_audio_callback(
         // whole buffer. Rare (requires loop shorter than audio
         // buffer — 5-85 ms at typical sample rates) but still needs
         // to be correct. Found by codex review on PR #1719.
-        if transport.state().is_advancing() {
+        //
+        // Count-in (3G): when `count_in_state` is active, clip
+        // rendering is suppressed. Metronome continues — see the
+        // block below — so the user hears the count but no clip
+        // audio leaks through.
+        if transport.state().is_advancing() && !count_in_state.is_active() {
             let clip_schedule_guard = transport.clip_schedule_handle().load();
             let clip_schedule: &super::clip::ClipSchedule = &clip_schedule_guard;
             if !clip_schedule.is_empty() {
@@ -671,6 +711,15 @@ fn make_audio_callback(
                     data[i] = (master_l[i] + master_r[i]) * 0.5;
                 }
             }
+        }
+
+        // Advance count-in countdown in parallel with transport
+        // position (3G). If the countdown finishes inside this
+        // buffer the clip scheduler will start rendering on the
+        // *next* buffer — a one-buffer approximation that keeps
+        // the countdown check out of the per-sample hot path.
+        if count_in_state.is_active() && transport.state().is_advancing() {
+            count_in_state.advance(frames as u64);
         }
 
         // Advance the transport position. This is the single place in

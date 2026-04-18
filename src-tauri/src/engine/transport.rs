@@ -40,8 +40,10 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 
 use super::clip::ClipSchedule;
+use super::count_in::CountIn;
 use super::loop_region::LoopRegion;
 use super::metronome::MetronomeConfig;
+use super::punch_region::PunchRegion;
 use super::tempo_map::TempoMap;
 use super::time_sig_map::TimeSignatureMap;
 
@@ -75,12 +77,21 @@ pub enum TransportState {
 }
 
 impl TransportState {
-    /// Whether the callback should advance the sample counter.
+    /// Whether the audio callback should auto-advance the sample
+    /// counter this buffer.
+    ///
+    /// **Scrubbing is NOT advancing** in the 3G sense: during a
+    /// scrub, the playhead moves only in response to explicit
+    /// user-driven `transport_scrub(delta)` commands, not by
+    /// buffer-linear auto-advance. Clip rendering and metronome
+    /// clicks are also gated on this flag, so a scrubbing
+    /// transport produces no audible output — matching the
+    /// "silent scrub" UX of most native DAWs.
     #[inline]
     pub fn is_advancing(self) -> bool {
         matches!(
             self,
-            TransportState::Playing | TransportState::Recording | TransportState::Scrubbing
+            TransportState::Playing | TransportState::Recording
         )
     }
 }
@@ -194,6 +205,14 @@ pub struct Transport {
     /// `ArcSwap` so the main thread can replace the whole set
     /// without blocking the audio callback.
     clip_schedule: Arc<ArcSwap<ClipSchedule>>,
+    /// Punch (record-arm) region. State-only in 3G — UI queries
+    /// it; future recording code will gate capture on
+    /// `is_active() && contains(playhead)`.
+    punch_region: Arc<ArcSwap<PunchRegion>>,
+    /// Count-in config. The audio callback owns a separate
+    /// `CountInState` (countdown) that's started from this config
+    /// when TransportPlay is received.
+    count_in: Arc<ArcSwap<CountIn>>,
 }
 
 impl Transport {
@@ -208,6 +227,8 @@ impl Transport {
             loop_region: Arc::new(ArcSwap::from_pointee(LoopRegion::disabled())),
             metronome_config: Arc::new(ArcSwap::from_pointee(MetronomeConfig::default_off())),
             clip_schedule: Arc::new(ArcSwap::from_pointee(ClipSchedule::empty())),
+            punch_region: Arc::new(ArcSwap::from_pointee(PunchRegion::disabled())),
+            count_in: Arc::new(ArcSwap::from_pointee(CountIn::default_off())),
         }
     }
 
@@ -291,6 +312,34 @@ impl Transport {
         self.clip_schedule.store(Arc::new(schedule));
     }
 
+    // ── Punch (3G) ──────────────────────────────────────────────────
+
+    pub fn punch_region_handle(&self) -> Arc<ArcSwap<PunchRegion>> {
+        self.punch_region.clone()
+    }
+
+    pub fn punch_region_snapshot(&self) -> PunchRegion {
+        **self.punch_region.load()
+    }
+
+    pub fn replace_punch_region(&mut self, region: PunchRegion) {
+        self.punch_region.store(Arc::new(region));
+    }
+
+    // ── Count-in (3G) ───────────────────────────────────────────────
+
+    pub fn count_in_handle(&self) -> Arc<ArcSwap<CountIn>> {
+        self.count_in.clone()
+    }
+
+    pub fn count_in_snapshot(&self) -> CountIn {
+        **self.count_in.load()
+    }
+
+    pub fn replace_count_in(&mut self, config: CountIn) {
+        self.count_in.store(Arc::new(config));
+    }
+
     /// Snapshot the current tempo map. Cheap — `.load()` is wait-free
     /// and the returned `Arc<TempoMap>` is a counted reference, not a
     /// deep clone.
@@ -325,6 +374,27 @@ impl Transport {
     /// Jump to an absolute sample position. Does not change the state.
     pub fn seek(&mut self, sample: u64) {
         self.position.set(sample);
+    }
+
+    /// Scrub: move the playhead by a signed sample delta and
+    /// transition to `Scrubbing` state. Positive deltas move
+    /// forward, negative move backward. Uses saturating
+    /// arithmetic so a huge negative delta underflows to 0 rather
+    /// than wrapping around to near u64::MAX.
+    ///
+    /// Does NOT auto-wrap on the loop region — scrub is a
+    /// deliberate user gesture; if they drag past the loop end,
+    /// they want to be past the loop, not bounced back. Matches
+    /// the Pro Tools convention.
+    pub fn scrub(&mut self, delta_samples: i64) {
+        self.state = TransportState::Scrubbing;
+        let current = self.position.get();
+        let next = if delta_samples >= 0 {
+            current.saturating_add(delta_samples as u64)
+        } else {
+            current.saturating_sub(delta_samples.unsigned_abs())
+        };
+        self.position.set(next);
     }
 
     /// Set a constant tempo by swapping in a single-event map. For
@@ -522,18 +592,24 @@ mod tests {
     }
 
     #[test]
-    fn recording_and_scrubbing_states_advance_position() {
-        // Recording and Scrubbing share Playing's advance semantics in
-        // 3A — true record/scrub behavior lands in later phases, but
-        // they must not freeze the timeline.
+    fn recording_state_auto_advances_position() {
+        // Recording shares Playing's advance semantics (real
+        // recording gating lands with punch region in 3G+).
         let mut t = Transport::new();
         t.state = TransportState::Recording;
         t.advance_if_advancing(128);
         assert_eq!(t.position(), 128);
+    }
 
+    #[test]
+    fn scrubbing_state_does_not_auto_advance() {
+        // 3G regression: Scrubbing is a user-driven mode; the
+        // audio callback must NOT advance the playhead during
+        // scrub. Only explicit `scrub(delta)` calls move it.
+        let mut t = Transport::new();
         t.state = TransportState::Scrubbing;
         t.advance_if_advancing(128);
-        assert_eq!(t.position(), 256);
+        assert_eq!(t.position(), 0, "scrub state must not auto-advance");
     }
 
     #[test]
@@ -604,7 +680,10 @@ mod tests {
     }
 
     #[test]
-    fn is_advancing_covers_play_record_scrub_but_not_stop_or_pause() {
+    fn is_advancing_covers_play_record_only() {
+        // 3G: Scrubbing is no longer an "advancing" state — the
+        // user drives position explicitly via `scrub(delta)`, and
+        // the audio callback does not auto-advance during scrub.
         assert!(!TransportState::Stopped.is_advancing());
         assert!(
             !TransportState::Paused.is_advancing(),
@@ -612,7 +691,96 @@ mod tests {
         );
         assert!(TransportState::Playing.is_advancing());
         assert!(TransportState::Recording.is_advancing());
-        assert!(TransportState::Scrubbing.is_advancing());
+        assert!(
+            !TransportState::Scrubbing.is_advancing(),
+            "Scrubbing is user-driven — must NOT auto-advance"
+        );
+    }
+
+    // ── 3G: Scrub ────────────────────────────────────────────────────
+
+    #[test]
+    fn scrub_forward_moves_playhead_and_sets_state() {
+        let mut t = Transport::new();
+        t.seek(1000);
+        t.scrub(500);
+        assert_eq!(t.state(), TransportState::Scrubbing);
+        assert_eq!(t.position(), 1500);
+    }
+
+    #[test]
+    fn scrub_backward_moves_playhead_and_sets_state() {
+        let mut t = Transport::new();
+        t.seek(1000);
+        t.scrub(-300);
+        assert_eq!(t.state(), TransportState::Scrubbing);
+        assert_eq!(t.position(), 700);
+    }
+
+    #[test]
+    fn scrub_saturates_at_zero_on_large_negative_delta() {
+        let mut t = Transport::new();
+        t.seek(100);
+        t.scrub(-10_000);
+        assert_eq!(t.position(), 0, "scrub must not underflow to u64::MAX");
+    }
+
+    #[test]
+    fn scrub_saturates_at_u64_max_on_large_positive_delta() {
+        let mut t = Transport::new();
+        t.seek(u64::MAX - 10);
+        t.scrub(i64::MAX);
+        assert_eq!(t.position(), u64::MAX, "scrub must not wrap on overflow");
+    }
+
+    #[test]
+    fn scrub_from_playing_transitions_to_scrubbing() {
+        let mut t = Transport::new();
+        t.play();
+        t.advance_if_advancing(1000);
+        assert_eq!(t.state(), TransportState::Playing);
+        t.scrub(500);
+        assert_eq!(t.state(), TransportState::Scrubbing);
+    }
+
+    // ── 3G: Punch region integration ────────────────────────────────
+
+    #[test]
+    fn new_transport_has_disabled_punch_region() {
+        let t = Transport::new();
+        assert!(!t.punch_region_snapshot().is_active());
+    }
+
+    #[test]
+    fn replace_punch_region_is_visible_via_snapshot_and_handle() {
+        let mut t = Transport::new();
+        let handle = t.punch_region_handle();
+        let region = PunchRegion {
+            enabled: true,
+            start: 1000,
+            end: 5000,
+        };
+        t.replace_punch_region(region);
+        assert_eq!(t.punch_region_snapshot(), region);
+        assert_eq!(**handle.load(), region);
+    }
+
+    // ── 3G: Count-in integration ────────────────────────────────────
+
+    #[test]
+    fn new_transport_has_disabled_count_in() {
+        let t = Transport::new();
+        assert!(!t.count_in_snapshot().enabled);
+    }
+
+    #[test]
+    fn replace_count_in_is_visible_via_snapshot_and_handle() {
+        let mut t = Transport::new();
+        let handle = t.count_in_handle();
+        let cfg = CountIn::new(true, 8);
+        t.replace_count_in(cfg);
+        assert_eq!(t.count_in_snapshot(), cfg);
+        assert_eq!(**handle.load(), cfg);
     }
 
     #[test]

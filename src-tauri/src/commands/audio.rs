@@ -223,9 +223,14 @@ pub fn audio_transport_get_tempo_map(
         .0
         .lock()
         .map_err(|_| CommandError::Disconnected)?;
-    // Clone the snapshotted Arc<TempoMap> into an owned TempoMap for
-    // the wire. This is a small Vec clone, not a full replay of the
-    // automation — cheap even for large maps.
+    // Load the snapshot Arc<TempoMap>, then deep-clone for the
+    // wire. The clone is O(n) in event count — tolerable because
+    // the map is bounded to MAX_TEMPO_EVENTS (1024) and this
+    // command is expected to be polled rarely (tempo map loads on
+    // project open, not at UI frame rate). If this becomes a hot
+    // path, switch to a dedicated "tempo map changed" Tauri event
+    // that pushes on swap instead of a pull-poll.
+    // Copilot review follow-up (PR #1711).
     Ok(engine.tempo_map_snapshot().map(|arc| (*arc).clone()))
 }
 

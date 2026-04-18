@@ -248,18 +248,46 @@ impl TempoMap {
                     let seg_beats = seg_samples / samples_per_beat;
                     if remaining_beats <= seg_beats {
                         // Remainder lands inside this segment.
-                        return seg_start + (remaining_beats * samples_per_beat) as u64;
+                        // Use saturating_add so that a pathologically
+                        // large `beat` input (e.g. the caller asks for
+                        // beat 1e18) can't wrap the u64 — found by
+                        // Copilot review on PR #1711.
+                        let offset = clamp_f64_to_u64(remaining_beats * samples_per_beat);
+                        return seg_start.saturating_add(offset);
                     }
                     remaining_beats -= seg_beats;
                 }
                 None => {
                     // Last (open-ended) segment extends to +∞.
-                    return seg_start + (remaining_beats * samples_per_beat) as u64;
+                    let offset = clamp_f64_to_u64(remaining_beats * samples_per_beat);
+                    return seg_start.saturating_add(offset);
                 }
             }
         }
         // Unreachable given the anchor invariant.
         0
+    }
+}
+
+/// Clamp a possibly-pathological `f64` to a valid `u64` sample
+/// offset. Rules:
+/// - NaN → 0 (garbage input should not silently become huge).
+/// - Negative / zero → 0.
+/// - +∞ or ≥ `u64::MAX - 1` → `u64::MAX - 1` (saturate one below
+///   the max so a subsequent `saturating_add` on a non-zero anchor
+///   stays below `u64::MAX` — useful for downstream code that uses
+///   `u64::MAX` as a sentinel).
+/// - Anything else → `x as u64` (Rust saturates float-to-int casts
+///   since 1.45, so this is also safe on its own; we keep the
+///   explicit guard for readability and `- 1` headroom).
+#[inline]
+fn clamp_f64_to_u64(x: f64) -> u64 {
+    if x.is_nan() || x <= 0.0 {
+        0
+    } else if x >= (u64::MAX - 1) as f64 {
+        u64::MAX - 1
+    } else {
+        x as u64
     }
 }
 
@@ -574,6 +602,31 @@ mod tests {
             }
             other => panic!("expected TooManyEvents, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn beat_to_sample_saturates_on_pathological_input() {
+        // Copilot review regression (PR #1711): before the fix, an
+        // astronomically large beat value would compute a float
+        // offset that casts to `u64::MAX`, then adds to `seg_start`
+        // and wraps. With `clamp_f64_to_u64` + `saturating_add`,
+        // the conversion returns `u64::MAX - 1` instead of wrapping.
+        let map = TempoMap::new_constant(120.0);
+        // 10^18 beats at 120 BPM → ~5e17 s → ~2.4e22 samples —
+        // well beyond u64::MAX (1.8e19).
+        let s = map.beat_to_sample(1e18, 48_000);
+        assert!(s < u64::MAX, "result must not be u64::MAX sentinel");
+        assert!(s > 0, "clamped result should still be positive");
+    }
+
+    #[test]
+    fn clamp_f64_to_u64_handles_edges() {
+        assert_eq!(clamp_f64_to_u64(0.0), 0);
+        assert_eq!(clamp_f64_to_u64(-5.0), 0);
+        assert_eq!(clamp_f64_to_u64(f64::NAN), 0);
+        assert_eq!(clamp_f64_to_u64(f64::INFINITY), u64::MAX - 1);
+        assert_eq!(clamp_f64_to_u64(1e25), u64::MAX - 1);
+        assert_eq!(clamp_f64_to_u64(100.7), 100);
     }
 
     #[test]

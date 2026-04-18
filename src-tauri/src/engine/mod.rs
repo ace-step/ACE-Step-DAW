@@ -308,6 +308,13 @@ impl Engine {
 
         match ready_rx.recv_timeout(OPEN_TIMEOUT) {
             Ok(Ok(info)) => {
+                // Use the ACTIVE sample rate reported by the audio
+                // thread, not the requested config. CPAL is allowed
+                // to fall back (e.g. device doesn't support the
+                // requested rate) — if we cached the requested value,
+                // beat↔sample conversions would drift silently.
+                // Found by Copilot review on PR #1711.
+                let active_sample_rate = info.active_config.sample_rate;
                 let status = EngineStatus::Running {
                     active_config: info.active_config,
                     device_name: info.device_name,
@@ -323,7 +330,7 @@ impl Engine {
                     shared_position,
                     tempo_map: tempo_map_handle,
                     time_sig_map: time_sig_map_handle,
-                    sample_rate: config.sample_rate,
+                    sample_rate: active_sample_rate,
                 });
                 Ok(status)
             }

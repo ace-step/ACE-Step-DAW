@@ -19,8 +19,10 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use ace_step_daw_lib::engine::{
-    audio_io, Engine, EngineConfig, EngineStatus, LoopRegion, TempoEvent, TrackParams,
+    audio_io, Engine, EngineConfig, EngineStatus, LoopRegion, PositionEmitter, TempoEvent,
+    TrackParams,
 };
+use std::sync::{Arc, Mutex};
 
 /// Smoke test 1 — device enumeration returns at least one device on a
 /// machine that has audio hardware. Also exercises the tolerant error
@@ -502,6 +504,78 @@ fn real_engine_loop_wraps_position() {
     );
 
     engine.stop();
+}
+
+/// Smoke test — PositionEmitter pushes ~60 ticks/second with a
+/// live engine running.
+///
+/// Phase 3D end-to-end proof: start the real CPAL engine, use the
+/// exposed `shared_position_handle()` to feed a `PositionEmitter`,
+/// play for 500 ms, and assert:
+///   - tick count is in a sane range for 60 fps (20..60 ticks)
+///   - tick values are monotonically non-decreasing
+///   - at least one value is > 0 (i.e. the engine actually advanced)
+#[test]
+#[ignore]
+fn real_engine_position_emitter_ticks_and_tracks_playback() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    let shared = engine
+        .shared_position_handle()
+        .expect("running engine must expose shared position");
+
+    let samples: Arc<Mutex<Vec<u64>>> = Arc::new(Mutex::new(Vec::new()));
+    let samples_clone = samples.clone();
+    let mut emitter = PositionEmitter::start(
+        shared,
+        Duration::from_millis(16),
+        move |pos| {
+            samples_clone.lock().unwrap().push(pos);
+        },
+    );
+
+    // Play for 500 ms — ~31 ticks at 16 ms interval.
+    engine.transport_play().expect("play");
+    sleep(Duration::from_millis(500));
+
+    emitter.stop();
+    engine.stop();
+
+    let captured = samples.lock().unwrap().clone();
+    let n = captured.len();
+    eprintln!(
+        "captured {n} ticks; first={:?} last={:?}",
+        captured.first(),
+        captured.last()
+    );
+
+    // Tick-count window: 16 ms interval × 500 ms ≈ 31 ticks. Accept
+    // 20..60 to absorb OS scheduler jitter + the "emit immediately
+    // on start" first tick.
+    assert!(
+        (20..=60).contains(&n),
+        "expected ~31 ticks over 500 ms at 16 ms interval, got {n}"
+    );
+
+    // Monotonically non-decreasing (during linear playback without
+    // loop the position only advances).
+    for pair in captured.windows(2) {
+        assert!(
+            pair[1] >= pair[0],
+            "position went backwards: {} → {}",
+            pair[0],
+            pair[1]
+        );
+    }
+
+    // At least one tick must have observed a non-zero position
+    // (proving the engine actually advanced while the emitter was
+    // ticking).
+    assert!(
+        captured.iter().any(|&v| v > 0),
+        "emitter only saw zeros — engine did not advance"
+    );
 }
 
 /// Smoke test — starting with an unknown device name surfaces a

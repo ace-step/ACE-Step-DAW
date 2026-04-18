@@ -34,6 +34,7 @@ pub mod loop_region;
 pub mod meter;
 pub mod meter_bank;
 pub mod mixer;
+pub mod position_emitter;
 pub mod routing;
 pub mod slot;
 pub mod tempo_map;
@@ -47,6 +48,7 @@ pub use config::{
 };
 pub use graph::{AudioGraph, Track, MAX_TRACKS};
 pub use loop_region::LoopRegion;
+pub use position_emitter::{PositionEmitter, DEFAULT_INTERVAL as POSITION_EVENT_DEFAULT_INTERVAL};
 pub use meter::{generate_sine, Meter, MeterReading};
 pub use meter_bank::{MeterConsumers, MeterProducers};
 pub use mixer::{equal_power_pan, is_audible};
@@ -496,6 +498,15 @@ impl Engine {
             .as_ref()
             .map(|r| r.shared_position.get())
             .unwrap_or(0)
+    }
+
+    /// Clone the shared-position handle. External readers (the
+    /// [`position_emitter::PositionEmitter`] background thread, UI
+    /// poller, Tauri event pusher) use this to observe the atomic
+    /// counter without going through the engine mutex or the
+    /// command queue. Returns `None` when the engine is stopped.
+    pub fn shared_position_handle(&self) -> Option<SharedPosition> {
+        self.running.as_ref().map(|r| r.shared_position.clone())
     }
 
     // ── Transport tempo / time-signature maps (3B) ──────────────────

@@ -155,11 +155,13 @@ pub enum EngineCommand {
 
     /// Jump the transport to an absolute sample position.
     TransportSeek { sample_position: u64 },
-
-    /// Set a single-BPM tempo. Clamped to the transport's valid range
-    /// (see `transport::{MIN_BPM,MAX_BPM}`). Tempo maps land in 3B.
-    TransportSetTempo { bpm: f32 },
 }
+
+// Note: `TransportSetTempo` existed in 3A but was removed in 3B once
+// the ArcSwap<TempoMap> path shipped — see `Engine::transport_set_tempo`.
+// Sending tempo through the command queue would race against direct
+// `ArcSwap::store` from `set_tempo_map`, so both paths now publish via
+// the same ArcSwap and a later call unambiguously wins.
 
 #[cfg(test)]
 mod tests {

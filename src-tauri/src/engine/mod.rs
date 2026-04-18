@@ -454,9 +454,24 @@ impl Engine {
         self.send_command(EngineCommand::TransportSeek { sample_position })
     }
 
-    /// Set the transport tempo. Clamped on the audio thread.
+    /// Set a constant tempo by publishing a single-event map via
+    /// the same `ArcSwap` channel that [`set_tempo_map`] uses.
+    /// Returns `Err(NotRunning)` if the engine is stopped.
+    ///
+    /// **Ordering**: `set_tempo` and `set_tempo_map` now share one
+    /// publication channel, so a later call unambiguously wins —
+    /// there is no race where a queued `set_tempo` could arrive
+    /// after a later `set_tempo_map` and clobber it. Found by codex
+    /// review on PR #1711 (P1): prior version routed `set_tempo`
+    /// through the audio-thread command queue while `set_tempo_map`
+    /// wrote the `ArcSwap` immediately, creating two uncoordinated
+    /// write paths.
     pub fn transport_set_tempo(&self, bpm: f32) -> Result<(), CommandError> {
-        self.send_command(EngineCommand::TransportSetTempo { bpm })
+        let running = self.running.as_ref().ok_or(CommandError::NotRunning)?;
+        running
+            .tempo_map
+            .store(Arc::new(TempoMap::new_constant(bpm)));
+        Ok(())
     }
 
     /// Snapshot the current transport sample position. Reads the
@@ -1201,7 +1216,9 @@ mod tests {
             EngineCommand::TransportStop => transport.stop(),
             EngineCommand::TransportPause => transport.pause(),
             EngineCommand::TransportSeek { sample_position } => transport.seek(sample_position),
-            EngineCommand::TransportSetTempo { bpm } => transport.set_tempo(bpm),
+            // TransportSetTempo was removed in 3B — tempo now flows
+            // through the ArcSwap<TempoMap> on the main thread, not
+            // the command queue.
             _ => {}
         }
     }
@@ -1231,25 +1248,34 @@ mod tests {
 
         engine.transport_play().unwrap();
         engine.transport_seek(48_000).unwrap();
+        // transport_set_tempo in 3B writes ArcSwap directly — not the
+        // command queue — so it is NOT counted among the drained
+        // commands here. It is covered by the 3B ArcSwap tests instead.
         engine.transport_set_tempo(140.0).unwrap();
         engine.transport_pause().unwrap();
         engine.transport_stop().unwrap();
 
+        // Observe the set_tempo effect on the ArcSwap map BEFORE
+        // stopping the engine — tempo_map_snapshot returns None
+        // once the engine is stopped (handle-to-RunningEngine).
+        let snap = engine.tempo_map_snapshot().unwrap();
+        assert_eq!(snap.events()[0].bpm, 140.0);
+
         engine.stop();
 
         let got = drained.lock().unwrap();
-        assert_eq!(got.len(), 5, "five transport commands should have arrived");
+        assert_eq!(
+            got.len(),
+            4,
+            "four transport commands should have arrived (set_tempo bypasses queue)"
+        );
         assert!(matches!(got[0], EngineCommand::TransportPlay));
         assert!(matches!(
             got[1],
             EngineCommand::TransportSeek { sample_position: 48_000 }
         ));
-        assert!(matches!(
-            got[2],
-            EngineCommand::TransportSetTempo { bpm } if (bpm - 140.0).abs() < f32::EPSILON
-        ));
-        assert!(matches!(got[3], EngineCommand::TransportPause));
-        assert!(matches!(got[4], EngineCommand::TransportStop));
+        assert!(matches!(got[2], EngineCommand::TransportPause));
+        assert!(matches!(got[3], EngineCommand::TransportStop));
     }
 
     #[test]
@@ -1397,6 +1423,62 @@ mod tests {
         let snap = engine.time_signature_map_snapshot().unwrap();
         assert_eq!(snap.signature_at(0), (4, 4));
         assert_eq!(snap.signature_at(96_000), (3, 4));
+
+        engine.stop();
+    }
+
+    #[test]
+    fn transport_set_tempo_and_set_tempo_map_share_ordering_domain() {
+        // Regression for codex P1 finding on PR #1711: before the
+        // fix, `transport_set_tempo` routed through the audio-thread
+        // command queue while `set_tempo_map` wrote the ArcSwap
+        // directly. A later `set_tempo_map` could arrive BEFORE an
+        // earlier `set_tempo` because the queue path was slower,
+        // and the later call would be silently clobbered.
+        //
+        // After the fix, both paths write the same ArcSwap, so a
+        // later call always wins from the main thread's linearized
+        // view. Synchronously verify by issuing a set_tempo and
+        // reading back immediately.
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                fake_runner(
+                    Ok(ok_info()),
+                    Arc::new(AtomicBool::new(false)),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+
+        // Multi-point automation first.
+        engine
+            .set_tempo_map(vec![
+                TempoEvent::new(0, 60.0),
+                TempoEvent::new(48_000, 120.0),
+            ])
+            .unwrap();
+
+        // A set_tempo AFTER that must be IMMEDIATELY visible (no
+        // queue round-trip), replacing the automation with a
+        // constant 90.
+        engine.transport_set_tempo(90.0).unwrap();
+        let snap = engine.tempo_map_snapshot().unwrap();
+        assert_eq!(snap.events().len(), 1, "set_tempo should reduce the map to a single event");
+        assert_eq!(snap.events()[0].bpm, 90.0);
+
+        // And the reverse: a set_tempo_map AFTER a set_tempo wins.
+        engine.transport_set_tempo(100.0).unwrap();
+        engine
+            .set_tempo_map(vec![
+                TempoEvent::new(0, 77.0),
+                TempoEvent::new(96_000, 133.0),
+            ])
+            .unwrap();
+        let snap = engine.tempo_map_snapshot().unwrap();
+        assert_eq!(snap.events().len(), 2);
+        assert_eq!(snap.events()[0].bpm, 77.0);
 
         engine.stop();
     }

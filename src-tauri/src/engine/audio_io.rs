@@ -353,7 +353,6 @@ fn make_audio_callback(
                     EngineCommand::TransportSeek { sample_position } => {
                         transport.seek(sample_position);
                     }
-                    EngineCommand::TransportSetTempo { bpm } => transport.set_tempo(bpm),
                     other => {
                         // Reset effects + meter + sends eagerly on
                         // RemoveTrack so that if AddTrack for the same

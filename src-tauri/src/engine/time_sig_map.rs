@@ -72,7 +72,16 @@ pub enum TimeSignatureMapError {
     Empty,
     NotSortedOrDuplicate,
     MissingAnchor,
+    /// The event count exceeds [`MAX_TIME_SIGNATURE_EVENTS`]. Bounds
+    /// the worst-case scan on `signature_at`.
+    TooManyEvents(usize),
 }
+
+/// Upper bound on the number of events in a single time-signature
+/// map. 256 is an order-of-magnitude bigger than any realistic song
+/// needs (one signature change per bar for a 256-bar piece), and
+/// keeps `signature_at`'s worst-case scan small.
+pub const MAX_TIME_SIGNATURE_EVENTS: usize = 256;
 
 /// A time-signature map with the same invariants as
 /// [`super::tempo_map::TempoMap`]:
@@ -92,9 +101,22 @@ impl TimeSignatureMap {
         }
     }
 
+    /// Validated constructor.
+    ///
+    /// **Numerator/denominator normalization**: every incoming event
+    /// is re-run through [`TimeSignatureEvent::new`], so a raw
+    /// deserialized payload with `numerator: 0` / a non-power-of-two
+    /// denominator is silently snapped to `4/4` instead of reaching
+    /// the audio thread with advertised-invariant-violating values.
+    /// This matters because the serde boundary otherwise bypasses
+    /// the `TimeSignatureEvent::new` constructor (found by codex
+    /// review on PR #1711).
     pub fn try_new(events: Vec<TimeSignatureEvent>) -> Result<Self, TimeSignatureMapError> {
         if events.is_empty() {
             return Err(TimeSignatureMapError::Empty);
+        }
+        if events.len() > MAX_TIME_SIGNATURE_EVENTS {
+            return Err(TimeSignatureMapError::TooManyEvents(events.len()));
         }
         if events[0].at_sample != 0 {
             return Err(TimeSignatureMapError::MissingAnchor);
@@ -104,7 +126,11 @@ impl TimeSignatureMap {
                 return Err(TimeSignatureMapError::NotSortedOrDuplicate);
             }
         }
-        Ok(Self { events })
+        let normalized = events
+            .into_iter()
+            .map(|e| TimeSignatureEvent::new(e.at_sample, e.numerator, e.denominator))
+            .collect();
+        Ok(Self { events: normalized })
     }
 
     pub fn events(&self) -> &[TimeSignatureEvent] {
@@ -229,6 +255,40 @@ mod tests {
         assert!(json.contains("\"denominator\":4"));
         let back: TimeSignatureEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(back, ev);
+    }
+
+    // ── Codex P2 regression: serde-bypass numerator/denominator ──────
+
+    #[test]
+    fn try_new_normalizes_bypass_values() {
+        // A crafted JSON payload could construct TimeSignatureEvent
+        // with numerator=0 or a non-power-of-two denominator,
+        // bypassing TimeSignatureEvent::new's clamp. try_new must
+        // still normalize via the constructor.
+        let raw = vec![
+            TimeSignatureEvent { at_sample: 0, numerator: 0, denominator: 5 },
+            TimeSignatureEvent { at_sample: 48_000, numerator: 99, denominator: 4 },
+        ];
+        let map = TimeSignatureMap::try_new(raw).expect("must accept and normalize");
+        // 0 numerator → clamped to MIN_NUMERATOR (1).
+        assert_eq!(map.events()[0].numerator, MIN_NUMERATOR);
+        // 5 is not a valid denominator → snapped to 4.
+        assert_eq!(map.events()[0].denominator, 4);
+        // 99 clamped to MAX_NUMERATOR.
+        assert_eq!(map.events()[1].numerator, MAX_NUMERATOR);
+    }
+
+    #[test]
+    fn try_new_rejects_too_many_events() {
+        let too_many: Vec<TimeSignatureEvent> = (0..MAX_TIME_SIGNATURE_EVENTS + 1)
+            .map(|i| TimeSignatureEvent::new((i as u64) * 48_000, 4, 4))
+            .collect();
+        match TimeSignatureMap::try_new(too_many) {
+            Err(TimeSignatureMapError::TooManyEvents(n)) => {
+                assert_eq!(n, MAX_TIME_SIGNATURE_EVENTS + 1);
+            }
+            other => panic!("expected TooManyEvents, got {other:?}"),
+        }
     }
 
     #[test]

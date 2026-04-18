@@ -71,7 +71,19 @@ pub enum TempoMapError {
     /// The first event is not at sample 0. Without an anchor the
     /// map cannot answer `bpm_at(0)`.
     MissingAnchor,
+    /// The event count exceeds [`MAX_TEMPO_EVENTS`]. Bounding the
+    /// map size keeps the audio-thread lookup (`bpm_at`) worst-case
+    /// scan bounded.
+    TooManyEvents(usize),
 }
+
+/// Upper bound on the number of events in a single tempo map. Caps
+/// the worst-case scan cost of [`TempoMap::bpm_at`] /
+/// [`TempoMap::sample_to_beat`] / [`TempoMap::beat_to_sample`]. 1024
+/// entries is two tempo events per bar for a 512-bar piece — more
+/// than any realistic song needs, and well within what an audio
+/// thread can afford to scan on a hot path.
+pub const MAX_TEMPO_EVENTS: usize = 1024;
 
 /// A tempo map: sorted list of `(sample_position, bpm)` events, with
 /// piecewise-constant integration between events.
@@ -101,9 +113,22 @@ impl TempoMap {
     /// above are violated. Used by the Tauri command handler to
     /// surface "bad tempo map" to the UI instead of letting a
     /// malformed map reach the audio thread.
+    ///
+    /// **BPM normalization**: every incoming event is re-run through
+    /// [`TempoEvent::new`], so a deserialized payload with
+    /// `bpm = 0.0` / NaN / ±∞ / out-of-range values is silently
+    /// clamped instead of poisoning the map. This matters because
+    /// the serde boundary otherwise bypasses the `TempoEvent::new`
+    /// constructor: a raw JSON `{"atSample": 0, "bpm": 0}` would
+    /// deserialize straight through, and `beat_to_sample` would
+    /// then divide by zero and overflow the `f64 -> u64` cast
+    /// (found by codex review on PR #1711).
     pub fn try_new(events: Vec<TempoEvent>) -> Result<Self, TempoMapError> {
         if events.is_empty() {
             return Err(TempoMapError::Empty);
+        }
+        if events.len() > MAX_TEMPO_EVENTS {
+            return Err(TempoMapError::TooManyEvents(events.len()));
         }
         if events[0].at_sample != 0 {
             return Err(TempoMapError::MissingAnchor);
@@ -114,7 +139,13 @@ impl TempoMap {
                 return Err(TempoMapError::NotSortedOrDuplicate);
             }
         }
-        Ok(Self { events })
+        // Normalize BPM on every event to close the serde-bypass
+        // hole described in the docstring.
+        let normalized = events
+            .into_iter()
+            .map(|e| TempoEvent::new(e.at_sample, e.bpm))
+            .collect();
+        Ok(Self { events: normalized })
     }
 
     /// Borrow the raw events. Intended for read-only inspection on
@@ -194,7 +225,18 @@ impl TempoMap {
         let sr = sample_rate as f64;
         let mut remaining_beats = beat;
         for i in 0..self.events.len() {
-            let bpm = self.events[i].bpm as f64;
+            // Defense in depth: clamp BPM to the valid range even if
+            // the map somehow got past `try_new` with an invalid
+            // value. Without this, bpm == 0 would produce
+            // samples_per_beat = +∞, and `(remaining_beats * +∞) as u64`
+            // is `u64::MAX` — which then overflows when added to
+            // `seg_start`. Found by codex review on PR #1711.
+            let raw = self.events[i].bpm as f64;
+            let bpm = if raw.is_finite() && raw > 0.0 {
+                raw.clamp(MIN_BPM as f64, MAX_BPM as f64)
+            } else {
+                DEFAULT_BPM as f64
+            };
             let samples_per_beat = 60.0 * sr / bpm;
 
             let seg_start = self.events[i].at_sample;
@@ -473,6 +515,73 @@ mod tests {
         // Round-trip.
         let back: TempoEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(back, ev);
+    }
+
+    // ── Codex P1 regression: serde-bypass BPM injection ──────────────
+
+    #[test]
+    fn try_new_normalizes_zero_bpm_via_tempo_event_new() {
+        // Regression for codex finding on PR #1711: a crafted JSON
+        // payload with bpm=0 would previously slip past try_new's
+        // validation and poison beat_to_sample (div by zero →
+        // `inf as u64` → overflow).
+        //
+        // We simulate the serde-bypass path by hand-constructing
+        // TempoEvent values with fields set directly (bypassing
+        // TempoEvent::new's clamp).
+        let raw = vec![
+            TempoEvent { at_sample: 0, bpm: 0.0 },
+            TempoEvent { at_sample: 48_000, bpm: f32::NAN },
+            TempoEvent { at_sample: 96_000, bpm: f32::INFINITY },
+        ];
+        let map = TempoMap::try_new(raw).expect("try_new must accept and normalize");
+        assert_eq!(map.events()[0].bpm, MIN_BPM, "0 bpm snapped to MIN_BPM");
+        assert_eq!(map.events()[1].bpm, DEFAULT_BPM, "NaN snapped to default");
+        assert_eq!(map.events()[2].bpm, DEFAULT_BPM, "inf snapped to default");
+
+        // And the conversion math no longer overflows.
+        let s = map.beat_to_sample(100.0, 48_000);
+        assert!(s > 0, "should return a real sample, not 0 or overflow");
+        assert!(s < u64::MAX / 2, "should not be overflow sentinel");
+    }
+
+    #[test]
+    fn beat_to_sample_defense_in_depth_clamps_stored_bad_bpm() {
+        // Even if an event somehow got past try_new with bad BPM,
+        // beat_to_sample itself must clamp to the valid range so
+        // divide-by-zero / overflow cannot escape.
+        //
+        // We have to build the map bypassing try_new entirely to
+        // hit this path, so do so via direct struct construction.
+        let map = TempoMap {
+            events: vec![TempoEvent { at_sample: 0, bpm: 0.0 }],
+        };
+        let s = map.beat_to_sample(4.0, 48_000);
+        assert!(
+            s > 0 && s < u64::MAX / 2,
+            "beat_to_sample should clamp bad BPM and return a sane value, got {s}"
+        );
+    }
+
+    #[test]
+    fn try_new_rejects_too_many_events() {
+        let too_many: Vec<TempoEvent> = (0..MAX_TEMPO_EVENTS + 1)
+            .map(|i| TempoEvent::new((i as u64) * 48_000, 120.0))
+            .collect();
+        match TempoMap::try_new(too_many) {
+            Err(TempoMapError::TooManyEvents(n)) => {
+                assert_eq!(n, MAX_TEMPO_EVENTS + 1);
+            }
+            other => panic!("expected TooManyEvents, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn try_new_accepts_max_events_exactly() {
+        let max: Vec<TempoEvent> = (0..MAX_TEMPO_EVENTS)
+            .map(|i| TempoEvent::new((i as u64) * 48_000, 120.0))
+            .collect();
+        assert!(TempoMap::try_new(max).is_ok());
     }
 
     #[test]

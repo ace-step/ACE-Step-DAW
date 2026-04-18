@@ -15,11 +15,16 @@
 //!   publish the sample offset with a plain atomic store, and the UI
 //!   thread can snapshot it with an atomic load. No locks, no channels
 //!   needed for the read path.
-//! - `Ordering::Relaxed` is sufficient for both sides: the position is
-//!   monotonic within a Playing run (audio callback only increments it),
-//!   and a single-producer / multi-consumer counter does not need
-//!   ordering relative to other memory operations. This matches the
-//!   existing meter pattern in `meter_bank.rs`.
+//! - `Ordering::Relaxed` is sufficient for both sides. The invariant
+//!   that justifies Relaxed is **single-writer**, not monotonicity: the
+//!   audio callback is the only thread that mutates the counter, so
+//!   readers never see torn or reordered writes. The counter is *not*
+//!   strictly monotonic — `Seek` jumps to an arbitrary position,
+//!   `Stop` rewinds to 0, and `Scrubbing` can move backwards — but a
+//!   single-producer / multi-consumer counter without inter-location
+//!   ordering requirements does not need anything stronger than
+//!   Relaxed. This matches the existing meter pattern in
+//!   `meter_bank.rs`.
 //!
 //! # Scope
 //!
@@ -148,7 +153,11 @@ pub const DEFAULT_BPM: f32 = 120.0;
 #[derive(Debug)]
 pub struct Transport {
     state: TransportState,
-    /// Monotonically-advancing sample counter (shared with the UI).
+    /// Shared sample-position counter. Single-writer (the audio
+    /// callback) but NOT strictly monotonic — `Seek` / `Stop` /
+    /// `Scrubbing` can jump it backwards or to zero. Readers on
+    /// other threads see every write but may observe a stale value
+    /// for up to one callback.
     position: SharedPosition,
     /// Single BPM (tempo map lands in 3B).
     bpm: f32,
@@ -220,9 +229,18 @@ impl Transport {
     }
 
     /// Called by the audio callback once per buffer. Advances the
-    /// position if the transport is advancing; otherwise no-ops.
+    /// position if the transport is in *any* advancing state
+    /// (`Playing`, `Recording`, or `Scrubbing` — see
+    /// [`TransportState::is_advancing`]). No-op for `Stopped` and
+    /// `Paused`.
+    ///
+    /// Named `advance_if_advancing` rather than `advance_if_advancing`
+    /// because the condition is not just `Playing` — all three
+    /// advancing states share the same per-buffer increment in 3A.
+    /// Later phases (3G scrub) may split these paths; callers should
+    /// not assume the condition is equivalent to "state == Playing".
     #[inline]
-    pub fn advance_if_playing(&mut self, frames: u64) {
+    pub fn advance_if_advancing(&mut self, frames: u64) {
         if self.state.is_advancing() {
             self.position.advance(frames);
         }
@@ -291,9 +309,9 @@ mod tests {
     fn paused_state_does_not_advance_position() {
         let mut t = Transport::new();
         t.play();
-        t.advance_if_playing(256);
+        t.advance_if_advancing(256);
         t.pause();
-        t.advance_if_playing(256);
+        t.advance_if_advancing(256);
         assert_eq!(
             t.position(),
             256,
@@ -301,7 +319,7 @@ mod tests {
         );
         // Resuming play picks up from where pause left off.
         t.play();
-        t.advance_if_playing(256);
+        t.advance_if_advancing(256);
         assert_eq!(t.position(), 512);
     }
 
@@ -323,19 +341,19 @@ mod tests {
     fn advance_only_runs_when_state_is_advancing() {
         let mut t = Transport::new();
         // Stopped: no advance.
-        t.advance_if_playing(256);
+        t.advance_if_advancing(256);
         assert_eq!(t.position(), 0);
 
         // Playing: advance.
         t.play();
-        t.advance_if_playing(256);
-        t.advance_if_playing(256);
+        t.advance_if_advancing(256);
+        t.advance_if_advancing(256);
         assert_eq!(t.position(), 512);
 
         // Pause: advance stops AND state is Paused (distinct from Stopped).
         t.pause();
         assert_eq!(t.state(), TransportState::Paused);
-        t.advance_if_playing(256);
+        t.advance_if_advancing(256);
         assert_eq!(t.position(), 512, "paused state must not advance");
     }
 
@@ -346,11 +364,11 @@ mod tests {
         // they must not freeze the timeline.
         let mut t = Transport::new();
         t.state = TransportState::Recording;
-        t.advance_if_playing(128);
+        t.advance_if_advancing(128);
         assert_eq!(t.position(), 128);
 
         t.state = TransportState::Scrubbing;
-        t.advance_if_playing(128);
+        t.advance_if_advancing(128);
         assert_eq!(t.position(), 256);
     }
 
@@ -387,7 +405,7 @@ mod tests {
         let mut t = Transport::new();
         let shared = t.shared_position();
         t.play();
-        t.advance_if_playing(1024);
+        t.advance_if_advancing(1024);
         assert_eq!(shared.get(), 1024);
         t.seek(999_999);
         assert_eq!(shared.get(), 999_999);

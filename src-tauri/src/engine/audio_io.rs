@@ -267,10 +267,18 @@ fn make_audio_callback(
     sample_rate: f32,
     channels: u16,
 ) -> impl FnMut(&mut [f32], &cpal::OutputCallbackInfo) + Send + 'static {
-    // Pre-allocate a mono scratch buffer sized to the maximum expected
-    // buffer. 1024 frames is generous (our max supported buffer size);
-    // if CPAL gives us a larger buffer, we chunk it.
-    let max_frames = 1024_usize;
+    // Pre-allocate a mono scratch buffer sized to absorb the largest
+    // buffer CPAL is likely to hand us. Our `EngineConfig` validates
+    // buffer_size against `VALID_BUFFER_SIZES` (≤ 1024), but CPAL can
+    // ignore a `BufferSize::Fixed` request on some hosts and deliver
+    // whatever it wants. 4096 frames is 4× headroom on the validated
+    // max — if CPAL ever goes higher we render a partial buffer and
+    // advance the transport by the same partial amount (so the
+    // counter stays consistent with what was actually heard), which
+    // is the least-bad outcome (audible gap rather than out-of-bounds
+    // write or position desync). The extra 36 KiB of scratch is
+    // negligible.
+    let max_frames = 4096_usize;
     let mut scratch = vec![0.0_f32; max_frames];
     // Pre-allocate master L/R accumulators.
     let mut master_l = vec![0.0_f32; max_frames];
@@ -496,7 +504,16 @@ fn make_audio_callback(
         // stopped/paused, otherwise bumps the shared atomic by
         // `frames`. Downstream phases (3C loop wrap, 3F clip
         // scheduling) read this counter to decide what to render.
-        transport.advance_if_playing(frames as u64);
+        //
+        // The advance intentionally uses the *rendered* frame count
+        // (already clamped to `max_frames`), not the raw buffer size.
+        // This keeps the position counter consistent with what the
+        // listener actually heard: if CPAL ever hands us a buffer
+        // larger than `max_frames`, we render the first `max_frames`
+        // and leave the tail silent (one-time audible gap) while
+        // position advances by the same amount — versus advancing by
+        // the full buffer, which would desync UI from audio.
+        transport.advance_if_advancing(frames as u64);
     }
 }
 

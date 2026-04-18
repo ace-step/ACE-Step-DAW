@@ -104,6 +104,17 @@ impl LoopRegion {
     ///   buffer, so the wrap still applies).
     /// - `frames > length` (pathological: buffer larger than loop) →
     ///   modulo handles multiple wraps safely.
+    ///
+    /// # Overflow caveat
+    ///
+    /// `saturating_add` prevents a panic on `current + frames`
+    /// overflow, but if `frames` is pathologically large (close to
+    /// `u64::MAX`) the saturated raw value collapses distinct
+    /// inputs onto the same sentinel, and the wrapped result can
+    /// disagree with the "mathematically ideal" value by up to
+    /// one loop length. Not reachable from the real audio callback,
+    /// where `frames` is bounded by `max_frames = 4096` (see
+    /// `audio_io.rs`). Found by codex review on PR #1713.
     #[inline]
     pub fn next_position(&self, current: u64, frames: u64) -> u64 {
         let raw = current.saturating_add(frames);
@@ -334,6 +345,52 @@ mod tests {
     fn next_position_saturates_on_overflow_when_inactive() {
         let l = LoopRegion::disabled();
         assert_eq!(l.next_position(u64::MAX - 10, 50), u64::MAX);
+    }
+
+    // ── Codex review regression: frames = 0 / length = 1 ────────────
+
+    #[test]
+    fn next_position_zero_frames_is_no_op_in_all_regimes() {
+        // Audio callback may deliver a zero-frame buffer on device
+        // resync; the advance must be a pure no-op regardless of
+        // loop state.
+        let disabled = LoopRegion::disabled();
+        assert_eq!(disabled.next_position(123, 0), 123);
+
+        let active = LoopRegion {
+            enabled: true,
+            start: 100,
+            end: 200,
+        };
+        // Inside the loop.
+        assert_eq!(active.next_position(150, 0), 150);
+        // Before the loop.
+        assert_eq!(active.next_position(50, 0), 50);
+        // At the end boundary — still no advance, stays AT end.
+        assert_eq!(active.next_position(200, 0), 200);
+        // Past the end.
+        assert_eq!(active.next_position(250, 0), 250);
+    }
+
+    #[test]
+    fn next_position_loop_length_one_holds_cursor_on_single_sample() {
+        // Degenerate but valid region: [100, 101) — exactly one
+        // sample in the loop. The wrap math must collapse every
+        // advance back to `start`.
+        let l = LoopRegion {
+            enabled: true,
+            start: 100,
+            end: 101,
+        };
+        assert_eq!(l.length(), 1);
+        // Advance from inside the single sample → wrap to start.
+        assert_eq!(l.next_position(100, 1), 100, "advance of 1 wraps to start");
+        assert_eq!(l.next_position(100, 2), 100, "advance of 2 still lands on start (over % 1 == 0)");
+        assert_eq!(
+            l.next_position(100, 1000),
+            100,
+            "large advance modulo-wraps to start"
+        );
     }
 
     #[test]

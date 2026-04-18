@@ -63,9 +63,10 @@ impl PositionEmitter {
     /// Spawn the polling thread. The callback is invoked on every
     /// tick with the current sample position; the thread sleeps
     /// for `interval` between ticks. `interval` is clamped to
-    /// `[MIN_INTERVAL, MAX_INTERVAL]` so pathological inputs
-    /// (zero, NaN via `Duration::ZERO` / `Duration::MAX`) cannot
-    /// produce a hot-spin loop or a hung UI.
+    /// `[MIN_INTERVAL, MAX_INTERVAL]` so pathological inputs — in
+    /// particular `Duration::ZERO` (would hot-spin) and unbounded
+    /// durations like `Duration::MAX` (would make the UI look
+    /// frozen) — cannot poison the emitter loop.
     pub fn start<F>(
         shared_position: SharedPosition,
         interval: Duration,

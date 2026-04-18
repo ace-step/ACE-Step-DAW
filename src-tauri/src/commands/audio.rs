@@ -477,16 +477,6 @@ pub fn audio_clip_set_schedule(
     engine.set_clip_schedule(clips)
 }
 
-/// Snapshot the current clip schedule. Returns `None` when the
-/// engine is stopped. Each clip's audio_data is serialized as a
-/// Vec<f32> on the wire — this can be large for long clips, so
-/// the UI should poll `get_schedule` rarely (on project load /
-/// structural change), not per-frame.
-///
-/// Returns `InvalidClipSchedule` on the rare path where the
-/// snapshot round-trips through `try_new` and hits an invariant
-/// error — prefer surfacing that over silently pretending the
-/// schedule was cleared (Copilot review on PR #1719).
 // ── Transport scrub (3G) ────────────────────────────────────────────
 
 #[tauri::command]
@@ -565,6 +555,16 @@ pub fn audio_transport_get_count_in(
 
 // ── Clip scheduler (3F) - continued ────────────────────────────────
 
+/// Snapshot the current clip schedule. Returns `None` when the
+/// engine is stopped. Each clip's audio_data is serialized as a
+/// Vec<f32> on the wire — this can be large for long clips, so
+/// the UI should poll `get_schedule` rarely (on project load /
+/// structural change), not per-frame.
+///
+/// Returns `InvalidClipSchedule` on the rare path where the
+/// snapshot round-trips through `try_new` and hits an invariant
+/// error — prefer surfacing that over silently pretending the
+/// schedule was cleared (Copilot review on PR #1719).
 #[tauri::command]
 pub fn audio_clip_get_schedule(
     state: State<'_, EngineState>,

@@ -466,14 +466,22 @@ fn make_audio_callback(
 
         // Metronome render (3E). Runs AFTER track/aux mixing but
         // BEFORE master volume so the click respects master gain
-        // like any other bus. The config is read once per buffer
-        // via wait-free ArcSwap load; tempo + time-signature maps
-        // are snapshotted into Arc references held for the buffer.
+        // like any other bus.
+        //
+        // Map access uses `.load()` borrows (NOT `.load_full()`) so
+        // the audio callback never clones or drops an `Arc<TempoMap>`
+        // — both would risk allocator work on the RT thread if the
+        // old map happens to be the last outstanding reference when
+        // the UI swapped in a new one. Found by codex review on
+        // PR #1717. The guards live until the end of the block and
+        // only decrement cheap per-thread counters on drop.
         {
             let metronome_config = transport.metronome_config_snapshot();
             if metronome_config.enabled && transport.state().is_advancing() {
-                let tempo_map = transport.tempo_map_snapshot();
-                let time_sig = transport.time_sig_map_snapshot();
+                let tempo_guard = transport.tempo_map_handle().load();
+                let time_sig_guard = transport.time_sig_map_handle().load();
+                let tempo_map: &super::tempo_map::TempoMap = &tempo_guard;
+                let time_sig: &super::time_sig_map::TimeSignatureMap = &time_sig_guard;
                 let playhead_start = transport.position();
                 let sr_u32 = sample_rate as u32;
 
@@ -481,7 +489,7 @@ fn make_audio_callback(
                 // advance one beat at a time as we cross boundaries inside
                 // the sample loop.
                 let (mut next_beat_idx, mut next_beat_sample) =
-                    next_beat_at_or_after(playhead_start, &tempo_map, sr_u32);
+                    next_beat_at_or_after(playhead_start, tempo_map, sr_u32);
 
                 for i in 0..frames {
                     let cur_sample = playhead_start + i as u64;
@@ -492,7 +500,7 @@ fn make_audio_callback(
                         let accent = is_accent_beat(
                             next_beat_idx,
                             next_beat_sample,
-                            &time_sig,
+                            time_sig,
                         );
                         let (freq, amp) = if accent {
                             (

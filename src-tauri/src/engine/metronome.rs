@@ -66,10 +66,18 @@ pub struct MetronomeConfig {
     pub enabled: bool,
     /// Linear gain for non-accent beats, [0.0, 1.0]. Clamped on
     /// [`MetronomeConfig::new`].
+    ///
+    /// **Note on clipping**: the metronome is mixed additively with
+    /// program audio on the master bus. If program audio is already
+    /// near 0 dBFS, a unity-volume metronome (both this and
+    /// `accent_volume`) will push the sum over full scale and
+    /// clip. The default of 0.6 / 0.8 leaves ~4 dB of headroom for
+    /// a program signal peaking around -4 dBFS. Raise with care.
     pub volume: f32,
     /// Linear gain for the accented beat (beat 1 of each bar).
     /// Clamped on [`MetronomeConfig::new`]. Typically slightly
     /// louder than `volume` so the downbeat stands out.
+    /// See [`volume`](Self::volume) for the clipping caveat.
     pub accent_volume: f32,
     /// Pitch of the non-accent click. 1000 Hz is the Ableton
     /// default.
@@ -243,12 +251,24 @@ pub fn next_beat_at_or_after(
 ) -> (u64, u64) {
     let frac = tempo_map.sample_to_beat(playhead_sample, sample_rate);
     // Align to the next integer beat. If the playhead is exactly
-    // on a beat (frac is integer), fire THIS beat, not the next —
-    // the boundary is inclusive on the low side. `ceil` of an
-    // integer is itself, so this works.
-    let beat = frac.ceil() as u64;
-    // If `frac` is slightly negative due to FP noise, treat as 0.
-    let beat = beat.max(0);
+    // on a beat (frac is integer), fire THIS beat, not the next.
+    //
+    // Naive `frac.ceil()` fails when multi-segment integration
+    // produces an ULP-sized overshoot: at 44.1 kHz with a
+    // pathological tempo map, `sample_to_beat(beat_to_sample(15))`
+    // can return `15.000000000000002`, so `ceil` goes to 16 and
+    // the click on beat 15 is skipped (found by codex review on
+    // PR #1717). An ε-tolerant round-to-integer fixes this while
+    // still promoting any mid-beat value up to the next integer.
+    const EPS: f64 = 1e-9;
+    let rounded = frac.round();
+    let beat = if (frac - rounded).abs() < EPS && rounded >= 0.0 {
+        rounded as u64
+    } else if frac <= 0.0 {
+        0
+    } else {
+        frac.ceil() as u64
+    };
     let sample = tempo_map.beat_to_sample(beat as f64, sample_rate);
     (beat, sample)
 }
@@ -472,6 +492,34 @@ mod tests {
         let (beat, sample) = next_beat_at_or_after(24_000, &map, 48_000);
         assert_eq!(beat, 1);
         assert_eq!(sample, 24_000);
+    }
+
+    #[test]
+    fn next_beat_tolerates_fp_precision_on_multi_segment_map() {
+        // Codex P1 regression (PR #1717): at 44.1 kHz with certain
+        // tempo maps, `sample_to_beat(beat_to_sample(N))` returns
+        // something like `N + 1e-15`, so `ceil` jumps to N+1 and
+        // the click on beat N is skipped. The ε-tolerant ceil
+        // fixes this.
+        let map = TempoMap::try_new(vec![
+            TempoEvent::new(0, 651.0),
+            TempoEvent::new(17_548, 172.0),
+            TempoEvent::new(169_105, 504.0),
+            TempoEvent::new(182_483, 665.0),
+        ])
+        .unwrap();
+        let sr = 44_100;
+        // Round-trip every beat and confirm next_beat_at_or_after
+        // returns THAT beat, not the one after.
+        for beat in 0..30u64 {
+            let sample = map.beat_to_sample(beat as f64, sr);
+            let (got, _) = next_beat_at_or_after(sample, &map, sr);
+            assert_eq!(
+                got, beat,
+                "playhead exactly on beat {beat} (sample {sample}) \
+                 should round-trip to beat {beat}, not {got}"
+            );
+        }
     }
 
     #[test]

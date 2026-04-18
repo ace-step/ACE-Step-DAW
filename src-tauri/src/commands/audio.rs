@@ -10,8 +10,8 @@ use tauri::{Emitter, State};
 
 use crate::engine::{
     audio_io, AudioDeviceInfo, CommandError, Engine, EngineConfig, EngineError,
-    EngineStatus, LoopRegion, PositionEmitter, TempoEvent, TempoMap, TimeSignatureEvent,
-    TimeSignatureMap, TrackParams, POSITION_EVENT_DEFAULT_INTERVAL,
+    EngineStatus, LoopRegion, MetronomeConfig, PositionEmitter, TempoEvent, TempoMap,
+    TimeSignatureEvent, TimeSignatureMap, TrackParams, POSITION_EVENT_DEFAULT_INTERVAL,
 };
 use crate::engine::slot::SlotHandle;
 
@@ -418,6 +418,43 @@ pub fn audio_transport_set_loop_enabled(
         .lock()
         .map_err(|_| CommandError::Disconnected)?;
     engine.set_loop_enabled(enabled)
+}
+
+// ── Metronome (3E) ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn audio_metronome_set_config(
+    config: MetronomeConfig,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_metronome_config(config)
+}
+
+#[tauri::command]
+pub fn audio_metronome_get_config(
+    state: State<'_, EngineState>,
+) -> Result<Option<MetronomeConfig>, CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.metronome_config_snapshot())
+}
+
+#[tauri::command]
+pub fn audio_metronome_set_enabled(
+    enabled: bool,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_metronome_enabled(enabled)
 }
 
 #[cfg(test)]

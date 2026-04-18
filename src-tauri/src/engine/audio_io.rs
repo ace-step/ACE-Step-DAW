@@ -29,6 +29,7 @@ use super::config::{AudioDeviceInfo, VALID_SAMPLE_RATES};
 use super::graph::AudioGraph;
 use super::meter::generate_sine;
 use super::meter_bank::MeterProducers;
+use super::metronome::{render_metronome_segment, ClickGenerator};
 use super::mixer;
 use super::transport::Transport;
 use super::{EngineCommand, OpenInfo, RuntimeContext};
@@ -283,6 +284,10 @@ fn make_audio_callback(
     // Pre-allocate master L/R accumulators.
     let mut master_l = vec![0.0_f32; max_frames];
     let mut master_r = vec![0.0_f32; max_frames];
+    // Pre-allocated click state lives across buffers so a click
+    // that starts near the end of one buffer can decay into the
+    // start of the next without truncation.
+    let mut click_gen = ClickGenerator::idle();
 
     let ch = channels as usize;
 
@@ -458,6 +463,103 @@ fn make_audio_callback(
 
         // Mix aux return buses into master BEFORE master volume.
         routing.mix_into_master(&mut master_l[..frames], &mut master_r[..frames], frames);
+
+        // Metronome render (3E). Runs AFTER track/aux mixing but
+        // BEFORE master volume so the click respects master gain
+        // like any other bus.
+        //
+        // Map access uses `.load()` borrows (NOT `.load_full()`) so
+        // the audio callback never clones or drops an `Arc<TempoMap>`
+        // — both would risk allocator work on the RT thread if the
+        // old map happens to be the last outstanding reference when
+        // the UI swapped in a new one. Found by codex review on
+        // PR #1717.
+        //
+        // Loop wrap-around (3C) is handled here too: if the buffer
+        // straddles the active loop's end boundary, split the
+        // metronome render into "pre-wrap" and "post-wrap" segments
+        // so beats landing in the wrapped region still fire.
+        // Found by Copilot review on PR #1717.
+        {
+            let metronome_config = transport.metronome_config_snapshot();
+            if metronome_config.enabled && transport.state().is_advancing() {
+                let tempo_guard = transport.tempo_map_handle().load();
+                let time_sig_guard = transport.time_sig_map_handle().load();
+                let tempo_map: &super::tempo_map::TempoMap = &tempo_guard;
+                let time_sig: &super::time_sig_map::TimeSignatureMap = &time_sig_guard;
+                let loop_region = **transport.loop_region_handle().load();
+                let playhead_start = transport.position();
+
+                // Wrap split: if the loop is active and we'll cross
+                // the end boundary inside this buffer, find the
+                // offset (in frames) at which the wrap happens.
+                let wrap_offset: Option<usize> = if loop_region.is_active()
+                    && playhead_start < loop_region.end
+                {
+                    let to_end = loop_region.end - playhead_start;
+                    if to_end < frames as u64 {
+                        Some(to_end as usize)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                match wrap_offset {
+                    Some(w) => {
+                        render_metronome_segment(
+                            &mut click_gen,
+                            &mut master_l[..frames],
+                            &mut master_r[..frames],
+                            0,
+                            w,
+                            playhead_start,
+                            tempo_map,
+                            time_sig,
+                            metronome_config,
+                            sample_rate,
+                        );
+                        render_metronome_segment(
+                            &mut click_gen,
+                            &mut master_l[..frames],
+                            &mut master_r[..frames],
+                            w,
+                            frames,
+                            loop_region.start,
+                            tempo_map,
+                            time_sig,
+                            metronome_config,
+                            sample_rate,
+                        );
+                    }
+                    None => {
+                        render_metronome_segment(
+                            &mut click_gen,
+                            &mut master_l[..frames],
+                            &mut master_r[..frames],
+                            0,
+                            frames,
+                            playhead_start,
+                            tempo_map,
+                            time_sig,
+                            metronome_config,
+                            sample_rate,
+                        );
+                    }
+                }
+            } else if click_gen.is_active() {
+                // Finish draining any in-flight click even if the
+                // user just disabled the metronome or paused — avoids
+                // a clipped tail that would sound like a digital
+                // pop.
+                for i in 0..frames {
+                    let s = click_gen.tick(sample_rate);
+                    master_l[i] += s;
+                    master_r[i] += s;
+                }
+            }
+        }
 
         // Apply master volume.
         for i in 0..frames {

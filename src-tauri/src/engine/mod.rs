@@ -33,6 +33,7 @@ pub mod graph;
 pub mod loop_region;
 pub mod meter;
 pub mod meter_bank;
+pub mod metronome;
 pub mod mixer;
 pub mod position_emitter;
 pub mod routing;
@@ -48,6 +49,7 @@ pub use config::{
 };
 pub use graph::{AudioGraph, Track, MAX_TRACKS};
 pub use loop_region::LoopRegion;
+pub use metronome::MetronomeConfig;
 pub use position_emitter::{PositionEmitter, DEFAULT_INTERVAL as POSITION_EVENT_DEFAULT_INTERVAL};
 pub use meter::{generate_sine, Meter, MeterReading};
 pub use meter_bank::{MeterConsumers, MeterProducers};
@@ -215,6 +217,8 @@ struct RunningEngine {
     time_sig_map: Arc<ArcSwap<TimeSignatureMap>>,
     /// Same pattern for the loop region.
     loop_region: Arc<ArcSwap<LoopRegion>>,
+    /// Same pattern for the metronome config.
+    metronome_config: Arc<ArcSwap<MetronomeConfig>>,
     /// Active sample rate — cached so beat↔sample conversion can
     /// run without re-parsing `EngineStatus`.
     sample_rate: u32,
@@ -292,6 +296,7 @@ impl Engine {
         let tempo_map_handle = transport.tempo_map_handle();
         let time_sig_map_handle = transport.time_sig_map_handle();
         let loop_region_handle = transport.loop_region_handle();
+        let metronome_config_handle = transport.metronome_config_handle();
 
         let ctx = RuntimeContext {
             config: config.clone(),
@@ -338,6 +343,7 @@ impl Engine {
                     tempo_map: tempo_map_handle,
                     time_sig_map: time_sig_map_handle,
                     loop_region: loop_region_handle,
+                    metronome_config: metronome_config_handle,
                     sample_rate: active_sample_rate,
                 });
                 Ok(status)
@@ -593,6 +599,43 @@ impl Engine {
         let mut region = **running.loop_region.load();
         region.enabled = enabled;
         running.loop_region.store(Arc::new(region));
+        Ok(())
+    }
+
+    // ── Metronome (3E) ──────────────────────────────────────────────
+
+    /// Replace the metronome config atomically. Incoming values
+    /// are normalized via `MetronomeConfig::new` so a deserialized
+    /// payload with out-of-range volume or non-finite frequency
+    /// cannot poison the audio thread.
+    pub fn set_metronome_config(&self, config: MetronomeConfig) -> Result<(), CommandError> {
+        let running = self.running.as_ref().ok_or(CommandError::NotRunning)?;
+        let normalized = MetronomeConfig::new(
+            config.enabled,
+            config.volume,
+            config.accent_volume,
+            config.click_freq_hz,
+            config.accent_freq_hz,
+        );
+        running.metronome_config.store(Arc::new(normalized));
+        Ok(())
+    }
+
+    /// Snapshot the current metronome config. Returns `None` when
+    /// the engine is stopped.
+    pub fn metronome_config_snapshot(&self) -> Option<MetronomeConfig> {
+        self.running
+            .as_ref()
+            .map(|r| **r.metronome_config.load())
+    }
+
+    /// Convenience: toggle just `enabled` without changing the
+    /// other knobs. Used by the UI "Click On/Off" button.
+    pub fn set_metronome_enabled(&self, enabled: bool) -> Result<(), CommandError> {
+        let running = self.running.as_ref().ok_or(CommandError::NotRunning)?;
+        let mut cfg = **running.metronome_config.load();
+        cfg.enabled = enabled;
+        running.metronome_config.store(Arc::new(cfg));
         Ok(())
     }
 

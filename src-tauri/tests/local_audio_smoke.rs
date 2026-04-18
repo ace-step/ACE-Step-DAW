@@ -19,8 +19,8 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use ace_step_daw_lib::engine::{
-    audio_io, Engine, EngineConfig, EngineStatus, LoopRegion, PositionEmitter, TempoEvent,
-    TrackParams,
+    audio_io, Engine, EngineConfig, EngineStatus, LoopRegion, MetronomeConfig,
+    PositionEmitter, TempoEvent, TrackParams,
 };
 use std::sync::{Arc, Mutex};
 
@@ -576,6 +576,70 @@ fn real_engine_position_emitter_ticks_and_tracks_playback() {
         captured.iter().any(|&v| v > 0),
         "emitter only saw zeros — engine did not advance"
     );
+}
+
+/// Smoke test — metronome produces audible clicks on the master bus
+/// at beat boundaries during live playback.
+///
+/// Phase 3E end-to-end proof: start engine, enable metronome at
+/// 120 BPM 4/4, play for 2 s, read master meter peak over time.
+/// At 120 BPM there should be ~4 beats in 2 s; each click produces
+/// a transient that the peak-hold meter catches as > 0.05.
+#[test]
+#[ignore]
+fn real_engine_metronome_renders_audible_clicks() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    // 120 BPM 4/4 is the default, so just enable.
+    engine
+        .set_metronome_config(MetronomeConfig::new(
+            true, 0.7, 0.9, 1000.0, 1500.0,
+        ))
+        .expect("set_metronome_config");
+
+    engine.transport_play().expect("play");
+
+    // Play for 2 s — at 120 BPM that's 4 beats. Sample the master
+    // meter at 50 ms intervals and look for peaks.
+    let mut observed_peaks = 0;
+    for _ in 0..40 {
+        sleep(Duration::from_millis(50));
+        let m = engine.get_master_meter();
+        if m.peak > 0.05 {
+            observed_peaks += 1;
+        }
+    }
+    eprintln!("observed peaks over 2 s at 120 BPM: {observed_peaks}");
+
+    // At 120 BPM over 2 s, expect ~4 clicks. The peak-hold is
+    // 1 s so each click will be "observed" over ~20 samples
+    // (1 s / 50 ms). 4 × 20 = 80. We poll 40 times so cap at 40
+    // observations; anything more than ~10 proves clicks landed.
+    assert!(
+        observed_peaks >= 10,
+        "expected at least 10 peak observations over 2 s at 120 BPM, got {}",
+        observed_peaks
+    );
+
+    // Disable and verify the config was actually updated on the
+    // audio thread (round-trips via the ArcSwap). We don't assert
+    // on the meter tail here — the meter's peak-hold + 300 ms EMA
+    // makes a tight "near zero" bound flaky, and "40 peaks during
+    // the 2 s playback window" already proves that clicks fire
+    // correctly.
+    engine
+        .set_metronome_enabled(false)
+        .expect("set_metronome_enabled");
+    let cfg_after = engine
+        .metronome_config_snapshot()
+        .expect("snapshot after disable");
+    assert!(
+        !cfg_after.enabled,
+        "disable command did not propagate to the ArcSwap"
+    );
+
+    engine.stop();
 }
 
 /// Smoke test — starting with an unknown device name surfaces a

@@ -227,10 +227,27 @@ struct RunningEngine {
     metronome_config: Arc<ArcSwap<MetronomeConfig>>,
     /// Same pattern for the clip schedule.
     clip_schedule: Arc<ArcSwap<ClipSchedule>>,
+    /// Main-thread-owned ring buffer of recently-retired clip
+    /// schedules. Each `set_clip_schedule` pushes the old Arc onto
+    /// this queue and pops the oldest when the queue grows past
+    /// `CLIP_SCHEDULE_GRAVEYARD_SIZE`. The drop of the evicted
+    /// Arc happens on the main thread (the caller of
+    /// `set_clip_schedule`) — which prevents the audio callback,
+    /// which may transiently hold a guard referencing the old
+    /// schedule, from being the last owner and ending up
+    /// deallocating PCM buffers on the RT thread. Found by codex
+    /// review on PR #1719.
+    clip_schedule_graveyard: std::sync::Mutex<std::collections::VecDeque<Arc<ClipSchedule>>>,
     /// Active sample rate — cached so beat↔sample conversion can
     /// run without re-parsing `EngineStatus`.
     sample_rate: u32,
 }
+
+/// How many past clip schedules to keep alive on the main thread
+/// after a swap. With audio buffers in the 1-10 ms range, 16 is
+/// 16-160 ms of audio processing — orders of magnitude more than
+/// the audio callback's window for a single guard hold.
+pub const CLIP_SCHEDULE_GRAVEYARD_SIZE: usize = 16;
 
 impl RunningEngine {
     fn shutdown(mut self) {
@@ -354,6 +371,11 @@ impl Engine {
                     loop_region: loop_region_handle,
                     metronome_config: metronome_config_handle,
                     clip_schedule: clip_schedule_handle,
+                    clip_schedule_graveyard: std::sync::Mutex::new(
+                        std::collections::VecDeque::with_capacity(
+                            CLIP_SCHEDULE_GRAVEYARD_SIZE,
+                        ),
+                    ),
                     sample_rate: active_sample_rate,
                 });
                 Ok(status)
@@ -654,11 +676,41 @@ impl Engine {
     /// Replace the clip schedule atomically. Validates via
     /// [`ClipSchedule::try_new`] before publishing so a malformed
     /// payload never reaches the audio thread.
+    ///
+    /// Uses a main-thread graveyard to defer the drop of the
+    /// *previous* schedule: the audio callback may be holding a
+    /// `load()` guard referencing it, and when that guard drops
+    /// (end of callback) we don't want the RT thread to be the
+    /// last owner and trigger allocator work on itself. By
+    /// retaining each retired Arc here for
+    /// [`CLIP_SCHEDULE_GRAVEYARD_SIZE`] swaps, the eviction drop
+    /// always happens on the main thread. Found by codex review
+    /// on PR #1719.
     pub fn set_clip_schedule(&self, clips: Vec<ClipSource>) -> Result<(), CommandError> {
         let running = self.running.as_ref().ok_or(CommandError::NotRunning)?;
         let schedule = ClipSchedule::try_new(clips)
             .map_err(|e| CommandError::InvalidClipSchedule(format!("{e:?}")))?;
-        running.clip_schedule.store(Arc::new(schedule));
+        let new_arc = Arc::new(schedule);
+        // Snapshot the outgoing schedule on the MAIN thread so the
+        // Arc's refcount doesn't hit zero on the audio side.
+        let old_arc = running.clip_schedule.load_full();
+        running.clip_schedule.store(new_arc);
+        // Push into the graveyard; drop the oldest eviction here
+        // (main thread) rather than letting the audio callback
+        // become the last owner.
+        let mut graveyard = running
+            .clip_schedule_graveyard
+            .lock()
+            .map_err(|_| CommandError::Disconnected)?;
+        graveyard.push_back(old_arc);
+        while graveyard.len() > CLIP_SCHEDULE_GRAVEYARD_SIZE {
+            // `pop_front` returns Some(Arc<...>) — dropped HERE
+            // on the main thread. If no other references exist
+            // (including no audio-thread guard), deallocation of
+            // the ClipSchedule's `Vec<ClipSource>` and each
+            // clip's `Vec<f32>` PCM happens on this thread.
+            graveyard.pop_front();
+        }
         Ok(())
     }
 
@@ -1550,6 +1602,50 @@ mod tests {
         let snap = engine.time_signature_map_snapshot().unwrap();
         assert_eq!(snap.signature_at(0), (4, 4));
         assert_eq!(snap.signature_at(96_000), (3, 4));
+
+        engine.stop();
+    }
+
+    #[test]
+    fn clip_schedule_graveyard_bounds_retained_arcs() {
+        // Codex P1 regression (PR #1719): the graveyard must cap
+        // retained Arc<ClipSchedule>s at CLIP_SCHEDULE_GRAVEYARD_SIZE
+        // so rapid-fire schedule swaps don't leak memory forever.
+        use std::sync::Arc;
+
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                fake_runner(
+                    Ok(ok_info()),
+                    Arc::new(AtomicBool::new(false)),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+
+        // Build a tiny PCM so each ClipSource is cheap.
+        let pcm = Arc::new(vec![0.5_f32; 4]);
+
+        // Swap 3× the graveyard capacity — the queue must cap.
+        for i in 0..(CLIP_SCHEDULE_GRAVEYARD_SIZE * 3) {
+            let clip = ClipSource::new(i as u64 * 1000, 2, 1.0, pcm.clone()).unwrap();
+            engine.set_clip_schedule(vec![clip]).unwrap();
+        }
+
+        let graveyard_len = engine
+            .running
+            .as_ref()
+            .unwrap()
+            .clip_schedule_graveyard
+            .lock()
+            .unwrap()
+            .len();
+        assert!(
+            graveyard_len <= CLIP_SCHEDULE_GRAVEYARD_SIZE,
+            "graveyard grew past cap: {graveyard_len} > {CLIP_SCHEDULE_GRAVEYARD_SIZE}"
+        );
 
         engine.stop();
     }

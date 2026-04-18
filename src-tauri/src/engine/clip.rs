@@ -245,24 +245,37 @@ pub fn render_clip_segment(
 
     let pcm: &[f32] = &clip.audio_data;
     let gain = clip.gain;
+    let pcm_len = pcm.len();
+    let out_l_len = out_l.len();
+    let out_r_len = out_r.len();
 
     // Stereo-interleaved reads. Each frame is 2 floats: L then R.
+    //
+    // Defensive bounds checks use `checked_mul`/`checked_add` so a
+    // manually-constructed `ClipSource` with a forged length can't
+    // wrap `usize` arithmetic and turn an out-of-range read into
+    // an in-range one (found by codex review on PR #1719).
     for i in 0..render_frames {
-        let src = (pcm_offset_frames + i) * 2;
-        // Bounds-check defensively — the validated constructor
-        // should have made this unreachable, but the audio thread
-        // must NEVER panic.
-        if src + 1 >= pcm.len() {
+        let Some(frame_idx) = pcm_offset_frames.checked_add(i) else {
+            break;
+        };
+        let Some(src) = frame_idx.checked_mul(2) else {
+            break;
+        };
+        let Some(src_r) = src.checked_add(1) else {
+            break;
+        };
+        if src_r >= pcm_len {
             break;
         }
-        let l = pcm[src] * gain;
-        let r = pcm[src + 1] * gain;
-        let dst = out_offset + i;
-        if dst >= out_l.len() || dst >= out_r.len() {
+        let Some(dst) = out_offset.checked_add(i) else {
+            break;
+        };
+        if dst >= out_l_len || dst >= out_r_len {
             break;
         }
-        out_l[dst] += l;
-        out_r[dst] += r;
+        out_l[dst] += pcm[src] * gain;
+        out_r[dst] += pcm[src_r] * gain;
     }
 }
 
@@ -483,6 +496,30 @@ mod tests {
         assert!((l[0] - 0.50).abs() < 1e-6, "expected 0.50 got {}", l[0]);
         // L[9] should be pcm L at frame 59 = 0.59.
         assert!((l[9] - 0.59).abs() < 1e-6, "expected 0.59 got {}", l[9]);
+    }
+
+    #[test]
+    fn render_rejects_forged_length_that_would_overflow_usize() {
+        // Codex P2 regression (PR #1719): if a caller constructs
+        // ClipSource by struct literal (bypassing new) with a
+        // forged length_samples approaching u64::MAX, the
+        // `pcm_offset_frames * 2` arithmetic could overflow
+        // usize and wrap. Checked_mul prevents that.
+        let pcm = Arc::new(vec![1.0_f32; 4]); // 2 frames of PCM
+        let clip = ClipSource {
+            start_sample: 0,
+            length_samples: u64::MAX, // forged
+            gain: 1.0,
+            audio_data: pcm,
+        };
+        let mut l = vec![0.0_f32; 10];
+        let mut r = vec![0.0_f32; 10];
+        // Segment at an offset that would overflow with a
+        // non-checked `pcm_offset_frames * 2`.
+        render_clip_segment(&clip, &mut l, &mut r, 0, 10, usize::MAX as u64 - 100);
+        // Audio thread must NOT panic. We don't assert on output
+        // content because there is no correct mapping for a
+        // forged-length clip — we just need to survive.
     }
 
     #[test]

@@ -35,6 +35,7 @@ pub mod meter_bank;
 pub mod mixer;
 pub mod routing;
 pub mod slot;
+pub mod transport;
 
 pub use command::{EngineCommand, TrackParams};
 pub use config::{
@@ -46,6 +47,7 @@ pub use meter::{generate_sine, Meter, MeterReading};
 pub use meter_bank::{MeterConsumers, MeterProducers};
 pub use mixer::{equal_power_pan, is_audible};
 pub use slot::{SlotAllocator, SlotHandle};
+pub use transport::{SharedPosition, Transport, TransportState, DEFAULT_BPM, MAX_BPM, MIN_BPM};
 
 use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
 use serde::Serialize;
@@ -95,6 +97,11 @@ pub struct RuntimeContext {
     pub track_effects: Vec<effect_chain::TrackEffects>,
     /// Pre-allocated aux send/return routing state.
     pub routing: routing::RoutingState,
+    /// Transport state machine + position counter. The audio callback
+    /// owns this and advances the position on every buffer; the main
+    /// thread drives it via [`EngineCommand`] variants prefixed
+    /// `Transport*`.
+    pub transport: Transport,
 }
 
 /// Errors surfaced to Tauri command handlers.
@@ -177,6 +184,10 @@ struct RunningEngine {
     meter_consumers: MeterConsumers,
     thread: Option<JoinHandle<()>>,
     status: EngineStatus,
+    /// Main-thread handle on the transport's atomic position counter.
+    /// Cloned from the audio thread's `Transport` at startup; lets
+    /// position reads bypass the command queue entirely.
+    shared_position: SharedPosition,
 }
 
 impl RunningEngine {
@@ -246,6 +257,8 @@ impl Engine {
         let (cmd_tx, cmd_rx) = bounded::<EngineCommand>(COMMAND_QUEUE_CAPACITY);
         let (meter_prods, meter_cons) =
             meter_bank::create_meter_pair(config.sample_rate as f32);
+        let transport = Transport::new();
+        let shared_position = transport.shared_position();
 
         let ctx = RuntimeContext {
             config: config.clone(),
@@ -256,6 +269,7 @@ impl Engine {
             meter_producers: meter_prods,
             track_effects: effect_chain::create_effect_chains(config.sample_rate as f32),
             routing: routing::RoutingState::new(MAX_TRACKS, 1024),
+            transport,
         };
 
         let boxed: Box<dyn StreamRunner> = Box::new(runner);
@@ -280,6 +294,7 @@ impl Engine {
                     meter_consumers: meter_cons,
                     thread: Some(thread),
                     status: status.clone(),
+                    shared_position,
                 });
                 Ok(status)
             }
@@ -386,6 +401,44 @@ impl Engine {
     /// Set the master-bus output gain.
     pub fn set_master_volume(&self, volume: f32) -> Result<(), CommandError> {
         self.send_command(EngineCommand::SetMasterVolume { volume })
+    }
+
+    // ── Transport (3A) ───────────────────────────────────────────────
+
+    /// Begin playback from the current position.
+    pub fn transport_play(&self) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::TransportPlay)
+    }
+
+    /// Stop playback and rewind to 0.
+    pub fn transport_stop(&self) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::TransportStop)
+    }
+
+    /// Stop playback but keep the current position.
+    pub fn transport_pause(&self) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::TransportPause)
+    }
+
+    /// Jump the transport to an absolute sample position.
+    pub fn transport_seek(&self, sample_position: u64) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::TransportSeek { sample_position })
+    }
+
+    /// Set the transport tempo. Clamped on the audio thread.
+    pub fn transport_set_tempo(&self, bpm: f32) -> Result<(), CommandError> {
+        self.send_command(EngineCommand::TransportSetTempo { bpm })
+    }
+
+    /// Snapshot the current transport sample position. Reads the
+    /// atomic counter directly — no command round-trip, so this is
+    /// safe to call at UI frame rate (60 Hz). Returns 0 when the
+    /// engine is stopped.
+    pub fn transport_position(&self) -> u64 {
+        self.running
+            .as_ref()
+            .map(|r| r.shared_position.get())
+            .unwrap_or(0)
     }
 
     /// Read the latest meter reading for a track.
@@ -1018,6 +1071,150 @@ mod tests {
         engine.stop();
     }
 
+    // ── 3A: transport wiring ────────────────────────────────────────
+
+    /// Runner that drives the audio-thread transport. Records every
+    /// command AND applies transport commands to the local `Transport`
+    /// so tests can verify end-to-end semantics (position advance,
+    /// state transitions, shared-position visibility).
+    fn transport_runner(
+        drained: Arc<Mutex<Vec<EngineCommand>>>,
+        drain_started: Arc<AtomicBool>,
+    ) -> impl FnOnce(RuntimeContext) + Send + 'static {
+        move |mut ctx: RuntimeContext| {
+            let _ = ctx.ready_tx.send(Ok(OpenInfo {
+                active_config: ctx.config.clone(),
+                device_name: "Transport Mock".into(),
+                channels: 2,
+            }));
+            drain_started.store(true, Ordering::SeqCst);
+            loop {
+                crossbeam_channel::select! {
+                    recv(ctx.cmd_rx) -> msg => match msg {
+                        Ok(cmd) => {
+                            drained.lock().unwrap().push(cmd);
+                            apply_transport(&mut ctx.transport, &cmd);
+                        }
+                        Err(_) => return,
+                    },
+                    recv(ctx.stop_rx) -> _ => {
+                        while let Ok(cmd) = ctx.cmd_rx.try_recv() {
+                            drained.lock().unwrap().push(cmd);
+                            apply_transport(&mut ctx.transport, &cmd);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    fn apply_transport(transport: &mut transport::Transport, cmd: &EngineCommand) {
+        match *cmd {
+            EngineCommand::TransportPlay => transport.play(),
+            EngineCommand::TransportStop => transport.stop(),
+            EngineCommand::TransportPause => transport.pause(),
+            EngineCommand::TransportSeek { sample_position } => transport.seek(sample_position),
+            EngineCommand::TransportSetTempo { bpm } => transport.set_tempo(bpm),
+            _ => {}
+        }
+    }
+
+    /// Helper: wait for a condition with a short timeout so tests do
+    /// not hang forever when the audio thread hasn't caught up yet.
+    fn wait_for<F: Fn() -> bool>(cond: F) {
+        let deadline = std::time::Instant::now() + Duration::from_millis(500);
+        while !cond() && std::time::Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(cond(), "timed out waiting for condition");
+    }
+
+    #[test]
+    fn transport_commands_flow_through_command_queue() {
+        let mut engine = Engine::new();
+        let drained = Arc::new(Mutex::new(Vec::new()));
+        let drain_started = Arc::new(AtomicBool::new(false));
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                transport_runner(drained.clone(), drain_started.clone()),
+            )
+            .unwrap();
+        wait_for(|| drain_started.load(Ordering::SeqCst));
+
+        engine.transport_play().unwrap();
+        engine.transport_seek(48_000).unwrap();
+        engine.transport_set_tempo(140.0).unwrap();
+        engine.transport_pause().unwrap();
+        engine.transport_stop().unwrap();
+
+        engine.stop();
+
+        let got = drained.lock().unwrap();
+        assert_eq!(got.len(), 5, "five transport commands should have arrived");
+        assert!(matches!(got[0], EngineCommand::TransportPlay));
+        assert!(matches!(
+            got[1],
+            EngineCommand::TransportSeek { sample_position: 48_000 }
+        ));
+        assert!(matches!(
+            got[2],
+            EngineCommand::TransportSetTempo { bpm } if (bpm - 140.0).abs() < f32::EPSILON
+        ));
+        assert!(matches!(got[3], EngineCommand::TransportPause));
+        assert!(matches!(got[4], EngineCommand::TransportStop));
+    }
+
+    #[test]
+    fn transport_seek_is_visible_on_shared_position() {
+        // End-to-end: sending TransportSeek must update the atomic
+        // counter that `Engine::transport_position` reads, without any
+        // explicit poll from the main thread.
+        let mut engine = Engine::new();
+        let drained = Arc::new(Mutex::new(Vec::new()));
+        let drain_started = Arc::new(AtomicBool::new(false));
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                transport_runner(drained.clone(), drain_started.clone()),
+            )
+            .unwrap();
+        wait_for(|| drain_started.load(Ordering::SeqCst));
+
+        assert_eq!(engine.transport_position(), 0);
+
+        engine.transport_seek(192_000).unwrap(); // 4 s at 48 k
+        wait_for(|| engine.transport_position() == 192_000);
+
+        engine.transport_stop().unwrap();
+        wait_for(|| engine.transport_position() == 0);
+
+        engine.stop();
+    }
+
+    #[test]
+    fn transport_position_returns_zero_when_engine_stopped() {
+        let engine = Engine::new();
+        assert_eq!(engine.transport_position(), 0);
+    }
+
+    #[test]
+    fn transport_commands_before_start_fail_with_not_running() {
+        let engine = Engine::new();
+        assert_eq!(engine.transport_play(), Err(CommandError::NotRunning));
+        assert_eq!(engine.transport_stop(), Err(CommandError::NotRunning));
+        assert_eq!(engine.transport_pause(), Err(CommandError::NotRunning));
+        assert_eq!(
+            engine.transport_seek(100),
+            Err(CommandError::NotRunning)
+        );
+        assert_eq!(
+            engine.transport_set_tempo(140.0),
+            Err(CommandError::NotRunning)
+        );
+    }
+
     #[test]
     fn runtime_context_exposes_all_fields() {
         // Compile-time check: a runner can take ownership of every
@@ -1029,6 +1226,7 @@ mod tests {
             let _ = ctx.cmd_rx;
             let _ = ctx.ready_tx;
             let _ = ctx.stop_rx;
+            let _ = ctx.transport;
         };
         fn assert_runner<R: StreamRunner>(_: R) {}
         assert_runner(runner);

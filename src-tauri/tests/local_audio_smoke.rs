@@ -265,6 +265,103 @@ fn real_engine_metering_with_test_signal() {
     engine.stop();
 }
 
+/// Poll `cond` until it returns true, or `timeout` expires. Used by
+/// the transport smoke test instead of fixed sleeps so a slow device
+/// or a loaded CI machine doesn't flake the test.
+fn wait_until<F: Fn() -> bool>(cond: F, timeout: Duration, what: &str) {
+    let deadline = std::time::Instant::now() + timeout;
+    while !cond() && std::time::Instant::now() < deadline {
+        sleep(Duration::from_millis(5));
+    }
+    assert!(cond(), "timed out waiting for: {what}");
+}
+
+/// Smoke test — transport position advances during real playback.
+///
+/// Phase 3A end-to-end proof: start the engine, call `transport_play`,
+/// wait until the shared position crosses 1000 samples (~21 ms at 48 k,
+/// enough to confirm the callback is advancing), then continue until
+/// it crosses ~9600 samples (~200 ms). Uses poll-with-timeout rather
+/// than fixed sleeps so a loaded machine or a high-latency device
+/// doesn't flake the test.
+///
+/// Also covers:
+///  - TransportStop rewinds to 0 (observed via shared atomic)
+///  - TransportSeek jumps to an arbitrary absolute position
+///  - TransportPause preserves position and does NOT keep advancing
+#[test]
+#[ignore]
+fn real_engine_transport_advances_position() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    // Starts at 0 when stopped.
+    assert_eq!(engine.transport_position(), 0);
+
+    // Play and wait until the counter has advanced past a clearly
+    // audio-thread-only threshold. 1000 samples proves the callback
+    // is actually advancing (not just that the command queue took it).
+    engine.transport_play().expect("transport_play");
+    wait_until(
+        || engine.transport_position() > 1_000,
+        Duration::from_secs(2),
+        "transport_position > 1000 samples after play",
+    );
+
+    // Let it run to ~200 ms worth.
+    wait_until(
+        || engine.transport_position() > 9_000,
+        Duration::from_secs(2),
+        "transport_position > 9000 samples (~200 ms at 48 kHz)",
+    );
+    let after_play = engine.transport_position();
+    eprintln!("position after ~200 ms of play: {after_play} samples");
+    // Upper bound: we shouldn't be catastrophically ahead even if the
+    // poll loop is slow. 96 000 = 2 s worth.
+    assert!(
+        after_play < 96_000,
+        "position {after_play} is implausibly far ahead — \
+         callback may be firing faster than wall-clock"
+    );
+
+    // Pause — record the counter and verify it does NOT keep
+    // advancing. Because the TransportPause command travels through
+    // the queue, the audio thread may still advance a few buffers
+    // before observing the pause. Use a small "settle" window to let
+    // the in-flight buffer land, then assert the counter is stable.
+    engine.transport_pause().expect("transport_pause");
+    // Give the command time to be drained AND one buffer to pass.
+    sleep(Duration::from_millis(50));
+    let paused_at = engine.transport_position();
+    eprintln!("position at pause-settled: {paused_at} samples");
+    assert!(paused_at >= after_play);
+    // Now poll for a longer window — position must remain stable.
+    sleep(Duration::from_millis(100));
+    let after_pause_wait = engine.transport_position();
+    assert_eq!(
+        after_pause_wait, paused_at,
+        "paused position changed over 100 ms — transport did not actually pause"
+    );
+
+    // Stop — must rewind to 0.
+    engine.transport_stop().expect("transport_stop");
+    wait_until(
+        || engine.transport_position() == 0,
+        Duration::from_secs(1),
+        "transport_position == 0 after stop",
+    );
+
+    // Seek — jump to an arbitrary absolute position without playing.
+    engine.transport_seek(123_456).expect("transport_seek");
+    wait_until(
+        || engine.transport_position() == 123_456,
+        Duration::from_secs(1),
+        "transport_position == 123_456 after seek-while-stopped",
+    );
+
+    engine.stop();
+}
+
 /// Smoke test — starting with an unknown device name surfaces a
 /// human-readable error via the Open variant.
 #[test]

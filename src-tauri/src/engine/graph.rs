@@ -251,7 +251,12 @@ impl AudioGraph {
             | EngineCommand::SetCompressorParams { .. }
             | EngineCommand::SetTrackSendLevel { .. }
             | EngineCommand::SetAuxBusVolume { .. }
-            | EngineCommand::SetAuxBusEnabled { .. } => {}
+            | EngineCommand::SetAuxBusEnabled { .. }
+            | EngineCommand::TransportPlay
+            | EngineCommand::TransportStop
+            | EngineCommand::TransportPause
+            | EngineCommand::TransportSeek { .. }
+            | EngineCommand::TransportSetTempo { .. } => {}
         }
     }
 

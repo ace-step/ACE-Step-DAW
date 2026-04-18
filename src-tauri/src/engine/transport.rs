@@ -330,17 +330,39 @@ impl Transport {
     ///
     /// The wrap math lives in [`LoopRegion::next_position`], so
     /// this method is a thin audio-callback-friendly wrapper — no
-    /// allocation, no locks, one `ArcSwap::load` + one atomic
-    /// write. Safe to call from the audio thread.
+    /// allocation, no locks, one `ArcSwap::load` + at most one
+    /// atomic read-modify-write. Safe to call from the audio thread.
+    ///
+    /// **Fast path** — when the loop is inactive (the common case
+    /// during single-shot playback), we delegate to
+    /// `SharedPosition::advance`, which uses a single `fetch_add`
+    /// atomic RMW. Only the active-loop path needs the more
+    /// expensive load + compute + store, because we have to re-read
+    /// the cursor to decide whether the advance crosses the end
+    /// boundary. Copilot review noted the inactive case was paying
+    /// extra atomics for nothing (PR #1713).
     #[inline]
     pub fn advance_with_loop_if_advancing(&mut self, frames: u64) {
         if !self.state.is_advancing() {
             return;
         }
         let region = **self.loop_region.load();
+        if !region.is_active() {
+            self.position.advance(frames);
+            return;
+        }
         let current = self.position.get();
         let next = region.next_position(current, frames);
-        self.position.set(next);
+        // Skip the store if the advance landed exactly where the
+        // non-wrap path would have, which is the 99% case when the
+        // playhead is outside the loop range entirely. `advance`
+        // does a single RMW and matches what the caller wants.
+        if next == current.saturating_add(frames) {
+            self.position.advance(frames);
+        } else {
+            // Wrap happened — need an absolute set, not a delta.
+            self.position.set(next);
+        }
     }
 }
 

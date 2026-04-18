@@ -470,22 +470,35 @@ fn real_engine_loop_wraps_position() {
         region.end
     );
 
-    // Disable the loop and verify the next advance goes past end
-    // without wrapping.
+    // Disable the loop and verify the playhead leaves the region.
+    // This is the critical regression guard — without the assertion
+    // that `after_disable >= region.end`, a bug where wrapping kept
+    // happening after `set_loop_enabled(false)` would slip through
+    // (Copilot review on PR #1713).
     engine
         .set_loop_enabled(false)
         .expect("set_loop_enabled");
-    sleep(Duration::from_millis(50));
+    wait_until(
+        || engine.transport_position() >= region.end,
+        Duration::from_secs(2),
+        "position exits loop region once enabled=false",
+    );
     let after_disable = engine.transport_position();
     eprintln!("position after loop disabled: {after_disable}");
-    // The position was inside [48_000, 96_000). After 50 ms ≈ 2400
-    // more samples and loop disabled, it should now exceed 96_000
-    // (assuming no wrap happened post-disable).
-    // Allow a small grace because there may be 1 in-flight buffer
-    // already partway through a wrap when we flipped the flag.
     assert!(
-        after_disable >= region.start,
-        "position {after_disable} went backwards"
+        after_disable >= region.end,
+        "position {after_disable} still inside loop range \
+         [{}, {}) after set_loop_enabled(false) — wrap did not stop",
+        region.start,
+        region.end
+    );
+    // And the counter must keep advancing (not re-wrap).
+    let first = after_disable;
+    sleep(Duration::from_millis(50));
+    let second = engine.transport_position();
+    assert!(
+        second > first,
+        "position stuck at {first} — counter not advancing after loop disabled"
     );
 
     engine.stop();

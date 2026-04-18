@@ -81,6 +81,14 @@ impl PositionEmitter {
         let thread = thread::Builder::new()
             .name("ace-position-emitter".into())
             .spawn(move || {
+                // Re-check the flag BEFORE the initial emit so that
+                // a caller who does `start()` immediately followed
+                // by `stop()` — before the thread's first wake —
+                // doesn't see one stale tick. Found by codex review
+                // on PR #1715.
+                if !running_clone.load(Ordering::Relaxed) {
+                    return;
+                }
                 // Emit once immediately so the UI sees a value on
                 // the very first frame, not `clamped` ms later.
                 notify(shared_position.get());
@@ -299,6 +307,32 @@ mod tests {
         // Right at the boundaries: preserve exactly.
         assert_eq!(clamp_interval(MIN_INTERVAL), MIN_INTERVAL);
         assert_eq!(clamp_interval(MAX_INTERVAL), MAX_INTERVAL);
+    }
+
+    #[test]
+    fn stop_immediately_after_start_fires_no_ticks() {
+        // Codex P2 regression (PR #1715): the constructor spawns a
+        // thread that emits immediately before checking the running
+        // flag. If a caller does `start(...)` then `stop()` before
+        // the thread's first wake, the flag check must suppress the
+        // initial emit too — not just subsequent loop iterations.
+        let (sink, cb) = make_sink();
+        let pos = SharedPosition::new();
+        pos.set(99);
+        let mut emitter = PositionEmitter::start(pos, Duration::from_millis(50), cb);
+        // Stop *immediately*. On a fast machine the thread may not
+        // have even been scheduled yet; the flag flip + join must
+        // still prevent the stale tick.
+        emitter.stop();
+        // Give the thread a generous window to (incorrectly) tick
+        // if it were going to.
+        thread::sleep(Duration::from_millis(50));
+        assert_eq!(
+            sink.len(),
+            0,
+            "emitter fired {} stale ticks after an immediate stop",
+            sink.len()
+        );
     }
 
     #[test]

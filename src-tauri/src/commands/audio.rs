@@ -73,6 +73,17 @@ pub fn audio_get_default_device() -> Option<AudioDeviceInfo> {
 
 // ── Engine lifecycle ────────────────────────────────────────────────
 
+// Locking protocol for start/stop (addresses codex P1 on PR #1715):
+//
+// - ALWAYS take `EngineState` FIRST, then `TransportEmitterState`.
+//   The reverse order in any command would risk a deadlock if two
+//   commands overlap.
+// - HOLD BOTH LOCKS through the entire emitter lifecycle transition
+//   (old stopped → new stopped, or old running → new running).
+//   Otherwise a `stop_engine` that sees `None` can race a concurrent
+//   `start_engine` that installs a new emitter between the check and
+//   the engine stop, leaving a stale emitter behind.
+
 #[tauri::command]
 pub fn audio_start_engine(
     config: EngineConfig,
@@ -80,26 +91,26 @@ pub fn audio_start_engine(
     emitter_state: State<'_, TransportEmitterState>,
     app: tauri::AppHandle,
 ) -> Result<EngineStatus, EngineError> {
+    // Take locks in canonical order and hold both.
     let mut engine = state
         .0
         .lock()
         .map_err(|_| EngineError::Open("engine mutex poisoned".into()))?;
+    let mut emitter_slot = emitter_state
+        .0
+        .lock()
+        .map_err(|_| EngineError::Open("emitter mutex poisoned".into()))?;
+
+    // Stop any leftover emitter BEFORE starting the new engine — so
+    // we never have two emitters pushing to the same event name, and
+    // we don't leak a thread if `start` fails.
+    if let Some(mut old) = emitter_slot.take() {
+        old.stop();
+    }
+
     let status = engine.start(config)?;
 
-    // Spawn the position emitter so the UI can animate the playhead
-    // from Tauri events instead of polling at 60 Hz. If an emitter
-    // from a previous start is still alive (should not happen under
-    // normal use, but stop_engine may have been skipped), stop it
-    // first so we never have two emitters pushing to the same event
-    // name.
     if let Some(shared_pos) = engine.shared_position_handle() {
-        let mut slot = emitter_state
-            .0
-            .lock()
-            .map_err(|_| EngineError::Open("emitter mutex poisoned".into()))?;
-        if let Some(mut old) = slot.take() {
-            old.stop();
-        }
         let app_handle = app.clone();
         let emitter = PositionEmitter::start(
             shared_pos,
@@ -111,7 +122,7 @@ pub fn audio_start_engine(
                 let _ = app_handle.emit(TRANSPORT_POSITION_EVENT, pos);
             },
         );
-        *slot = Some(emitter);
+        *emitter_slot = Some(emitter);
     }
 
     Ok(status)
@@ -122,18 +133,24 @@ pub fn audio_stop_engine(
     state: State<'_, EngineState>,
     emitter_state: State<'_, TransportEmitterState>,
 ) -> Result<(), EngineError> {
-    // Stop the emitter BEFORE the engine so it doesn't tick one
-    // more event carrying a stale (pre-rewind) position after
-    // `engine.stop()` resets the counter.
-    if let Ok(mut slot) = emitter_state.0.lock() {
-        if let Some(mut e) = slot.take() {
-            e.stop();
-        }
-    }
+    // Canonical order: engine first, emitter second — matches
+    // start_engine so the two commands can never deadlock each
+    // other.
     let mut engine = state
         .0
         .lock()
         .map_err(|_| EngineError::Open("engine mutex poisoned".into()))?;
+    let mut emitter_slot = emitter_state
+        .0
+        .lock()
+        .map_err(|_| EngineError::Open("emitter mutex poisoned".into()))?;
+
+    // Stop the emitter BEFORE the engine so it doesn't tick one
+    // more event carrying a stale (pre-rewind) position after
+    // `engine.stop()` resets the counter.
+    if let Some(mut e) = emitter_slot.take() {
+        e.stop();
+    }
     engine.stop();
     Ok(())
 }

@@ -29,6 +29,7 @@ use super::config::{AudioDeviceInfo, VALID_SAMPLE_RATES};
 use super::graph::AudioGraph;
 use super::meter::generate_sine;
 use super::meter_bank::MeterProducers;
+use super::metronome::{is_accent_beat, next_beat_at_or_after, ClickGenerator};
 use super::mixer;
 use super::transport::Transport;
 use super::{EngineCommand, OpenInfo, RuntimeContext};
@@ -283,6 +284,10 @@ fn make_audio_callback(
     // Pre-allocate master L/R accumulators.
     let mut master_l = vec![0.0_f32; max_frames];
     let mut master_r = vec![0.0_f32; max_frames];
+    // Pre-allocated click state lives across buffers so a click
+    // that starts near the end of one buffer can decay into the
+    // start of the next without truncation.
+    let mut click_gen = ClickGenerator::idle();
 
     let ch = channels as usize;
 
@@ -458,6 +463,74 @@ fn make_audio_callback(
 
         // Mix aux return buses into master BEFORE master volume.
         routing.mix_into_master(&mut master_l[..frames], &mut master_r[..frames], frames);
+
+        // Metronome render (3E). Runs AFTER track/aux mixing but
+        // BEFORE master volume so the click respects master gain
+        // like any other bus. The config is read once per buffer
+        // via wait-free ArcSwap load; tempo + time-signature maps
+        // are snapshotted into Arc references held for the buffer.
+        {
+            let metronome_config = transport.metronome_config_snapshot();
+            if metronome_config.enabled && transport.state().is_advancing() {
+                let tempo_map = transport.tempo_map_snapshot();
+                let time_sig = transport.time_sig_map_snapshot();
+                let playhead_start = transport.position();
+                let sr_u32 = sample_rate as u32;
+
+                // Find the beat at or after the playhead once per buffer;
+                // advance one beat at a time as we cross boundaries inside
+                // the sample loop.
+                let (mut next_beat_idx, mut next_beat_sample) =
+                    next_beat_at_or_after(playhead_start, &tempo_map, sr_u32);
+
+                for i in 0..frames {
+                    let cur_sample = playhead_start + i as u64;
+                    if cur_sample >= next_beat_sample {
+                        // Crossed a beat boundary — trigger a click.
+                        // `is_accent_beat` is cheap (one sig lookup +
+                        // one modulo).
+                        let accent = is_accent_beat(
+                            next_beat_idx,
+                            next_beat_sample,
+                            &time_sig,
+                        );
+                        let (freq, amp) = if accent {
+                            (
+                                metronome_config.accent_freq_hz,
+                                metronome_config.accent_volume,
+                            )
+                        } else {
+                            (metronome_config.click_freq_hz, metronome_config.volume)
+                        };
+                        click_gen.trigger(freq, amp);
+                        // Advance to the following beat — beat_to_sample
+                        // handles tempo changes that may lie between.
+                        next_beat_idx += 1;
+                        next_beat_sample = tempo_map
+                            .beat_to_sample(next_beat_idx as f64, sr_u32);
+                        // Defensive: if tempo math produces a non-
+                        // advancing sample (degenerate BPM), bump
+                        // by one to break out of the loop.
+                        if next_beat_sample <= cur_sample {
+                            next_beat_sample = cur_sample + 1;
+                        }
+                    }
+                    let s = click_gen.tick(sample_rate);
+                    master_l[i] += s;
+                    master_r[i] += s;
+                }
+            } else if click_gen.is_active() {
+                // Finish draining any in-flight click even if the
+                // user just disabled the metronome or paused — avoids
+                // a clipped tail that would sound like a digital
+                // pop.
+                for i in 0..frames {
+                    let s = click_gen.tick(sample_rate);
+                    master_l[i] += s;
+                    master_r[i] += s;
+                }
+            }
+        }
 
         // Apply master volume.
         for i in 0..frames {

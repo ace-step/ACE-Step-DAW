@@ -40,6 +40,7 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 
 use super::loop_region::LoopRegion;
+use super::metronome::MetronomeConfig;
 use super::tempo_map::TempoMap;
 use super::time_sig_map::TimeSignatureMap;
 
@@ -184,10 +185,14 @@ pub struct Transport {
     /// toggle / move the region without blocking the audio thread
     /// — the callback does a wait-free `.load()` on each buffer.
     loop_region: Arc<ArcSwap<LoopRegion>>,
+    /// Metronome config (enable/volume/frequency). Audio-thread
+    /// click state lives separately — only the config is shared.
+    metronome_config: Arc<ArcSwap<MetronomeConfig>>,
 }
 
 impl Transport {
-    /// Fresh transport: Stopped at sample 0, 120 BPM, 4/4, no loop.
+    /// Fresh transport: Stopped at sample 0, 120 BPM, 4/4, no loop,
+    /// metronome off.
     pub fn new() -> Self {
         Self {
             state: TransportState::Stopped,
@@ -195,6 +200,7 @@ impl Transport {
             tempo_map: Arc::new(ArcSwap::from_pointee(TempoMap::new_constant(DEFAULT_BPM))),
             time_sig_map: Arc::new(ArcSwap::from_pointee(TimeSignatureMap::default())),
             loop_region: Arc::new(ArcSwap::from_pointee(LoopRegion::disabled())),
+            metronome_config: Arc::new(ArcSwap::from_pointee(MetronomeConfig::default_off())),
         }
     }
 
@@ -251,11 +257,32 @@ impl Transport {
         self.loop_region.store(Arc::new(region));
     }
 
+    /// Clone the metronome-config handle. Audio thread reads via
+    /// wait-free `.load()`, main thread publishes via `.store`.
+    pub fn metronome_config_handle(&self) -> Arc<ArcSwap<MetronomeConfig>> {
+        self.metronome_config.clone()
+    }
+
+    /// Snapshot the current metronome config.
+    pub fn metronome_config_snapshot(&self) -> MetronomeConfig {
+        **self.metronome_config.load()
+    }
+
+    /// Replace the metronome config atomically.
+    pub fn replace_metronome_config(&mut self, config: MetronomeConfig) {
+        self.metronome_config.store(Arc::new(config));
+    }
+
     /// Snapshot the current tempo map. Cheap — `.load()` is wait-free
     /// and the returned `Arc<TempoMap>` is a counted reference, not a
     /// deep clone.
     pub fn tempo_map_snapshot(&self) -> Arc<TempoMap> {
         self.tempo_map.load_full()
+    }
+
+    /// Snapshot the current time-signature map.
+    pub fn time_sig_map_snapshot(&self) -> Arc<TimeSignatureMap> {
+        self.time_sig_map.load_full()
     }
 
     /// Begin playback from the current position.

@@ -5,7 +5,8 @@ use tauri::Manager;
 
 use crate::commands::audio::{
     audio_add_track, audio_get_default_device, audio_get_engine_status,
-    audio_list_devices, audio_remove_track, audio_set_master_volume,
+    audio_list_devices, audio_metronome_get_config, audio_metronome_set_config,
+    audio_metronome_set_enabled, audio_remove_track, audio_set_master_volume,
     audio_set_track_params, audio_start_engine, audio_stop_engine,
     audio_transport_beat_to_sample, audio_transport_get_loop_region,
     audio_transport_get_position, audio_transport_get_tempo_map,
@@ -59,6 +60,9 @@ pub fn run() {
             audio_transport_set_loop_region,
             audio_transport_get_loop_region,
             audio_transport_set_loop_enabled,
+            audio_metronome_set_config,
+            audio_metronome_get_config,
+            audio_metronome_set_enabled,
         ])
         .setup(|app| {
             // Focus main window on startup

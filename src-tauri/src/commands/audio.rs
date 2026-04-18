@@ -9,9 +9,10 @@ use std::sync::Mutex;
 use tauri::{Emitter, State};
 
 use crate::engine::{
-    audio_io, AudioDeviceInfo, CommandError, Engine, EngineConfig, EngineError,
-    EngineStatus, LoopRegion, MetronomeConfig, PositionEmitter, TempoEvent, TempoMap,
-    TimeSignatureEvent, TimeSignatureMap, TrackParams, POSITION_EVENT_DEFAULT_INTERVAL,
+    audio_io, AudioDeviceInfo, ClipSchedule, ClipSource, CommandError, Engine,
+    EngineConfig, EngineError, EngineStatus, LoopRegion, MetronomeConfig, PositionEmitter,
+    TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap, TrackParams,
+    POSITION_EVENT_DEFAULT_INTERVAL,
 };
 use crate::engine::slot::SlotHandle;
 
@@ -455,6 +456,46 @@ pub fn audio_metronome_set_enabled(
         .lock()
         .map_err(|_| CommandError::Disconnected)?;
     engine.set_metronome_enabled(enabled)
+}
+
+// ── Clip scheduler (3F) ─────────────────────────────────────────────
+
+/// Replace the full clip schedule atomically. Validated on the
+/// Rust side via `ClipSchedule::try_new` before publishing, so a
+/// malformed payload (too many clips, empty audio_data, length
+/// exceeding PCM frames) returns a typed error to the UI instead
+/// of reaching the audio thread.
+#[tauri::command]
+pub fn audio_clip_set_schedule(
+    clips: Vec<ClipSource>,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_clip_schedule(clips)
+}
+
+/// Snapshot the current clip schedule. Returns `None` when the
+/// engine is stopped. Each clip's audio_data is serialized as a
+/// Vec<f32> on the wire — this can be large for long clips, so
+/// the UI should poll `get_schedule` rarely (on project load /
+/// structural change), not per-frame.
+#[tauri::command]
+pub fn audio_clip_get_schedule(
+    state: State<'_, EngineState>,
+) -> Result<Option<ClipSchedule>, CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.clip_schedule_snapshot().map(|arc| {
+        // Rebuild an owned ClipSchedule for the wire. The clip
+        // audio_data is still shared Arc<Vec<f32>> so there is no
+        // deep copy of the PCM.
+        ClipSchedule::try_new(arc.clips().to_vec()).unwrap_or_else(|_| ClipSchedule::empty())
+    }))
 }
 
 #[cfg(test)]

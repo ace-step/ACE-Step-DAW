@@ -19,7 +19,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use ace_step_daw_lib::engine::{
-    audio_io, Engine, EngineConfig, EngineStatus, LoopRegion, MetronomeConfig,
+    audio_io, ClipSource, Engine, EngineConfig, EngineStatus, LoopRegion, MetronomeConfig,
     PositionEmitter, TempoEvent, TrackParams,
 };
 use std::sync::{Arc, Mutex};
@@ -637,6 +637,81 @@ fn real_engine_metronome_renders_audible_clicks() {
     assert!(
         !cfg_after.enabled,
         "disable command did not propagate to the ArcSwap"
+    );
+
+    engine.stop();
+}
+
+/// Smoke test — clip scheduler mixes scheduled PCM into master
+/// during live playback.
+///
+/// Phase 3F end-to-end proof: build a 24_000-sample (0.5 s at
+/// 48 kHz) ramp PCM, schedule it at sample 24_000 (0.5 s into the
+/// transport), start playback, and observe the master meter RMS
+/// during the clip's window.
+#[test]
+#[ignore]
+fn real_engine_clip_schedule_plays_pcm() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    // Build a 0.5 s stereo ramp that goes from 0 to 0.5 amplitude.
+    // Arc-wrap so the schedule can share it.
+    let frames = 24_000_usize;
+    let mut pcm = Vec::with_capacity(frames * 2);
+    for i in 0..frames {
+        let amp = (i as f32 / frames as f32) * 0.5;
+        pcm.push(amp); // L
+        pcm.push(amp); // R
+    }
+    let pcm = std::sync::Arc::new(pcm);
+
+    // Schedule it at transport sample 24_000 (0.5 s delay from
+    // playback start), 0.8 gain.
+    let clip = ClipSource::new(24_000, frames as u64, 0.8, pcm).expect("ClipSource::new");
+    engine
+        .set_clip_schedule(vec![clip])
+        .expect("set_clip_schedule");
+
+    engine.transport_play().expect("play");
+
+    // Poll meter at 50ms intervals for 1.5 seconds, sampling peak.
+    // The clip is at 500-1000ms of transport time; its amplitude
+    // ramps from 0 to 0.4 (after 0.8 gain), so peak should rise
+    // during that window.
+    let mut peaks = Vec::new();
+    for step in 0..30 {
+        sleep(Duration::from_millis(50));
+        let m = engine.get_master_meter();
+        peaks.push((step * 50, m.peak));
+    }
+    eprintln!("peak progression (ms, peak):");
+    for (t, p) in &peaks {
+        eprintln!("  t={t}: peak={p}");
+    }
+
+    // Verify that at least one sample during the clip's expected
+    // playback window (500-1000ms = steps 10-20) shows an audible
+    // peak. The ramp starts at 0 and grows, so later steps should
+    // be higher than earlier steps.
+    let max_peak_during_clip = peaks[10..20]
+        .iter()
+        .map(|(_, p)| *p)
+        .fold(0.0_f32, f32::max);
+    eprintln!("max peak during clip window: {max_peak_during_clip}");
+    assert!(
+        max_peak_during_clip > 0.05,
+        "clip should have produced audible output, max peak was {max_peak_during_clip}"
+    );
+
+    // Also verify that transport.position actually advanced past
+    // the clip start — rules out the "transport never played"
+    // hypothesis.
+    let pos = engine.transport_position();
+    eprintln!("final transport position: {pos}");
+    assert!(
+        pos > 24_000,
+        "transport should have passed sample 24_000 after 1.5s, got {pos}"
     );
 
     engine.stop();

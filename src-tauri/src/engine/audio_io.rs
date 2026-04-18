@@ -29,6 +29,7 @@ use super::config::{AudioDeviceInfo, VALID_SAMPLE_RATES};
 use super::graph::AudioGraph;
 use super::meter::generate_sine;
 use super::meter_bank::MeterProducers;
+use super::clip::render_clip_segment;
 use super::metronome::{render_metronome_segment, ClickGenerator};
 use super::mixer;
 use super::transport::Transport;
@@ -463,6 +464,87 @@ fn make_audio_callback(
 
         // Mix aux return buses into master BEFORE master volume.
         routing.mix_into_master(&mut master_l[..frames], &mut master_r[..frames], frames);
+
+        // Clip scheduler render (3F). Same wrap-split pattern as
+        // the metronome. Reads a borrowed guard from the ArcSwap
+        // so no Arc clone / drop on the audio thread. Each clip
+        // is bounds-checked (`intersects_buffer`) before any PCM
+        // access to cap per-buffer cost at O(N) comparisons even
+        // when most clips are outside the current buffer window.
+        if transport.state().is_advancing() {
+            let clip_schedule_guard = transport.clip_schedule_handle().load();
+            let clip_schedule: &super::clip::ClipSchedule = &clip_schedule_guard;
+            if !clip_schedule.is_empty() {
+                let loop_region = **transport.loop_region_handle().load();
+                let playhead_start = transport.position();
+                let playhead_end = playhead_start.saturating_add(frames as u64);
+
+                // Wrap split: same logic as the metronome.
+                let wrap_offset: Option<usize> = if loop_region.is_active()
+                    && playhead_start < loop_region.end
+                {
+                    let to_end = loop_region.end - playhead_start;
+                    if to_end < frames as u64 {
+                        Some(to_end as usize)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let clips = clip_schedule.clips();
+                match wrap_offset {
+                    Some(w) => {
+                        // Pre-wrap segment: [0..w), absolute
+                        // [playhead_start..loop_region.end).
+                        for clip in clips {
+                            if clip.intersects_buffer(playhead_start, loop_region.end) {
+                                render_clip_segment(
+                                    clip,
+                                    &mut master_l[..frames],
+                                    &mut master_r[..frames],
+                                    0,
+                                    w,
+                                    playhead_start,
+                                );
+                            }
+                        }
+                        // Post-wrap segment: [w..frames), absolute
+                        // [loop_region.start..loop_region.start + (frames - w)).
+                        let post_end_abs = loop_region
+                            .start
+                            .saturating_add((frames - w) as u64);
+                        for clip in clips {
+                            if clip.intersects_buffer(loop_region.start, post_end_abs) {
+                                render_clip_segment(
+                                    clip,
+                                    &mut master_l[..frames],
+                                    &mut master_r[..frames],
+                                    w,
+                                    frames,
+                                    loop_region.start,
+                                );
+                            }
+                        }
+                    }
+                    None => {
+                        for clip in clips {
+                            if clip.intersects_buffer(playhead_start, playhead_end) {
+                                render_clip_segment(
+                                    clip,
+                                    &mut master_l[..frames],
+                                    &mut master_r[..frames],
+                                    0,
+                                    frames,
+                                    playhead_start,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Metronome render (3E). Runs AFTER track/aux mixing but
         // BEFORE master volume so the click respects master gain

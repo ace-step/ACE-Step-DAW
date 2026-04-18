@@ -26,6 +26,7 @@
 //! command receiver, ready signal, and stop signal.
 
 pub mod audio_io;
+pub mod clip;
 pub mod command;
 pub mod config;
 pub mod effect_chain;
@@ -48,6 +49,7 @@ pub use config::{
     VALID_SAMPLE_RATES,
 };
 pub use graph::{AudioGraph, Track, MAX_TRACKS};
+pub use clip::{ClipSchedule, ClipScheduleError, ClipSource, MAX_CLIPS};
 pub use loop_region::LoopRegion;
 pub use metronome::MetronomeConfig;
 pub use position_emitter::{PositionEmitter, DEFAULT_INTERVAL as POSITION_EVENT_DEFAULT_INTERVAL};
@@ -160,6 +162,10 @@ pub enum CommandError {
     /// Same as `InvalidTempoMap` but for the time-signature map.
     #[error("invalid time signature map: {0}")]
     InvalidTimeSignatureMap(String),
+    /// Caller sent a clip-schedule payload that violated invariants
+    /// (too many clips, empty audio_data, length > PCM frames).
+    #[error("invalid clip schedule: {0}")]
+    InvalidClipSchedule(String),
 }
 
 /// Contract for the function that owns a CPAL stream.
@@ -219,6 +225,8 @@ struct RunningEngine {
     loop_region: Arc<ArcSwap<LoopRegion>>,
     /// Same pattern for the metronome config.
     metronome_config: Arc<ArcSwap<MetronomeConfig>>,
+    /// Same pattern for the clip schedule.
+    clip_schedule: Arc<ArcSwap<ClipSchedule>>,
     /// Active sample rate — cached so beat↔sample conversion can
     /// run without re-parsing `EngineStatus`.
     sample_rate: u32,
@@ -297,6 +305,7 @@ impl Engine {
         let time_sig_map_handle = transport.time_sig_map_handle();
         let loop_region_handle = transport.loop_region_handle();
         let metronome_config_handle = transport.metronome_config_handle();
+        let clip_schedule_handle = transport.clip_schedule_handle();
 
         let ctx = RuntimeContext {
             config: config.clone(),
@@ -344,6 +353,7 @@ impl Engine {
                     time_sig_map: time_sig_map_handle,
                     loop_region: loop_region_handle,
                     metronome_config: metronome_config_handle,
+                    clip_schedule: clip_schedule_handle,
                     sample_rate: active_sample_rate,
                 });
                 Ok(status)
@@ -637,6 +647,26 @@ impl Engine {
         cfg.enabled = enabled;
         running.metronome_config.store(Arc::new(cfg));
         Ok(())
+    }
+
+    // ── Clip schedule (3F) ──────────────────────────────────────────
+
+    /// Replace the clip schedule atomically. Validates via
+    /// [`ClipSchedule::try_new`] before publishing so a malformed
+    /// payload never reaches the audio thread.
+    pub fn set_clip_schedule(&self, clips: Vec<ClipSource>) -> Result<(), CommandError> {
+        let running = self.running.as_ref().ok_or(CommandError::NotRunning)?;
+        let schedule = ClipSchedule::try_new(clips)
+            .map_err(|e| CommandError::InvalidClipSchedule(format!("{e:?}")))?;
+        running.clip_schedule.store(Arc::new(schedule));
+        Ok(())
+    }
+
+    /// Snapshot the current clip schedule. Returns `None` when the
+    /// engine is stopped. Cheap — wait-free `load_full` produces a
+    /// refcounted handle.
+    pub fn clip_schedule_snapshot(&self) -> Option<Arc<ClipSchedule>> {
+        self.running.as_ref().map(|r| r.clip_schedule.load_full())
     }
 
     /// Read the latest meter reading for a track.

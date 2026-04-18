@@ -39,6 +39,7 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 
+use super::clip::ClipSchedule;
 use super::loop_region::LoopRegion;
 use super::metronome::MetronomeConfig;
 use super::tempo_map::TempoMap;
@@ -188,6 +189,11 @@ pub struct Transport {
     /// Metronome config (enable/volume/frequency). Audio-thread
     /// click state lives separately — only the config is shared.
     metronome_config: Arc<ArcSwap<MetronomeConfig>>,
+    /// Clip schedule — the set of PCM clips to mix into the master
+    /// bus at their scheduled sample positions. Shared via
+    /// `ArcSwap` so the main thread can replace the whole set
+    /// without blocking the audio callback.
+    clip_schedule: Arc<ArcSwap<ClipSchedule>>,
 }
 
 impl Transport {
@@ -201,6 +207,7 @@ impl Transport {
             time_sig_map: Arc::new(ArcSwap::from_pointee(TimeSignatureMap::default())),
             loop_region: Arc::new(ArcSwap::from_pointee(LoopRegion::disabled())),
             metronome_config: Arc::new(ArcSwap::from_pointee(MetronomeConfig::default_off())),
+            clip_schedule: Arc::new(ArcSwap::from_pointee(ClipSchedule::empty())),
         }
     }
 
@@ -271,6 +278,17 @@ impl Transport {
     /// Replace the metronome config atomically.
     pub fn replace_metronome_config(&mut self, config: MetronomeConfig) {
         self.metronome_config.store(Arc::new(config));
+    }
+
+    /// Clone the clip-schedule handle. Audio thread reads via
+    /// wait-free `.load()`, main thread publishes via `.store`.
+    pub fn clip_schedule_handle(&self) -> Arc<ArcSwap<ClipSchedule>> {
+        self.clip_schedule.clone()
+    }
+
+    /// Replace the clip schedule atomically.
+    pub fn replace_clip_schedule(&mut self, schedule: ClipSchedule) {
+        self.clip_schedule.store(Arc::new(schedule));
     }
 
     /// Snapshot the current tempo map. Cheap — `.load()` is wait-free

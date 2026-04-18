@@ -689,7 +689,7 @@ impl Engine {
     pub fn set_clip_schedule(&self, clips: Vec<ClipSource>) -> Result<(), CommandError> {
         let running = self.running.as_ref().ok_or(CommandError::NotRunning)?;
         let schedule = ClipSchedule::try_new(clips)
-            .map_err(|e| CommandError::InvalidClipSchedule(format!("{e:?}")))?;
+            .map_err(|e| CommandError::InvalidClipSchedule(e.to_string()))?;
         let new_arc = Arc::new(schedule);
         // Snapshot the outgoing schedule on the MAIN thread so the
         // Arc's refcount doesn't hit zero on the audio side.

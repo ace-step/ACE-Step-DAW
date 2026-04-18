@@ -41,6 +41,7 @@
 //!   deinterleaving needed.
 
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::sync::Arc;
 
 /// Maximum number of clips a single [`ClipSchedule`] can hold. This
@@ -60,7 +61,36 @@ pub enum ClipScheduleError {
     /// Clip's `length_samples` is longer than the PCM frames
     /// available in `audio_data`.
     LengthExceedsAudio { length: u64, available_frames: u64 },
+    /// Clip's `audio_data` length is odd — stereo-interleaved PCM
+    /// must have `2 * frames` samples.
+    OddAudioLength(usize),
 }
+
+impl fmt::Display for ClipScheduleError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ClipScheduleError::TooManyClips(n) => {
+                write!(f, "too many clips ({n}, max {MAX_CLIPS})")
+            }
+            ClipScheduleError::EmptyAudio => {
+                f.write_str("clip audio data is empty")
+            }
+            ClipScheduleError::LengthExceedsAudio {
+                length,
+                available_frames,
+            } => write!(
+                f,
+                "length_samples ({length}) exceeds available PCM frames ({available_frames})"
+            ),
+            ClipScheduleError::OddAudioLength(n) => write!(
+                f,
+                "audio data has {n} samples, which is odd; stereo-interleaved PCM must have 2×frames samples"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ClipScheduleError {}
 
 /// A single audio clip scheduled at an absolute sample position.
 ///
@@ -89,10 +119,10 @@ pub struct ClipSource {
 }
 
 impl ClipSource {
-    /// Validated constructor. Clamps `gain` to `[0.0, 1.0]` and
-    /// rejects clips whose requested length exceeds what the PCM
-    /// buffer actually holds (prevents out-of-bounds reads on the
-    /// audio thread).
+    /// Validated constructor. Clamps `gain` to `[0.0, 1.0]`,
+    /// rejects empty or odd-length PCM (stereo-interleaved must be
+    /// a multiple of 2), and rejects clips whose requested length
+    /// exceeds what the PCM buffer actually holds.
     pub fn new(
         start_sample: u64,
         length_samples: u64,
@@ -102,7 +132,13 @@ impl ClipSource {
         if audio_data.is_empty() {
             return Err(ClipScheduleError::EmptyAudio);
         }
-        // Stereo-interleaved: 2 floats per frame.
+        // Stereo-interleaved: 2 floats per frame. Odd length means
+        // the caller handed us the wrong channel layout; reject it
+        // here so the audio thread never has to handle a partial
+        // trailing sample (found by Copilot review on PR #1719).
+        if audio_data.len() % 2 != 0 {
+            return Err(ClipScheduleError::OddAudioLength(audio_data.len()));
+        }
         let available_frames = (audio_data.len() as u64) / 2;
         if length_samples > available_frames {
             return Err(ClipScheduleError::LengthExceedsAudio {
@@ -110,11 +146,10 @@ impl ClipSource {
                 available_frames,
             });
         }
-        let safe_gain = if gain.is_finite() { gain.clamp(0.0, 1.0) } else { 0.0 };
         Ok(Self {
             start_sample,
             length_samples,
-            gain: safe_gain,
+            gain: normalize_gain(gain),
             audio_data,
         })
     }
@@ -157,17 +192,23 @@ impl ClipSchedule {
     }
 
     /// Validated constructor.
-    pub fn try_new(clips: Vec<ClipSource>) -> Result<Self, ClipScheduleError> {
+    /// Validated constructor.
+    ///
+    /// Normalizes every incoming clip's `gain` via
+    /// [`normalize_gain`] so that a payload arriving via serde
+    /// (which can set public fields directly) cannot inject NaN,
+    /// ±∞, or out-of-range gain into the mix. Found by Copilot
+    /// review on PR #1719.
+    pub fn try_new(mut clips: Vec<ClipSource>) -> Result<Self, ClipScheduleError> {
         if clips.len() > MAX_CLIPS {
             return Err(ClipScheduleError::TooManyClips(clips.len()));
         }
-        // Clips are validated individually by `ClipSource::new`, but
-        // allow callers who constructed them manually (e.g. via
-        // serde) to still fail fast if audio_data was emptied or
-        // length was extended out of bounds after construction.
-        for c in &clips {
+        for c in &mut clips {
             if c.audio_data.is_empty() {
                 return Err(ClipScheduleError::EmptyAudio);
+            }
+            if c.audio_data.len() % 2 != 0 {
+                return Err(ClipScheduleError::OddAudioLength(c.audio_data.len()));
             }
             let available = (c.audio_data.len() as u64) / 2;
             if c.length_samples > available {
@@ -176,6 +217,9 @@ impl ClipSchedule {
                     available_frames: available,
                 });
             }
+            // Normalize gain — closes the serde-bypass hole where a
+            // raw ClipSource literal skipped ClipSource::new.
+            c.gain = normalize_gain(c.gain);
         }
         Ok(Self { clips })
     }
@@ -196,6 +240,18 @@ impl ClipSchedule {
 impl Default for ClipSchedule {
     fn default() -> Self {
         Self::empty()
+    }
+}
+
+/// Clamp gain to the valid unit range, snapping non-finite inputs
+/// (NaN / ±∞) to 0. Used by both `ClipSource::new` and
+/// `ClipSchedule::try_new` so there is one canonical definition.
+#[inline]
+pub fn normalize_gain(gain: f32) -> f32 {
+    if gain.is_finite() {
+        gain.clamp(0.0, 1.0)
+    } else {
+        0.0
     }
 }
 
@@ -303,6 +359,81 @@ mod tests {
         assert_eq!(a.gain, 0.0);
         assert_eq!(b.gain, 1.0);
         assert_eq!(c.gain, 0.0, "NaN snaps to 0");
+    }
+
+    #[test]
+    fn new_rejects_odd_length_audio() {
+        let odd = Arc::new(vec![1.0_f32, 2.0, 3.0]); // 3 samples
+        match ClipSource::new(0, 1, 1.0, odd) {
+            Err(ClipScheduleError::OddAudioLength(n)) => assert_eq!(n, 3),
+            other => panic!("expected OddAudioLength, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn try_new_normalizes_nan_gain_in_bypass_path() {
+        // Codex+Copilot regression: serde / struct-literal
+        // construction of ClipSource can set gain to NaN, bypassing
+        // ClipSource::new's clamp. try_new must re-normalize so the
+        // audio thread never sees NaN.
+        let pcm = make_pcm(10, 1.0, 1.0);
+        let bad = ClipSource {
+            start_sample: 0,
+            length_samples: 10,
+            gain: f32::NAN,
+            audio_data: pcm,
+        };
+        let schedule = ClipSchedule::try_new(vec![bad]).unwrap();
+        assert_eq!(schedule.clips()[0].gain, 0.0, "NaN snaps to 0");
+    }
+
+    #[test]
+    fn try_new_normalizes_out_of_range_gain_in_bypass_path() {
+        let pcm = make_pcm(10, 1.0, 1.0);
+        let bad = ClipSource {
+            start_sample: 0,
+            length_samples: 10,
+            gain: 99.0,
+            audio_data: pcm,
+        };
+        let schedule = ClipSchedule::try_new(vec![bad]).unwrap();
+        assert_eq!(schedule.clips()[0].gain, 1.0);
+    }
+
+    #[test]
+    fn try_new_rejects_odd_length_in_bypass_path() {
+        let odd = Arc::new(vec![0.5_f32; 7]);
+        // Cannot use ClipSource::new (it would reject); build by
+        // struct literal to bypass.
+        let bad = ClipSource {
+            start_sample: 0,
+            length_samples: 3,
+            gain: 1.0,
+            audio_data: odd,
+        };
+        match ClipSchedule::try_new(vec![bad]) {
+            Err(ClipScheduleError::OddAudioLength(_)) => {}
+            other => panic!("expected OddAudioLength, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn error_display_is_human_readable() {
+        // Copilot regression: use Display not Debug for user-facing
+        // errors.
+        let e = ClipScheduleError::TooManyClips(9999);
+        assert!(format!("{e}").contains("9999"));
+        let e = ClipScheduleError::EmptyAudio;
+        assert_eq!(format!("{e}"), "clip audio data is empty");
+        let e = ClipScheduleError::OddAudioLength(5);
+        assert!(format!("{e}").contains("5"));
+        let e = ClipScheduleError::LengthExceedsAudio {
+            length: 100,
+            available_frames: 50,
+        };
+        let s = format!("{e}");
+        assert!(s.contains("100"));
+        assert!(s.contains("50"));
     }
 
     #[test]

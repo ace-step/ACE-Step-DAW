@@ -482,6 +482,11 @@ pub fn audio_clip_set_schedule(
 /// Vec<f32> on the wire — this can be large for long clips, so
 /// the UI should poll `get_schedule` rarely (on project load /
 /// structural change), not per-frame.
+///
+/// Returns `InvalidClipSchedule` on the rare path where the
+/// snapshot round-trips through `try_new` and hits an invariant
+/// error — prefer surfacing that over silently pretending the
+/// schedule was cleared (Copilot review on PR #1719).
 #[tauri::command]
 pub fn audio_clip_get_schedule(
     state: State<'_, EngineState>,
@@ -490,12 +495,15 @@ pub fn audio_clip_get_schedule(
         .0
         .lock()
         .map_err(|_| CommandError::Disconnected)?;
-    Ok(engine.clip_schedule_snapshot().map(|arc| {
-        // Rebuild an owned ClipSchedule for the wire. The clip
-        // audio_data is still shared Arc<Vec<f32>> so there is no
-        // deep copy of the PCM.
-        ClipSchedule::try_new(arc.clips().to_vec()).unwrap_or_else(|_| ClipSchedule::empty())
-    }))
+    let Some(arc) = engine.clip_schedule_snapshot() else {
+        return Ok(None);
+    };
+    // Rebuild an owned ClipSchedule for the wire. The clip
+    // audio_data is still shared Arc<Vec<f32>> so there is no
+    // deep copy of the PCM.
+    let rebuilt = ClipSchedule::try_new(arc.clips().to_vec())
+        .map_err(|e| CommandError::InvalidClipSchedule(e.to_string()))?;
+    Ok(Some(rebuilt))
 }
 
 #[cfg(test)]

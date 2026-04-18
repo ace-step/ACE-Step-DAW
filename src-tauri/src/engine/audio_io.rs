@@ -501,8 +501,13 @@ fn make_audio_callback(
         // Advance the transport position. This is the single place in
         // the engine that moves the timeline forward — no-op when
         // stopped/paused, otherwise bumps the shared atomic by
-        // `frames`. Downstream phases (3C loop wrap, 3F clip
-        // scheduling) read this counter to decide what to render.
+        // `frames` (or wraps mid-buffer when the advance crosses the
+        // active loop end). Downstream phases (3F clip scheduling)
+        // read this counter to decide what to render.
+        //
+        // `advance_with_loop_if_advancing` loads the latest loop
+        // region from its `ArcSwap` on every buffer — changes the
+        // main thread publishes take effect on the next buffer.
         //
         // The advance intentionally uses the *rendered* frame count
         // (already clamped to `max_frames`), not the raw buffer size.
@@ -512,7 +517,7 @@ fn make_audio_callback(
         // and leave the tail silent (one-time audible gap) while
         // position advances by the same amount — versus advancing by
         // the full buffer, which would desync UI from audio.
-        transport.advance_if_advancing(frames as u64);
+        transport.advance_with_loop_if_advancing(frames as u64);
     }
 }
 

@@ -30,6 +30,7 @@ pub mod command;
 pub mod config;
 pub mod effect_chain;
 pub mod graph;
+pub mod loop_region;
 pub mod meter;
 pub mod meter_bank;
 pub mod mixer;
@@ -45,6 +46,7 @@ pub use config::{
     VALID_SAMPLE_RATES,
 };
 pub use graph::{AudioGraph, Track, MAX_TRACKS};
+pub use loop_region::LoopRegion;
 pub use meter::{generate_sine, Meter, MeterReading};
 pub use meter_bank::{MeterConsumers, MeterProducers};
 pub use mixer::{equal_power_pan, is_audible};
@@ -209,6 +211,8 @@ struct RunningEngine {
     tempo_map: Arc<ArcSwap<TempoMap>>,
     /// Same pattern for time signature.
     time_sig_map: Arc<ArcSwap<TimeSignatureMap>>,
+    /// Same pattern for the loop region.
+    loop_region: Arc<ArcSwap<LoopRegion>>,
     /// Active sample rate — cached so beat↔sample conversion can
     /// run without re-parsing `EngineStatus`.
     sample_rate: u32,
@@ -285,6 +289,7 @@ impl Engine {
         let shared_position = transport.shared_position();
         let tempo_map_handle = transport.tempo_map_handle();
         let time_sig_map_handle = transport.time_sig_map_handle();
+        let loop_region_handle = transport.loop_region_handle();
 
         let ctx = RuntimeContext {
             config: config.clone(),
@@ -330,6 +335,7 @@ impl Engine {
                     shared_position,
                     tempo_map: tempo_map_handle,
                     time_sig_map: time_sig_map_handle,
+                    loop_region: loop_region_handle,
                     sample_rate: active_sample_rate,
                 });
                 Ok(status)
@@ -547,6 +553,36 @@ impl Engine {
             Some(r) => r.tempo_map.load().sample_to_beat(sample, r.sample_rate),
             None => 0.0,
         }
+    }
+
+    // ── Transport loop region (3C) ──────────────────────────────────
+
+    /// Replace the loop region atomically. The region is stored as
+    /// given — malformed regions (`end <= start`) are NOT rejected
+    /// here because the UI may be in a transient drag state where
+    /// the handles have briefly crossed. Such regions are silently
+    /// treated as disabled on the audio thread (see
+    /// [`LoopRegion::is_active`]).
+    pub fn set_loop_region(&self, region: LoopRegion) -> Result<(), CommandError> {
+        let running = self.running.as_ref().ok_or(CommandError::NotRunning)?;
+        running.loop_region.store(Arc::new(region));
+        Ok(())
+    }
+
+    /// Snapshot the current loop region. Returns `None` when the
+    /// engine is stopped.
+    pub fn loop_region_snapshot(&self) -> Option<LoopRegion> {
+        self.running.as_ref().map(|r| **r.loop_region.load())
+    }
+
+    /// Enable or disable the existing loop region without changing
+    /// its bounds. Convenience for the "Loop On/Off" UI toggle.
+    pub fn set_loop_enabled(&self, enabled: bool) -> Result<(), CommandError> {
+        let running = self.running.as_ref().ok_or(CommandError::NotRunning)?;
+        let mut region = **running.loop_region.load();
+        region.enabled = enabled;
+        running.loop_region.store(Arc::new(region));
+        Ok(())
     }
 
     /// Read the latest meter reading for a track.
@@ -1486,6 +1522,65 @@ mod tests {
         let snap = engine.tempo_map_snapshot().unwrap();
         assert_eq!(snap.events().len(), 2);
         assert_eq!(snap.events()[0].bpm, 77.0);
+
+        engine.stop();
+    }
+
+    // ── 3C: loop region via Engine ──────────────────────────────────
+
+    #[test]
+    fn loop_region_before_start_fails_with_not_running() {
+        let engine = Engine::new();
+        assert_eq!(
+            engine.set_loop_region(LoopRegion {
+                enabled: true,
+                start: 0,
+                end: 1_000,
+            }),
+            Err(CommandError::NotRunning)
+        );
+        assert!(engine.loop_region_snapshot().is_none());
+        assert_eq!(
+            engine.set_loop_enabled(true),
+            Err(CommandError::NotRunning)
+        );
+    }
+
+    #[test]
+    fn loop_region_publish_and_snapshot_round_trip() {
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                fake_runner(
+                    Ok(ok_info()),
+                    Arc::new(AtomicBool::new(false)),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+
+        // Default is disabled.
+        let initial = engine.loop_region_snapshot().unwrap();
+        assert_eq!(initial, LoopRegion::disabled());
+
+        let region = LoopRegion {
+            enabled: true,
+            start: 48_000,
+            end: 96_000,
+        };
+        engine.set_loop_region(region).unwrap();
+        assert_eq!(engine.loop_region_snapshot().unwrap(), region);
+
+        // set_loop_enabled toggles without changing the bounds.
+        engine.set_loop_enabled(false).unwrap();
+        let after = engine.loop_region_snapshot().unwrap();
+        assert!(!after.enabled);
+        assert_eq!(after.start, 48_000);
+        assert_eq!(after.end, 96_000);
+
+        engine.set_loop_enabled(true).unwrap();
+        assert!(engine.loop_region_snapshot().unwrap().enabled);
 
         engine.stop();
     }

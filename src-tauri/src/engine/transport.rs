@@ -39,6 +39,7 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 
+use super::loop_region::LoopRegion;
 use super::tempo_map::TempoMap;
 use super::time_sig_map::TimeSignatureMap;
 
@@ -177,16 +178,23 @@ pub struct Transport {
     /// `Transport` so that 3E's metronome and the UI can pull from a
     /// single source of truth.
     time_sig_map: Arc<ArcSwap<TimeSignatureMap>>,
+    /// Loop region. When active, the audio callback wraps the
+    /// playhead from `end` back to `start` as playback crosses the
+    /// end boundary. Shared via `ArcSwap` so the main thread can
+    /// toggle / move the region without blocking the audio thread
+    /// — the callback does a wait-free `.load()` on each buffer.
+    loop_region: Arc<ArcSwap<LoopRegion>>,
 }
 
 impl Transport {
-    /// Fresh transport: Stopped at sample 0, 120 BPM, 4/4.
+    /// Fresh transport: Stopped at sample 0, 120 BPM, 4/4, no loop.
     pub fn new() -> Self {
         Self {
             state: TransportState::Stopped,
             position: SharedPosition::new(),
             tempo_map: Arc::new(ArcSwap::from_pointee(TempoMap::new_constant(DEFAULT_BPM))),
             time_sig_map: Arc::new(ArcSwap::from_pointee(TimeSignatureMap::default())),
+            loop_region: Arc::new(ArcSwap::from_pointee(LoopRegion::disabled())),
         }
     }
 
@@ -224,6 +232,23 @@ impl Transport {
     /// [`tempo_map_handle`](Self::tempo_map_handle) for semantics.
     pub fn time_sig_map_handle(&self) -> Arc<ArcSwap<TimeSignatureMap>> {
         self.time_sig_map.clone()
+    }
+
+    /// Clone the loop-region handle. Read-only on the audio side;
+    /// main thread publishes via `.store(Arc::new(new))`.
+    pub fn loop_region_handle(&self) -> Arc<ArcSwap<LoopRegion>> {
+        self.loop_region.clone()
+    }
+
+    /// Snapshot the current loop region. Cheap — `ArcSwap::load` is
+    /// wait-free and returns a lightweight guard.
+    pub fn loop_region_snapshot(&self) -> LoopRegion {
+        **self.loop_region.load()
+    }
+
+    /// Replace the loop region atomically.
+    pub fn replace_loop_region(&mut self, region: LoopRegion) {
+        self.loop_region.store(Arc::new(region));
     }
 
     /// Snapshot the current tempo map. Cheap — `.load()` is wait-free
@@ -288,16 +313,34 @@ impl Transport {
     /// [`TransportState::is_advancing`]). No-op for `Stopped` and
     /// `Paused`.
     ///
-    /// Named `advance_if_advancing` rather than `advance_if_advancing`
-    /// because the condition is not just `Playing` — all three
-    /// advancing states share the same per-buffer increment in 3A.
-    /// Later phases (3G scrub) may split these paths; callers should
-    /// not assume the condition is equivalent to "state == Playing".
+    /// Kept for tests and for callers that explicitly want to ignore
+    /// the loop region. The production audio callback uses
+    /// [`advance_with_loop_if_advancing`] instead.
     #[inline]
     pub fn advance_if_advancing(&mut self, frames: u64) {
         if self.state.is_advancing() {
             self.position.advance(frames);
         }
+    }
+
+    /// Called by the audio callback once per buffer. Like
+    /// [`advance_if_advancing`] but reads the current loop region
+    /// snapshot and wraps the playhead if the advance crosses the
+    /// loop end boundary.
+    ///
+    /// The wrap math lives in [`LoopRegion::next_position`], so
+    /// this method is a thin audio-callback-friendly wrapper — no
+    /// allocation, no locks, one `ArcSwap::load` + one atomic
+    /// write. Safe to call from the audio thread.
+    #[inline]
+    pub fn advance_with_loop_if_advancing(&mut self, frames: u64) {
+        if !self.state.is_advancing() {
+            return;
+        }
+        let region = **self.loop_region.load();
+        let current = self.position.get();
+        let next = region.next_position(current, frames);
+        self.position.set(next);
     }
 }
 
@@ -586,5 +629,122 @@ mod tests {
             (3, 4),
             "handle must observe transport-side updates"
         );
+    }
+
+    // ── 3C: loop region integration ─────────────────────────────────
+
+    #[test]
+    fn new_transport_has_disabled_loop_region() {
+        let t = Transport::new();
+        let r = t.loop_region_snapshot();
+        assert_eq!(r, LoopRegion::disabled());
+        assert!(!r.is_active());
+    }
+
+    #[test]
+    fn replace_loop_region_is_visible_on_snapshot_and_handle() {
+        let mut t = Transport::new();
+        let handle = t.loop_region_handle();
+
+        let region = LoopRegion {
+            enabled: true,
+            start: 48_000,
+            end: 96_000,
+        };
+        t.replace_loop_region(region);
+
+        assert_eq!(t.loop_region_snapshot(), region);
+        // The external handle must observe the same cell.
+        let via_handle = **handle.load();
+        assert_eq!(via_handle, region);
+    }
+
+    #[test]
+    fn advance_with_loop_no_op_when_stopped() {
+        let mut t = Transport::new();
+        t.replace_loop_region(LoopRegion {
+            enabled: true,
+            start: 0,
+            end: 100,
+        });
+        t.advance_with_loop_if_advancing(50);
+        assert_eq!(t.position(), 0, "stopped transport must not advance");
+    }
+
+    #[test]
+    fn advance_with_loop_wraps_at_end_boundary() {
+        let mut t = Transport::new();
+        t.replace_loop_region(LoopRegion {
+            enabled: true,
+            start: 48_000,
+            end: 96_000,
+        });
+        t.seek(95_900);
+        t.play();
+        // Advance 256 → raw 96_156; over = 156 → start + 156 = 48_156.
+        t.advance_with_loop_if_advancing(256);
+        assert_eq!(t.position(), 48_156);
+    }
+
+    #[test]
+    fn advance_with_loop_no_wrap_when_region_disabled() {
+        let mut t = Transport::new();
+        // Region set but disabled.
+        t.replace_loop_region(LoopRegion {
+            enabled: false,
+            start: 0,
+            end: 1_000,
+        });
+        t.seek(900);
+        t.play();
+        t.advance_with_loop_if_advancing(256);
+        assert_eq!(
+            t.position(),
+            1_156,
+            "disabled loop must not wrap — position advances past end"
+        );
+    }
+
+    #[test]
+    fn advance_with_loop_no_wrap_when_outside_loop() {
+        let mut t = Transport::new();
+        t.replace_loop_region(LoopRegion {
+            enabled: true,
+            start: 0,
+            end: 1_000,
+        });
+        // Seek past end → outside the loop.
+        t.seek(5_000);
+        t.play();
+        t.advance_with_loop_if_advancing(256);
+        assert_eq!(
+            t.position(),
+            5_256,
+            "playhead past end → no wrap, just advance"
+        );
+    }
+
+    #[test]
+    fn advance_with_loop_reads_latest_region_each_buffer() {
+        // The audio callback loads the ArcSwap on every buffer, so a
+        // main-thread mutation mid-playback must take effect
+        // immediately.
+        let mut t = Transport::new();
+        t.seek(500);
+        t.play();
+
+        // No wrap yet — no region set.
+        t.advance_with_loop_if_advancing(100);
+        assert_eq!(t.position(), 600);
+
+        // Now install a loop that the next advance will cross.
+        t.replace_loop_region(LoopRegion {
+            enabled: true,
+            start: 100,
+            end: 700,
+        });
+        t.advance_with_loop_if_advancing(200);
+        // 600 + 200 = 800; over = 100; 100 + (100 % 600) = 200.
+        assert_eq!(t.position(), 200);
     }
 }

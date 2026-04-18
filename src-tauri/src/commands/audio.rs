@@ -10,7 +10,8 @@ use tauri::State;
 
 use crate::engine::{
     audio_io, AudioDeviceInfo, CommandError, Engine, EngineConfig, EngineError,
-    EngineStatus, TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap, TrackParams,
+    EngineStatus, LoopRegion, TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap,
+    TrackParams,
 };
 use crate::engine::slot::SlotHandle;
 
@@ -285,6 +286,52 @@ pub fn audio_transport_sample_to_beat(
         .lock()
         .map_err(|_| CommandError::Disconnected)?;
     Ok(engine.sample_to_beat(sample))
+}
+
+// ── Transport loop region (3C) ──────────────────────────────────────
+
+/// Replace the transport loop region atomically. Malformed ranges
+/// (`end <= start`) are accepted but silently treated as disabled
+/// on the audio thread — this supports transient UI drag states
+/// where the handles briefly cross.
+#[tauri::command]
+pub fn audio_transport_set_loop_region(
+    region: LoopRegion,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_loop_region(region)
+}
+
+/// Snapshot the current loop region. Returns `None` when the
+/// engine is stopped.
+#[tauri::command]
+pub fn audio_transport_get_loop_region(
+    state: State<'_, EngineState>,
+) -> Result<Option<LoopRegion>, CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.loop_region_snapshot())
+}
+
+/// Toggle just the `enabled` flag of the current loop region
+/// without changing its bounds. Convenience for the "Loop On/Off"
+/// UI control.
+#[tauri::command]
+pub fn audio_transport_set_loop_enabled(
+    enabled: bool,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_loop_enabled(enabled)
 }
 
 #[cfg(test)]

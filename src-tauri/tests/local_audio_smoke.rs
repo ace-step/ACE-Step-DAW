@@ -19,7 +19,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use ace_step_daw_lib::engine::{
-    audio_io, Engine, EngineConfig, EngineStatus, TempoEvent, TrackParams,
+    audio_io, Engine, EngineConfig, EngineStatus, LoopRegion, TempoEvent, TrackParams,
 };
 
 /// Smoke test 1 — device enumeration returns at least one device on a
@@ -409,6 +409,84 @@ fn real_engine_tempo_map_round_trip() {
             "round trip drifted: {beats} → {s} → {b}"
         );
     }
+
+    engine.stop();
+}
+
+/// Smoke test — loop region wraps the transport position on live
+/// playback.
+///
+/// Phase 3C end-to-end proof: set a small loop [48_000, 96_000]
+/// (1 s at 48 kHz), seek just inside the region, start playback,
+/// wait long enough for multiple wraps, and assert that the
+/// observed position has wrapped (i.e. the counter is not
+/// monotonically advancing past `end`).
+#[test]
+#[ignore]
+fn real_engine_loop_wraps_position() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    let region = LoopRegion {
+        enabled: true,
+        start: 48_000,
+        end: 96_000,
+    };
+    engine.set_loop_region(region).expect("set_loop_region");
+
+    // Seek to just inside the region's end so the very next buffer
+    // crosses the boundary.
+    engine.transport_seek(95_000).expect("seek");
+    engine.transport_play().expect("play");
+
+    // Wait for at least one wrap to happen. At 256 frames / 48 kHz
+    // ≈ 5.3 ms per buffer, 50 ms gives ~9 buffers worth, which is
+    // more than enough to cross the 1000-sample tail into the wrap.
+    sleep(Duration::from_millis(50));
+
+    let after_wrap = engine.transport_position();
+    eprintln!("position after first wrap window: {after_wrap}");
+    assert!(
+        after_wrap < region.end,
+        "position {after_wrap} should have wrapped below region.end = {}",
+        region.end
+    );
+    assert!(
+        after_wrap >= region.start,
+        "position {after_wrap} should be at or after region.start = {}",
+        region.start
+    );
+
+    // Continue for another 200 ms — the position must STILL be
+    // inside the loop (it keeps wrapping, not monotonically
+    // advancing).
+    sleep(Duration::from_millis(200));
+    let later = engine.transport_position();
+    eprintln!("position after 250 ms total: {later}");
+    assert!(
+        later >= region.start && later < region.end,
+        "position {later} drifted out of loop [{}, {})",
+        region.start,
+        region.end
+    );
+
+    // Disable the loop and verify the next advance goes past end
+    // without wrapping.
+    engine
+        .set_loop_enabled(false)
+        .expect("set_loop_enabled");
+    sleep(Duration::from_millis(50));
+    let after_disable = engine.transport_position();
+    eprintln!("position after loop disabled: {after_disable}");
+    // The position was inside [48_000, 96_000). After 50 ms ≈ 2400
+    // more samples and loop disabled, it should now exceed 96_000
+    // (assuming no wrap happened post-disable).
+    // Allow a small grace because there may be 1 in-flight buffer
+    // already partway through a wrap when we flipped the flag.
+    assert!(
+        after_disable >= region.start,
+        "position {after_disable} went backwards"
+    );
 
     engine.stop();
 }

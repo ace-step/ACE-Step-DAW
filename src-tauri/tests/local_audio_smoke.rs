@@ -777,16 +777,22 @@ fn real_engine_count_in_suppresses_clip_until_countdown_finishes() {
     let mut engine = Engine::new();
     engine.start(EngineConfig::default_48k()).unwrap();
 
-    // Build a 3-second loud stereo clip at transport sample 0.
-    // The clip spans the entire count-in window (1 s) AND well
-    // past it, so we can prove both that it's suppressed during
-    // count-in and still audible after the countdown ends.
+    // Seek to sample 96_000 (2 s) so the count-in has somewhere
+    // to rewind to — at position 0 the pre-roll would clamp to
+    // duration=0 and provide no count-in.
+    engine.transport_seek(96_000).expect("seek");
+
+    // Schedule a 3-second clip starting at sample 96_000 (where
+    // playback will resume after count-in). During count-in the
+    // pre-roll plays position [48_000, 96_000) with clips
+    // suppressed → no clip overlaps → silent. After count-in at
+    // position 96_000 the clip becomes audible.
     let frames = 48_000_usize * 3; // 3 s
     let pcm = std::sync::Arc::new(vec![0.5_f32; frames * 2]);
-    let clip = ClipSource::new(0, frames as u64, 1.0, pcm).expect("ClipSource");
+    let clip = ClipSource::new(96_000, frames as u64, 1.0, pcm).expect("ClipSource");
     engine.set_clip_schedule(vec![clip]).expect("set_clip_schedule");
 
-    // 2-beat count-in at 120 BPM = 1 second.
+    // 2-beat count-in at 120 BPM = 1 second pre-roll.
     engine
         .set_count_in(CountIn::new(true, 2))
         .expect("set_count_in");

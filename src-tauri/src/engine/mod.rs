@@ -1664,6 +1664,103 @@ mod tests {
         engine.stop();
     }
 
+    // ── 3G: scrub + count-in integration ────────────────────────────
+
+    #[test]
+    fn transport_scrub_flows_through_command_queue() {
+        let mut engine = Engine::new();
+        let drained = Arc::new(Mutex::new(Vec::new()));
+        let drain_started = Arc::new(AtomicBool::new(false));
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                transport_runner(drained.clone(), drain_started.clone()),
+            )
+            .unwrap();
+        wait_for(|| drain_started.load(Ordering::SeqCst));
+
+        engine.transport_seek(1000).unwrap();
+        engine.transport_scrub(500).unwrap();
+        engine.transport_scrub(-200).unwrap();
+
+        engine.stop();
+
+        let got = drained.lock().unwrap();
+        assert!(
+            got.iter().any(|c| matches!(
+                c,
+                EngineCommand::TransportScrub { delta_samples: 500 }
+            )),
+            "expected TransportScrub +500 in drained commands"
+        );
+        assert!(
+            got.iter().any(|c| matches!(
+                c,
+                EngineCommand::TransportScrub { delta_samples: -200 }
+            )),
+            "expected TransportScrub -200 in drained commands"
+        );
+    }
+
+    #[test]
+    fn punch_region_before_start_fails_with_not_running() {
+        let engine = Engine::new();
+        assert_eq!(
+            engine.set_punch_region(PunchRegion {
+                enabled: true,
+                start: 0,
+                end: 1000,
+            }),
+            Err(CommandError::NotRunning)
+        );
+        assert!(engine.punch_region_snapshot().is_none());
+    }
+
+    #[test]
+    fn count_in_before_start_fails_with_not_running() {
+        let engine = Engine::new();
+        assert_eq!(
+            engine.set_count_in(CountIn::new(true, 4)),
+            Err(CommandError::NotRunning)
+        );
+        assert!(engine.count_in_snapshot().is_none());
+    }
+
+    #[test]
+    fn punch_and_count_in_round_trip_through_engine() {
+        let mut engine = Engine::new();
+        engine
+            .start_with(
+                EngineConfig::default_48k(),
+                fake_runner(
+                    Ok(ok_info()),
+                    Arc::new(AtomicBool::new(false)),
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .unwrap();
+
+        let punch = PunchRegion {
+            enabled: true,
+            start: 48_000,
+            end: 192_000,
+        };
+        engine.set_punch_region(punch).unwrap();
+        assert_eq!(engine.punch_region_snapshot().unwrap(), punch);
+        engine.set_punch_enabled(false).unwrap();
+        assert!(!engine.punch_region_snapshot().unwrap().enabled);
+
+        let ci = CountIn::new(true, 8);
+        engine.set_count_in(ci).unwrap();
+        assert_eq!(engine.count_in_snapshot().unwrap(), ci);
+
+        // set_count_in normalizes — beats=99 clamps to MAX (16).
+        engine.set_count_in(CountIn::new(true, 99)).unwrap();
+        assert_eq!(engine.count_in_snapshot().unwrap().beats, 16);
+
+        engine.stop();
+    }
+
     #[test]
     fn clip_schedule_graveyard_bounds_retained_arcs() {
         // Codex P1 regression (PR #1719): the graveyard must cap

@@ -360,24 +360,37 @@ fn make_audio_callback(
                     // a Seek/Stop received in this buffer takes effect
                     // before we increment.
                     EngineCommand::TransportPlay => {
-                        transport.play();
-                        // 3G: start count-in countdown if configured.
-                        // Metronome continues during count-in (so the
-                        // user hears the clicks) but clip scheduler
-                        // is suppressed — see the render block below.
+                        // 3G count-in is a proper PRE-ROLL: before
+                        // starting playback, rewind the playhead by
+                        // `duration_samples` so that after the
+                        // countdown the playhead is back at the
+                        // user's original "play from here" position
+                        // and no clip material is skipped (codex P1
+                        // on PR #1721).
+                        //
+                        // If the original position is less than the
+                        // count-in duration, saturating_sub clips to
+                        // 0 — some pre-roll is lost but the
+                        // transport cannot roll before sample 0.
                         let cfg = transport.count_in_snapshot();
                         if cfg.enabled && cfg.beats > 0 {
                             let tempo_guard = transport.tempo_map_handle().load();
+                            let original = transport.position();
                             let duration = super::count_in::count_in_duration_samples(
                                 cfg.beats,
-                                transport.position(),
+                                original,
                                 &tempo_guard,
                                 sample_rate as u32,
                             );
-                            count_in_state.start(duration);
+                            // Rewind for pre-roll.
+                            transport.seek(original.saturating_sub(duration));
+                            // Actual countdown duration after clamp.
+                            let actual = original - transport.position();
+                            count_in_state.start(actual);
                         } else {
                             count_in_state.clear();
                         }
+                        transport.play();
                     }
                     EngineCommand::TransportStop => {
                         transport.stop();
@@ -389,6 +402,9 @@ fn make_audio_callback(
                     }
                     EngineCommand::TransportSeek { sample_position } => {
                         transport.seek(sample_position);
+                        // Seeking cancels an in-flight count-in —
+                        // consistent with Stop/Pause/Scrub.
+                        count_in_state.clear();
                     }
                     EngineCommand::TransportScrub { delta_samples } => {
                         transport.scrub(delta_samples);

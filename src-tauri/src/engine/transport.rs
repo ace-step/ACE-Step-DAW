@@ -32,15 +32,21 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-/// Transport state machine — mirrors the four modes every classic DAW
+/// Transport state machine — mirrors the five modes every classic DAW
 /// transport exposes. Flat `Copy` so commands can carry it without
 /// allocation; `PartialEq` so tests can assert exact values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportState {
-    /// Transport is at rest. Position does not advance. Audio callback
-    /// still runs (to honor any active test signals / metering), but no
-    /// scheduled content is rendered.
+    /// Transport is at rest AND position is at 0. This is the cold
+    /// start state and the state after `Stop`.
     Stopped,
+    /// Transport is at rest but the position counter holds a non-zero
+    /// value from a prior `Play`. Next `Play` resumes from this
+    /// position. Distinct from `Stopped` so downstream consumers (UI
+    /// badge, clip scheduler cache) can tell "user hit stop" apart
+    /// from "user hit pause" — they have different semantics for
+    /// cursor placement and clip-preview caching.
+    Paused,
     /// Transport is advancing at 1× speed. Position increments by
     /// `frames` on every audio callback.
     Playing,
@@ -131,7 +137,15 @@ pub const DEFAULT_BPM: f32 = 120.0;
 
 /// Audio-thread transport state. Owned by the audio callback; the
 /// main thread mutates it indirectly through [`EngineCommand`]s.
-#[derive(Debug, Clone)]
+///
+/// Intentionally **not** `Clone`: the `Relaxed` ordering on
+/// [`SharedPosition`] is only sound under a single-writer contract,
+/// and a cloned `Transport` would share the atomic counter while
+/// holding an independent `state`/`bpm` — two writers could then
+/// race on the same counter and diverge on their local state. The
+/// shared handle (for read-only position snapshots) is
+/// [`SharedPosition`], which *is* clonable.
+#[derive(Debug)]
 pub struct Transport {
     state: TransportState,
     /// Monotonically-advancing sample counter (shared with the UI).
@@ -183,8 +197,9 @@ impl Transport {
 
     /// Stop playback but KEEP the current position. Equivalent to
     /// Pro Tools / Logic's pause — next play resumes from here.
+    /// Distinct from [`stop`](Self::stop) (which also rewinds).
     pub fn pause(&mut self) {
-        self.state = TransportState::Stopped;
+        self.state = TransportState::Paused;
     }
 
     /// Jump to an absolute sample position. Does not change the state.
@@ -252,17 +267,42 @@ mod tests {
     }
 
     #[test]
-    fn pause_preserves_position() {
+    fn pause_preserves_position_and_uses_dedicated_paused_state() {
         let mut t = Transport::new();
         t.seek(96_000);
         t.play();
         t.pause();
-        assert_eq!(t.state(), TransportState::Stopped);
+        assert_eq!(
+            t.state(),
+            TransportState::Paused,
+            "pause must produce Paused, not Stopped — \
+             downstream consumers distinguish 'stopped' (cursor at 0) \
+             from 'paused' (cursor preserved) and they have different \
+             semantics for clip-preview caching and UI badging"
+        );
         assert_eq!(
             t.position(),
             96_000,
             "pause must leave the position counter intact"
         );
+    }
+
+    #[test]
+    fn paused_state_does_not_advance_position() {
+        let mut t = Transport::new();
+        t.play();
+        t.advance_if_playing(256);
+        t.pause();
+        t.advance_if_playing(256);
+        assert_eq!(
+            t.position(),
+            256,
+            "paused transport must not advance on subsequent buffers"
+        );
+        // Resuming play picks up from where pause left off.
+        t.play();
+        t.advance_if_playing(256);
+        assert_eq!(t.position(), 512);
     }
 
     #[test]
@@ -292,8 +332,9 @@ mod tests {
         t.advance_if_playing(256);
         assert_eq!(t.position(), 512);
 
-        // Pause: advance stops.
+        // Pause: advance stops AND state is Paused (distinct from Stopped).
         t.pause();
+        assert_eq!(t.state(), TransportState::Paused);
         t.advance_if_playing(256);
         assert_eq!(t.position(), 512, "paused state must not advance");
     }
@@ -381,8 +422,12 @@ mod tests {
     }
 
     #[test]
-    fn is_advancing_covers_play_record_scrub_but_not_stop() {
+    fn is_advancing_covers_play_record_scrub_but_not_stop_or_pause() {
         assert!(!TransportState::Stopped.is_advancing());
+        assert!(
+            !TransportState::Paused.is_advancing(),
+            "Paused must not advance — that is the whole point"
+        );
         assert!(TransportState::Playing.is_advancing());
         assert!(TransportState::Recording.is_advancing());
         assert!(TransportState::Scrubbing.is_advancing());

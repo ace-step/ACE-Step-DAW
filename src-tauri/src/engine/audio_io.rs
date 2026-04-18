@@ -29,7 +29,7 @@ use super::config::{AudioDeviceInfo, VALID_SAMPLE_RATES};
 use super::graph::AudioGraph;
 use super::meter::generate_sine;
 use super::meter_bank::MeterProducers;
-use super::metronome::{is_accent_beat, next_beat_at_or_after, ClickGenerator};
+use super::metronome::{render_metronome_segment, ClickGenerator};
 use super::mixer;
 use super::transport::Transport;
 use super::{EngineCommand, OpenInfo, RuntimeContext};
@@ -473,8 +473,13 @@ fn make_audio_callback(
         // — both would risk allocator work on the RT thread if the
         // old map happens to be the last outstanding reference when
         // the UI swapped in a new one. Found by codex review on
-        // PR #1717. The guards live until the end of the block and
-        // only decrement cheap per-thread counters on drop.
+        // PR #1717.
+        //
+        // Loop wrap-around (3C) is handled here too: if the buffer
+        // straddles the active loop's end boundary, split the
+        // metronome render into "pre-wrap" and "post-wrap" segments
+        // so beats landing in the wrapped region still fire.
+        // Found by Copilot review on PR #1717.
         {
             let metronome_config = transport.metronome_config_snapshot();
             if metronome_config.enabled && transport.state().is_advancing() {
@@ -482,50 +487,66 @@ fn make_audio_callback(
                 let time_sig_guard = transport.time_sig_map_handle().load();
                 let tempo_map: &super::tempo_map::TempoMap = &tempo_guard;
                 let time_sig: &super::time_sig_map::TimeSignatureMap = &time_sig_guard;
+                let loop_region = **transport.loop_region_handle().load();
                 let playhead_start = transport.position();
-                let sr_u32 = sample_rate as u32;
 
-                // Find the beat at or after the playhead once per buffer;
-                // advance one beat at a time as we cross boundaries inside
-                // the sample loop.
-                let (mut next_beat_idx, mut next_beat_sample) =
-                    next_beat_at_or_after(playhead_start, tempo_map, sr_u32);
-
-                for i in 0..frames {
-                    let cur_sample = playhead_start + i as u64;
-                    if cur_sample >= next_beat_sample {
-                        // Crossed a beat boundary — trigger a click.
-                        // `is_accent_beat` is cheap (one sig lookup +
-                        // one modulo).
-                        let accent = is_accent_beat(
-                            next_beat_idx,
-                            next_beat_sample,
-                            time_sig,
-                        );
-                        let (freq, amp) = if accent {
-                            (
-                                metronome_config.accent_freq_hz,
-                                metronome_config.accent_volume,
-                            )
-                        } else {
-                            (metronome_config.click_freq_hz, metronome_config.volume)
-                        };
-                        click_gen.trigger(freq, amp);
-                        // Advance to the following beat — beat_to_sample
-                        // handles tempo changes that may lie between.
-                        next_beat_idx += 1;
-                        next_beat_sample = tempo_map
-                            .beat_to_sample(next_beat_idx as f64, sr_u32);
-                        // Defensive: if tempo math produces a non-
-                        // advancing sample (degenerate BPM), bump
-                        // by one to break out of the loop.
-                        if next_beat_sample <= cur_sample {
-                            next_beat_sample = cur_sample + 1;
-                        }
+                // Wrap split: if the loop is active and we'll cross
+                // the end boundary inside this buffer, find the
+                // offset (in frames) at which the wrap happens.
+                let wrap_offset: Option<usize> = if loop_region.is_active()
+                    && playhead_start < loop_region.end
+                {
+                    let to_end = loop_region.end - playhead_start;
+                    if to_end < frames as u64 {
+                        Some(to_end as usize)
+                    } else {
+                        None
                     }
-                    let s = click_gen.tick(sample_rate);
-                    master_l[i] += s;
-                    master_r[i] += s;
+                } else {
+                    None
+                };
+
+                match wrap_offset {
+                    Some(w) => {
+                        render_metronome_segment(
+                            &mut click_gen,
+                            &mut master_l[..frames],
+                            &mut master_r[..frames],
+                            0,
+                            w,
+                            playhead_start,
+                            tempo_map,
+                            time_sig,
+                            metronome_config,
+                            sample_rate,
+                        );
+                        render_metronome_segment(
+                            &mut click_gen,
+                            &mut master_l[..frames],
+                            &mut master_r[..frames],
+                            w,
+                            frames,
+                            loop_region.start,
+                            tempo_map,
+                            time_sig,
+                            metronome_config,
+                            sample_rate,
+                        );
+                    }
+                    None => {
+                        render_metronome_segment(
+                            &mut click_gen,
+                            &mut master_l[..frames],
+                            &mut master_r[..frames],
+                            0,
+                            frames,
+                            playhead_start,
+                            tempo_map,
+                            time_sig,
+                            metronome_config,
+                            sample_rate,
+                        );
+                    }
                 }
             } else if click_gen.is_active() {
                 // Finish draining any in-flight click even if the

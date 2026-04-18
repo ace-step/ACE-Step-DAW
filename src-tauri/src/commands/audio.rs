@@ -10,7 +10,7 @@ use tauri::State;
 
 use crate::engine::{
     audio_io, AudioDeviceInfo, CommandError, Engine, EngineConfig, EngineError,
-    EngineStatus, TrackParams,
+    EngineStatus, TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap, TrackParams,
 };
 use crate::engine::slot::SlotHandle;
 
@@ -193,6 +193,93 @@ pub fn audio_transport_get_position(state: State<'_, EngineState>) -> Result<u64
         .lock()
         .map_err(|_| CommandError::Disconnected)?;
     Ok(engine.transport_position())
+}
+
+// ── Transport tempo / time-signature maps (3B) ──────────────────────
+
+/// Replace the full tempo map atomically. Returns `InvalidTempoMap`
+/// if the events fail validation (empty, unsorted, duplicated, or
+/// missing the sample-0 anchor).
+#[tauri::command]
+pub fn audio_transport_set_tempo_map(
+    events: Vec<TempoEvent>,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_tempo_map(events)
+}
+
+/// Snapshot the current tempo map. Returns `None` when the engine is
+/// stopped. Safe to call at UI frame rate — `ArcSwap::load_full` is
+/// wait-free and produces a cheap reference-counted handle.
+#[tauri::command]
+pub fn audio_transport_get_tempo_map(
+    state: State<'_, EngineState>,
+) -> Result<Option<TempoMap>, CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    // Clone the snapshotted Arc<TempoMap> into an owned TempoMap for
+    // the wire. This is a small Vec clone, not a full replay of the
+    // automation — cheap even for large maps.
+    Ok(engine.tempo_map_snapshot().map(|arc| (*arc).clone()))
+}
+
+#[tauri::command]
+pub fn audio_transport_set_time_signature_map(
+    events: Vec<TimeSignatureEvent>,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.set_time_signature_map(events)
+}
+
+#[tauri::command]
+pub fn audio_transport_get_time_signature_map(
+    state: State<'_, EngineState>,
+) -> Result<Option<TimeSignatureMap>, CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine
+        .time_signature_map_snapshot()
+        .map(|arc| (*arc).clone()))
+}
+
+/// Convert a fractional beat count to a sample position using the
+/// current tempo map + active sample rate. Returns 0 when stopped.
+#[tauri::command]
+pub fn audio_transport_beat_to_sample(
+    beat: f64,
+    state: State<'_, EngineState>,
+) -> Result<u64, CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.beat_to_sample(beat))
+}
+
+/// Convert an absolute sample position to a fractional beat count.
+/// Returns 0 when stopped.
+#[tauri::command]
+pub fn audio_transport_sample_to_beat(
+    sample: u64,
+    state: State<'_, EngineState>,
+) -> Result<f64, CommandError> {
+    let engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.sample_to_beat(sample))
 }
 
 #[cfg(test)]

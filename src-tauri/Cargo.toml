@@ -23,6 +23,10 @@ cpal = "0.15"
 crossbeam-channel = "0.5"
 ringbuf = "0.4"
 thiserror = "1"
+# arc-swap: wait-free reader / amortized-O(1) writer atomic swap of
+# Arc<T>. Used to publish TempoMap / TimeSignatureMap from the main
+# thread to the audio thread without locking the audio callback.
+arc-swap = "1.7"
 
 [features]
 default = ["custom-protocol"]

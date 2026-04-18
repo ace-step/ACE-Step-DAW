@@ -7,9 +7,11 @@ use crate::commands::audio::{
     audio_add_track, audio_get_default_device, audio_get_engine_status,
     audio_list_devices, audio_remove_track, audio_set_master_volume,
     audio_set_track_params, audio_start_engine, audio_stop_engine,
-    audio_transport_get_position, audio_transport_pause, audio_transport_play,
-    audio_transport_seek, audio_transport_set_tempo, audio_transport_stop,
-    EngineState,
+    audio_transport_beat_to_sample, audio_transport_get_position,
+    audio_transport_get_tempo_map, audio_transport_get_time_signature_map,
+    audio_transport_pause, audio_transport_play, audio_transport_sample_to_beat,
+    audio_transport_seek, audio_transport_set_tempo, audio_transport_set_tempo_map,
+    audio_transport_set_time_signature_map, audio_transport_stop, EngineState,
 };
 
 /// Greet command — placeholder to verify IPC works.
@@ -45,6 +47,12 @@ pub fn run() {
             audio_transport_seek,
             audio_transport_set_tempo,
             audio_transport_get_position,
+            audio_transport_set_tempo_map,
+            audio_transport_get_tempo_map,
+            audio_transport_set_time_signature_map,
+            audio_transport_get_time_signature_map,
+            audio_transport_beat_to_sample,
+            audio_transport_sample_to_beat,
         ])
         .setup(|app| {
             // Focus main window on startup

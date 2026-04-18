@@ -37,6 +37,11 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
+
+use super::tempo_map::TempoMap;
+use super::time_sig_map::TimeSignatureMap;
+
 /// Transport state machine — mirrors the five modes every classic DAW
 /// transport exposes. Flat `Copy` so commands can carry it without
 /// allocation; `PartialEq` so tests can assert exact values.
@@ -159,17 +164,29 @@ pub struct Transport {
     /// other threads see every write but may observe a stale value
     /// for up to one callback.
     position: SharedPosition,
-    /// Single BPM (tempo map lands in 3B).
-    bpm: f32,
+    /// Tempo automation. Shared via `ArcSwap` so the main thread can
+    /// publish a new map without blocking the audio thread — the
+    /// audio callback does a wait-free `.load()` on each buffer.
+    /// Replaces the single `bpm` field from 3A; for a constant tempo
+    /// this holds a single-event map, which is what
+    /// [`Transport::set_tempo`] builds under the hood.
+    tempo_map: Arc<ArcSwap<TempoMap>>,
+    /// Time signature automation. Same `ArcSwap` pattern as
+    /// `tempo_map`. The audio engine itself does not use the time
+    /// signature — it is a pure UI/metronome concern — but lives on
+    /// `Transport` so that 3E's metronome and the UI can pull from a
+    /// single source of truth.
+    time_sig_map: Arc<ArcSwap<TimeSignatureMap>>,
 }
 
 impl Transport {
-    /// Fresh transport: Stopped at sample 0, 120 BPM.
+    /// Fresh transport: Stopped at sample 0, 120 BPM, 4/4.
     pub fn new() -> Self {
         Self {
             state: TransportState::Stopped,
             position: SharedPosition::new(),
-            bpm: DEFAULT_BPM,
+            tempo_map: Arc::new(ArcSwap::from_pointee(TempoMap::new_constant(DEFAULT_BPM))),
+            time_sig_map: Arc::new(ArcSwap::from_pointee(TimeSignatureMap::default())),
         }
     }
 
@@ -181,8 +198,11 @@ impl Transport {
         self.position.get()
     }
 
+    /// Current BPM at the current position. For constant tempo this
+    /// is the single event's BPM; for automation it reflects whatever
+    /// segment the playhead is in.
     pub fn bpm(&self) -> f32 {
-        self.bpm
+        self.tempo_map.load().bpm_at(self.position.get())
     }
 
     /// Hand out a clone of the shared position counter so external
@@ -190,6 +210,27 @@ impl Transport {
     /// going through the command queue.
     pub fn shared_position(&self) -> SharedPosition {
         self.position.clone()
+    }
+
+    /// Clone the tempo-map handle. The returned `Arc<ArcSwap<_>>` is
+    /// the same cell as the audio thread sees — main-thread mutations
+    /// via `store` are visible to the audio thread on the next
+    /// `.load()`. Read-only on the audio side.
+    pub fn tempo_map_handle(&self) -> Arc<ArcSwap<TempoMap>> {
+        self.tempo_map.clone()
+    }
+
+    /// Clone the time-signature-map handle. See
+    /// [`tempo_map_handle`](Self::tempo_map_handle) for semantics.
+    pub fn time_sig_map_handle(&self) -> Arc<ArcSwap<TimeSignatureMap>> {
+        self.time_sig_map.clone()
+    }
+
+    /// Snapshot the current tempo map. Cheap — `.load()` is wait-free
+    /// and the returned `Arc<TempoMap>` is a counted reference, not a
+    /// deep clone.
+    pub fn tempo_map_snapshot(&self) -> Arc<TempoMap> {
+        self.tempo_map.load_full()
     }
 
     /// Begin playback from the current position.
@@ -216,16 +257,29 @@ impl Transport {
         self.position.set(sample);
     }
 
-    /// Set the tempo. Clamped to [`MIN_BPM`] ..= [`MAX_BPM`] and to
-    /// finite values — NaN or ±∞ are silently snapped to
-    /// [`DEFAULT_BPM`] so the audio thread never sees a poisoned tempo.
+    /// Set a constant tempo by swapping in a single-event map. For
+    /// multi-point tempo automation, use
+    /// [`replace_tempo_map`](Self::replace_tempo_map) instead.
+    ///
+    /// Clamping / NaN handling lives in
+    /// [`super::tempo_map::TempoEvent::new`] so there is one
+    /// canonical definition of "valid BPM".
     pub fn set_tempo(&mut self, bpm: f32) {
-        let safe = if bpm.is_finite() {
-            bpm.clamp(MIN_BPM, MAX_BPM)
-        } else {
-            DEFAULT_BPM
-        };
-        self.bpm = safe;
+        self.tempo_map
+            .store(Arc::new(TempoMap::new_constant(bpm)));
+    }
+
+    /// Replace the full tempo map atomically. The caller is
+    /// responsible for supplying a validated
+    /// [`super::tempo_map::TempoMap`] (built via
+    /// [`super::tempo_map::TempoMap::try_new`]).
+    pub fn replace_tempo_map(&mut self, map: TempoMap) {
+        self.tempo_map.store(Arc::new(map));
+    }
+
+    /// Replace the full time-signature map atomically.
+    pub fn replace_time_signature_map(&mut self, map: TimeSignatureMap) {
+        self.time_sig_map.store(Arc::new(map));
     }
 
     /// Called by the audio callback once per buffer. Advances the
@@ -457,5 +511,80 @@ mod tests {
         assert!(MIN_BPM > 0.0);
         assert!(MAX_BPM > MIN_BPM);
         assert!(DEFAULT_BPM > MIN_BPM && DEFAULT_BPM < MAX_BPM);
+    }
+
+    // ── 3B: tempo map + time-signature integration ──────────────────
+
+    #[test]
+    fn new_transport_starts_with_constant_default_tempo_map() {
+        let t = Transport::new();
+        let map = t.tempo_map_snapshot();
+        assert_eq!(map.events().len(), 1);
+        assert_eq!(map.events()[0].bpm, DEFAULT_BPM);
+        assert_eq!(map.events()[0].at_sample, 0);
+    }
+
+    #[test]
+    fn set_tempo_builds_single_event_map() {
+        let mut t = Transport::new();
+        t.set_tempo(140.0);
+        let map = t.tempo_map_snapshot();
+        assert_eq!(map.events().len(), 1);
+        assert_eq!(map.events()[0].bpm, 140.0);
+        assert_eq!(t.bpm(), 140.0);
+    }
+
+    #[test]
+    fn replace_tempo_map_swaps_atomically() {
+        use super::super::tempo_map::{TempoEvent, TempoMap};
+        let mut t = Transport::new();
+        let new_map = TempoMap::try_new(vec![
+            TempoEvent::new(0, 100.0),
+            TempoEvent::new(48_000, 160.0),
+        ])
+        .unwrap();
+        t.replace_tempo_map(new_map);
+        let snapshot = t.tempo_map_snapshot();
+        assert_eq!(snapshot.events().len(), 2);
+        // BPM at position 0 reads the first segment.
+        assert_eq!(t.bpm(), 100.0);
+        // Seeking into the second segment should flip the BPM reading.
+        t.seek(48_000);
+        assert_eq!(t.bpm(), 160.0);
+    }
+
+    #[test]
+    fn tempo_map_handle_aliases_transport_cell() {
+        // Regression guard: `tempo_map_handle` must return a handle
+        // to the SAME `ArcSwap` the transport uses, so downstream
+        // consumers (main-thread readers, UI polling) see the audio
+        // thread's writes without a second subscription path.
+        use super::super::tempo_map::TempoMap;
+        let mut t = Transport::new();
+        let handle = t.tempo_map_handle();
+        assert_eq!(handle.load().bpm_at(0), DEFAULT_BPM);
+        t.set_tempo(99.0);
+        assert_eq!(
+            handle.load().bpm_at(0),
+            99.0,
+            "handle must observe transport-side updates"
+        );
+        // And the other way — external swaps reach the transport.
+        handle.store(Arc::new(TempoMap::new_constant(77.0)));
+        assert_eq!(t.bpm(), 77.0);
+    }
+
+    #[test]
+    fn time_sig_map_handle_aliases_transport_cell() {
+        use super::super::time_sig_map::TimeSignatureMap;
+        let mut t = Transport::new();
+        let handle = t.time_sig_map_handle();
+        assert_eq!(handle.load().signature_at(0), (4, 4));
+        t.replace_time_signature_map(TimeSignatureMap::new_constant(3, 4));
+        assert_eq!(
+            handle.load().signature_at(0),
+            (3, 4),
+            "handle must observe transport-side updates"
+        );
     }
 }

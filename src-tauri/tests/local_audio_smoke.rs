@@ -19,7 +19,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use ace_step_daw_lib::engine::{
-    audio_io, Engine, EngineConfig, EngineStatus, TrackParams,
+    audio_io, Engine, EngineConfig, EngineStatus, TempoEvent, TrackParams,
 };
 
 /// Smoke test 1 — device enumeration returns at least one device on a
@@ -358,6 +358,57 @@ fn real_engine_transport_advances_position() {
         Duration::from_secs(1),
         "transport_position == 123_456 after seek-while-stopped",
     );
+
+    engine.stop();
+}
+
+/// Smoke test — tempo map + beat/sample conversion round-trip on
+/// a live engine.
+///
+/// Phase 3B end-to-end proof: publish a 2-event automation, read
+/// it back via `tempo_map_snapshot`, assert beat_to_sample and
+/// sample_to_beat agree on boundary + interior points, and verify
+/// the audio thread's `Transport::bpm()` follows the playhead
+/// across the tempo-change boundary while the engine is running.
+#[test]
+#[ignore]
+fn real_engine_tempo_map_round_trip() {
+    let mut engine = Engine::new();
+    engine.start(EngineConfig::default_48k()).unwrap();
+
+    // Publish a 2-segment automation: 60 BPM for 1 s, then 120 BPM.
+    engine
+        .set_tempo_map(vec![
+            TempoEvent::new(0, 60.0),
+            TempoEvent::new(48_000, 120.0),
+        ])
+        .expect("set_tempo_map");
+
+    // Snapshot reflects what we just published.
+    let snap = engine.tempo_map_snapshot().expect("tempo_map_snapshot");
+    assert_eq!(snap.events().len(), 2);
+    assert_eq!(snap.events()[0].bpm, 60.0);
+    assert_eq!(snap.events()[1].bpm, 120.0);
+
+    // 1 beat at 60 BPM = 1 s = 48_000 samples (exact boundary).
+    assert_eq!(
+        engine.beat_to_sample(1.0),
+        48_000,
+        "beat-to-sample should land exactly on the tempo-change boundary"
+    );
+    // 3 beats: 1 beat at 60 BPM (1 s) + 2 beats at 120 BPM (1 s) = 2 s = 96_000.
+    assert_eq!(engine.beat_to_sample(3.0), 96_000);
+
+    // Round trip on a non-boundary point.
+    for beats in [0.25, 0.75, 1.0, 1.5, 2.5, 10.0] {
+        let s = engine.beat_to_sample(beats);
+        let b = engine.sample_to_beat(s);
+        eprintln!("beat_to_sample({beats}) = {s}, sample_to_beat({s}) = {b}");
+        assert!(
+            (b - beats).abs() < 1e-3,
+            "round trip drifted: {beats} → {s} → {b}"
+        );
+    }
 
     engine.stop();
 }

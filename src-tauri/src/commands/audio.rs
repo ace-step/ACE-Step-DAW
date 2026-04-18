@@ -6,12 +6,12 @@
 //! affected by the mutex.
 
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::engine::{
     audio_io, AudioDeviceInfo, CommandError, Engine, EngineConfig, EngineError,
-    EngineStatus, LoopRegion, TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap,
-    TrackParams,
+    EngineStatus, LoopRegion, PositionEmitter, TempoEvent, TempoMap, TimeSignatureEvent,
+    TimeSignatureMap, TrackParams, POSITION_EVENT_DEFAULT_INTERVAL,
 };
 use crate::engine::slot::SlotHandle;
 
@@ -33,6 +33,32 @@ impl Default for EngineState {
     }
 }
 
+/// Holds the background thread that emits transport-position Tauri
+/// events at ~60 Hz while the engine is running. Split from
+/// [`EngineState`] so the existing 20+ command sites that lock
+/// `state.0` don't need to change shape.
+///
+/// The `None` case means "no emitter currently active" — i.e. the
+/// engine is stopped, or the app is still in first-open state.
+pub struct TransportEmitterState(pub Mutex<Option<PositionEmitter>>);
+
+impl TransportEmitterState {
+    pub fn new() -> Self {
+        Self(Mutex::new(None))
+    }
+}
+
+impl Default for TransportEmitterState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Tauri event name for the 60 Hz transport-position push. Payload
+/// is a `u64` sample position. Kept as a constant so the UI test
+/// harness can reference it without hard-coding the string.
+pub const TRANSPORT_POSITION_EVENT: &str = "transport-position";
+
 // ── Device enumeration ──────────────────────────────────────────────
 
 #[tauri::command]
@@ -51,16 +77,59 @@ pub fn audio_get_default_device() -> Option<AudioDeviceInfo> {
 pub fn audio_start_engine(
     config: EngineConfig,
     state: State<'_, EngineState>,
+    emitter_state: State<'_, TransportEmitterState>,
+    app: tauri::AppHandle,
 ) -> Result<EngineStatus, EngineError> {
     let mut engine = state
         .0
         .lock()
         .map_err(|_| EngineError::Open("engine mutex poisoned".into()))?;
-    engine.start(config)
+    let status = engine.start(config)?;
+
+    // Spawn the position emitter so the UI can animate the playhead
+    // from Tauri events instead of polling at 60 Hz. If an emitter
+    // from a previous start is still alive (should not happen under
+    // normal use, but stop_engine may have been skipped), stop it
+    // first so we never have two emitters pushing to the same event
+    // name.
+    if let Some(shared_pos) = engine.shared_position_handle() {
+        let mut slot = emitter_state
+            .0
+            .lock()
+            .map_err(|_| EngineError::Open("emitter mutex poisoned".into()))?;
+        if let Some(mut old) = slot.take() {
+            old.stop();
+        }
+        let app_handle = app.clone();
+        let emitter = PositionEmitter::start(
+            shared_pos,
+            POSITION_EVENT_DEFAULT_INTERVAL,
+            move |pos| {
+                // Deliberately ignore emit errors: the webview may
+                // not be alive on initial boot, and a dropped event
+                // is preferable to panicking the emitter thread.
+                let _ = app_handle.emit(TRANSPORT_POSITION_EVENT, pos);
+            },
+        );
+        *slot = Some(emitter);
+    }
+
+    Ok(status)
 }
 
 #[tauri::command]
-pub fn audio_stop_engine(state: State<'_, EngineState>) -> Result<(), EngineError> {
+pub fn audio_stop_engine(
+    state: State<'_, EngineState>,
+    emitter_state: State<'_, TransportEmitterState>,
+) -> Result<(), EngineError> {
+    // Stop the emitter BEFORE the engine so it doesn't tick one
+    // more event carrying a stale (pre-rewind) position after
+    // `engine.stop()` resets the counter.
+    if let Ok(mut slot) = emitter_state.0.lock() {
+        if let Some(mut e) = slot.take() {
+            e.stop();
+        }
+    }
     let mut engine = state
         .0
         .lock()

@@ -13,7 +13,7 @@ use crate::commands::audio::{
     audio_transport_sample_to_beat, audio_transport_seek, audio_transport_set_loop_enabled,
     audio_transport_set_loop_region, audio_transport_set_tempo,
     audio_transport_set_tempo_map, audio_transport_set_time_signature_map,
-    audio_transport_stop, EngineState,
+    audio_transport_stop, EngineState, TransportEmitterState,
 };
 
 /// Greet command — placeholder to verify IPC works.
@@ -31,6 +31,7 @@ fn is_desktop() -> bool {
 pub fn run() {
     tauri::Builder::default()
         .manage(EngineState::new())
+        .manage(TransportEmitterState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
             is_desktop,

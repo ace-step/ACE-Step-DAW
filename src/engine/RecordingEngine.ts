@@ -15,8 +15,13 @@ const log = createDebugLogger('recording-engine');
  *
  * Models a kick-like click: starts at `startFreq`, exponentially
  * sweeps to `endFreq` over `decayMs`, with a linear attack and
- * exponential amplitude decay. Fresh nodes per trigger — the
- * oscillator stops itself so there is nothing to dispose.
+ * exponential amplitude decay.
+ *
+ * Cleanup: oscillator `stop()` ends playback; the `onended` handler
+ * disconnects both nodes so the graph edges + closures are
+ * released deterministically instead of waiting for browser GC
+ * (codex P3 on PR #1731, matching the pattern in
+ * `LoopBrowser.playPreview`).
  */
 function playClick(
   ctx: AudioContext,
@@ -41,6 +46,11 @@ function playClick(
   osc.connect(gain).connect(destination);
   osc.start(now);
   osc.stop(endTime + 0.02);
+  osc.onended = () => {
+    try { osc.disconnect(); } catch { /* already disconnected */ }
+    try { gain.disconnect(); } catch { /* already disconnected */ }
+    osc.onended = null;
+  };
 }
 
 export interface AudioInputDevice {
@@ -443,11 +453,13 @@ class RecordingEngine {
     await engine.resume();
     const ctx = engine.ctx;
     // Hi click (downbeat) and lo click (other beats) — pitch
-    // parameters picked to match the old Tone.MembraneSynth
-    // (pitchDecay 0.01, octaves 6/4 from C5/C4) closely enough to
-    // keep the perceptual "kick click" character.
-    const clickHi = () => playClick(ctx, ctx.destination, 800, 120, 60, 0.6);
-    const clickLo = () => playClick(ctx, ctx.destination, 400, 90, 60, 0.5);
+    // sweeps match the old Tone.MembraneSynth character
+    // (pitchDecay 0.01, octaves 6/4 from C5/C4): ~3139 → 523 Hz
+    // over 10 ms for hi, ~1046 → 261 Hz for lo. Previous values
+    // (800→120, 400→90 over 60 ms) sounded too low and soft
+    // (codex P3 on PR #1731).
+    const clickHi = () => playClick(ctx, ctx.destination, 3139, 523, 10, 0.6);
+    const clickLo = () => playClick(ctx, ctx.destination, 1046, 261, 10, 0.5);
 
     for (let i = 0; i < totalBeats; i++) {
       const bar = Math.floor(i / beatsPerBar);
@@ -471,18 +483,22 @@ class RecordingEngine {
   // --- Metronome ---
 
   startMetronome(bpm: number, beatsPerBar: number): () => void {
-    // Recording-time metronome. Not sample-accurate — the Rust
-    // engine owns the sample-accurate metronome in Phase 3E; this
-    // is the pre-roll clicker that plays wallclock-driven during
-    // a recording session.
+    // Recording-time metronome. Not sample-accurate: clicks fire
+    // when the JS timer wakes up (subject to UI stall, GC,
+    // background-tab throttling). The app's sample-accurate
+    // metronome lives in the Rust engine (Phase 3E); this helper
+    // has no current call sites in `src/` as of Phase 5E, but is
+    // retained for future recording-session UX that may need
+    // wallclock-driven click beneath the sample-accurate playback
+    // metronome (codex P2 note on PR #1731).
     const engine = getAudioEngine();
     const ctx = engine.ctx;
-    // -6 dB ≈ 0.5 linear, -10 dB ≈ 0.316 linear (matches the old
+    // -6 dB ≈ 0.5 linear, -10 dB ≈ 0.316 linear (matches old
     // Tone.MembraneSynth volume.value settings).
     const hiVolume = 0.5;
     const loVolume = 0.316;
-    const clickHi = () => playClick(ctx, ctx.destination, 800, 120, 50, hiVolume);
-    const clickLo = () => playClick(ctx, ctx.destination, 400, 90, 40, loVolume);
+    const clickHi = () => playClick(ctx, ctx.destination, 3139, 523, 10, hiVolume);
+    const clickLo = () => playClick(ctx, ctx.destination, 1046, 261, 10, loVolume);
 
     let beat = 0;
     const beatInterval = (60 / bpm) * 1000;

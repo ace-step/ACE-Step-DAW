@@ -85,7 +85,13 @@ async function playPreview(audioBuffer: AudioBuffer) {
   previewSource = source;
   // Release the reference automatically when playback finishes so a
   // subsequent stopPreview() doesn't call stop() on a finished node.
+  // Also disconnect the source and clear its handler so the graph
+  // edge + closure are released immediately on end — matches the
+  // synchronous cleanup path in `stopPreview()` (Copilot review on
+  // PR #1725).
   source.onended = () => {
+    try { source.disconnect(); } catch { /* already disconnected */ }
+    source.onended = null;
     if (previewSource === source) previewSource = null;
   };
 }

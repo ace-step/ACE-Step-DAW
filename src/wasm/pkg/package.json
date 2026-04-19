@@ -3,7 +3,7 @@
   "type": "module",
   "description": "WASM bindings for ACE-Step DAW DSP engine — exposes ace-dsp-core to AudioWorklet",
   "version": "0.1.0",
-  "license": "MIT OR Apache-2.0",
+  "license": "AGPL-3.0-or-later",
   "files": [
     "ace_dsp_wasm_bg.wasm",
     "ace_dsp_wasm.js",

@@ -34,6 +34,21 @@ import type { TimelineScrubClip } from '../engine/AudioEngine';
 import { useVST3Store } from '../store/vst3Store';
 import { pluginEngine } from '../engine/PluginEngine';
 
+/**
+ * Coerce a TrackNode.inputGain (currently a Tone.Gain wrapped under
+ * the hood) to a native AudioNode for downstream engine APIs. The
+ * double cast exists because the engines in SynthEngine /
+ * SubtractiveEngine / SamplerEngine / WavetableEngine / GranularEngine
+ * still take `Tone.InputNode` or `AudioNode` parameters depending on
+ * the engine — they only use the value as a `.connect` destination,
+ * which both types support. Centralized in one helper per Copilot
+ * review on PR #1723 so subsequent engine migrations have a single
+ * place to remove.
+ */
+function trackInputAsAudioNode(inputGain: unknown): AudioNode {
+  return inputGain as AudioNode;
+}
+
 const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   kick: 0,
   snare: 1,
@@ -414,7 +429,7 @@ export function useTransport() {
             const trackNode = engine.getOrCreateTrackNode(track.id);
             samplerEngine.ensureTrackSampler(
               track.id, samplerConfig, sampleBuffer,
-              trackNode.inputGain as unknown as AudioNode,
+              trackInputAsAudioNode(trackNode.inputGain),
             );
           }
         } else if (!vst3Instrument && track.instrument?.kind === 'subtractive') {
@@ -422,7 +437,7 @@ export function useTransport() {
           subtractiveEngine.ensureTrackSynth(
             track.id,
             track.instrument.settings,
-            trackNode.inputGain as unknown as AudioNode,
+            trackInputAsAudioNode(trackNode.inputGain),
           );
           // Apply modulation matrix if configured
           if (track.instrument.settings.modulation?.slots.length) {
@@ -435,13 +450,13 @@ export function useTransport() {
           const trackNode = engine.getOrCreateTrackNode(track.id);
           synthEngine.ensureFmSynth(
             track.id, track.instrument.settings,
-            trackNode.inputGain as unknown as AudioNode,
+            trackInputAsAudioNode(trackNode.inputGain),
           );
         } else if (!vst3Instrument && track.instrument?.kind === 'wavetable') {
           const trackNode = engine.getOrCreateTrackNode(track.id);
           wavetableEngine.ensureTrackSynth(
             track.id, track.instrument.settings,
-            trackNode.inputGain as unknown as AudioNode,
+            trackInputAsAudioNode(trackNode.inputGain),
           );
         } else if (!vst3Instrument && track.instrument?.kind === 'granular' && track.granularConfig) {
           const sampleBlob = await loadAudioBlobByKey(track.granularConfig.audioKey);
@@ -450,7 +465,7 @@ export function useTransport() {
             const trackNode = engine.getOrCreateTrackNode(track.id);
             granularEngine.ensureTrackGranular(
               track.id, track.granularConfig, sampleBuffer,
-              trackNode.inputGain as unknown as AudioNode,
+              trackInputAsAudioNode(trackNode.inputGain),
             );
           }
         } else if (preset !== 'sampler') {

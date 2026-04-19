@@ -2,7 +2,7 @@ import * as Tone from 'tone';
 import type {
   SubtractiveInstrumentSettings,
 } from '../types/project';
-import type { ModulationTargets } from './ModulationEngine';
+import type { ModulationTarget, ModulationTargets } from './ModulationEngine';
 
 interface SubtractiveInstance {
   synth: Tone.PolySynth;
@@ -138,15 +138,20 @@ class SubtractiveEngine {
     const instance = this.instances.get(trackId);
     if (!instance) return null;
 
+    // These are all Tone.Param wrappers; they carry `.connect()` that
+    // works within Tone's graph but isn't a direct AudioParam/AudioNode
+    // match. The ModulationEngine's runtime try/catch handles the
+    // mismatch — until SubtractiveEngine itself goes native (Phase 5K),
+    // modulation routes involving this engine will degrade silently.
     return {
-      amp: instance.output.gain as unknown as Tone.InputNode,
-      pitch: (instance.synth as unknown as { detune: Tone.InputNode }).detune ?? undefined,
-      pan: instance.panner.pan as unknown as Tone.InputNode,
+      amp: instance.output.gain as unknown as ModulationTarget,
+      pitch: (instance.synth as unknown as { detune: ModulationTarget }).detune ?? undefined,
+      pan: instance.panner.pan as unknown as ModulationTarget,
       filterCutoff: instance.filter
-        ? (instance.filter.frequency as unknown as Tone.InputNode)
+        ? (instance.filter.frequency as unknown as ModulationTarget)
         : undefined,
       filterResonance: instance.filter
-        ? (instance.filter.Q as unknown as Tone.InputNode)
+        ? (instance.filter.Q as unknown as ModulationTarget)
         : undefined,
     };
   }

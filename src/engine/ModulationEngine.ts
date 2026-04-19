@@ -11,7 +11,6 @@
  *                    (linear remap from [-1,1] to [0,1])
  */
 
-import type { InputNode as ToneInputNode } from 'tone';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import type {
   ModulationSettings,
@@ -20,19 +19,21 @@ import type {
 } from '../types/project';
 
 /**
- * Destination: given a track's audio nodes, an AudioParam / AudioNode
- * to modulate.
- *
- * The `ToneInputNode` branch is a transitional type-only shim — still
- * required because some upstream engines (Subtractive/Synth/etc.) are
- * Tone-wrapped during the 5-phase migration. Those engines' return
- * types flow through here untouched; at runtime we skip any target
- * that isn't a genuinely-native AudioParam/AudioNode instance, so
- * unmigrated routes degrade silently rather than crashing.
- *
- * This `tone` import is erased by TS at build time — no runtime dep.
+ * Destination: native AudioParam / AudioNode, or — transitionally —
+ * any object with a `connect` method. During the Tone migration some
+ * upstream engines (Subtractive/Synth/etc.) still hand back Tone
+ * wrappers; once those land on native-only, this union can shrink to
+ * just `AudioParam | AudioNode`. We intentionally don't import
+ * `tone`'s types here, even as a `type`-only import, so removing the
+ * `tone` package doesn't depend on finishing every engine first. At
+ * runtime the `.connect()` call is wrapped in try/catch, so any
+ * target that isn't compatible with native `AudioNode.connect`
+ * degrades silently.
  */
-export type ModulationTarget = AudioParam | AudioNode | ToneInputNode;
+// `any`-typed params so Tone's `ToneAudioNode.connect(destination: InputNode, …)`
+// structurally matches without dragging in Tone's `InputNode` type.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ModulationTarget = AudioParam | AudioNode | { connect: (target: any, ...rest: any[]) => any };
 
 export interface ModulationTargets {
   pitch?: ModulationTarget;
@@ -72,19 +73,24 @@ interface TrackModulation {
 }
 
 /**
- * Build a WaveShaper curve that linearly remaps its [-1, 1] input
- * range to [0, 1] — the unipolar fold Tone.Scale(0, 1) used to do.
+ * WaveShaper curve that linearly remaps its [-1, 1] input range to
+ * [0, 1] — the unipolar fold Tone.Scale(0, 1) used to do.
  *
- * Returns the strict `Float32Array<ArrayBuffer>` variant required by
- * `WaveShaperNode.curve` in TS 5.7's generic TypedArray typings.
+ * Hoisted to a module-level constant so `applyModulation` doesn't
+ * allocate a fresh 3-element Float32Array per unipolar LFO slot.
+ * The same curve buffer is safe to assign to many WaveShaperNodes —
+ * each node reads the values at assignment time.
+ *
+ * Typed as `Float32Array<ArrayBuffer>` to satisfy TS 5.7's strict
+ * generic TypedArray typings for `WaveShaperNode.curve`.
  */
-function buildUnipolarCurve(): Float32Array<ArrayBuffer> {
+const UNIPOLAR_CURVE: Float32Array<ArrayBuffer> = (() => {
   const curve = new Float32Array(3);
   curve[0] = 0;
   curve[1] = 0.5;
   curve[2] = 1;
   return curve;
-}
+})();
 
 /**
  * Connect a native AudioNode to `target`. The target can be a native
@@ -184,6 +190,19 @@ class ModulationEngine {
       const target = this.resolveTarget(slot.destination, targets);
       if (!target) continue;
 
+      // Try the downstream connection first — if the target is a
+      // still-Tone-wrapped value from an unmigrated engine, native
+      // `.connect()` will throw. In that case we bail before
+      // allocating the scaler / shaper and leaking nodes into the
+      // track's dispose queue.
+      const scaler = ctx.createGain();
+      scaler.gain.value = slot.amount;
+      const connected = connectToTarget(scaler, target);
+      if (!connected) {
+        try { scaler.disconnect(); } catch { /* already disconnected */ }
+        continue;
+      }
+
       // For unipolar (bipolar=false) LFO sources, fold output from
       // [-1, 1] to [0, 1] via a WaveShaper before the amount scaler.
       const isLfoSource = source.kind === 'lfo';
@@ -191,7 +210,7 @@ class ModulationEngine {
 
       if (!slot.bipolar && isLfoSource) {
         const shaper = ctx.createWaveShaper();
-        shaper.curve = buildUnipolarCurve();
+        shaper.curve = UNIPOLAR_CURVE;
         source.output.connect(shaper);
         upstream = shaper;
         connections.push({
@@ -203,18 +222,8 @@ class ModulationEngine {
       }
 
       // Scaling node: upstream × amount → destination.
-      const scaler = ctx.createGain();
-      scaler.gain.value = slot.amount;
       const slotUpstream = upstream;
       slotUpstream.connect(scaler);
-      const connected = connectToTarget(scaler, target);
-      // If the target wasn't a native connectable, leave the scaler
-      // orphaned but registered for disposal — cheaper than rolling
-      // back the upstream chain above, and its dispose path will
-      // disconnect everything cleanly on removeTrack.
-      if (!connected) {
-        // No target connection made — nothing more to do for this slot.
-      }
 
       connections.push({
         dispose: () => {

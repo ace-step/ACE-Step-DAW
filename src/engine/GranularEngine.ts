@@ -136,9 +136,12 @@ class GranularEngine {
   }
 
   async ensureStarted(): Promise<void> {
-    const ctx = getAudioEngine().ctx;
-    if (ctx.state !== 'running') {
-      await getAudioEngine().resume();
+    // Cache the engine handle into a local — `getAudioEngine()` is
+    // a singleton accessor today but taking it once is cheaper and
+    // robust against future changes (Copilot review on PR #1729).
+    const engine = getAudioEngine();
+    if (engine.ctx.state !== 'running') {
+      await engine.resume();
     }
   }
 

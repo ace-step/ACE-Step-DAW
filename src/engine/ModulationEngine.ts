@@ -1,48 +1,67 @@
 /**
- * Modulation Matrix Engine
+ * Modulation Matrix Engine — routes LFO / macro sources to synth
+ * parameters. Each track has up to 8 modulation slots.
  *
- * Manages Tone.js LFO and Signal nodes for flexible modulation routing.
- * Each track can have up to 8 modulation slots routing sources (LFOs,
- * envelopes, macros) to destinations (synth parameters).
- *
- * Architecture:
- * - Source nodes (LFO1, LFO2, macros) are Tone.Signal or Tone.LFO instances
- * - Each slot creates a Tone.Multiply (amount) node between source and destination
- * - Destinations are AudioParam references obtained from the synth engine
+ * Phase 5I migration: replaced Tone.LFO / Signal / Multiply / Scale
+ * with native Web Audio primitives. Mapping:
+ *   Tone.LFO       → OscillatorNode (native sine/square/triangle/sawtooth)
+ *   Tone.Signal(v) → ConstantSourceNode with offset.value = v
+ *   Tone.Multiply  → GainNode (gain = factor)
+ *   Tone.Scale(0,1)→ WaveShaperNode with curve [0, 0.5, 1]
+ *                    (linear remap from [-1,1] to [0,1])
  */
 
-import * as Tone from 'tone';
+import type { InputNode as ToneInputNode } from 'tone';
+import { getAudioEngine } from '../hooks/useAudioEngine';
 import type {
   ModulationSettings,
-  ModulationSlot,
   ModulationSource,
   ModulationDestination,
 } from '../types/project';
 
 /**
- * Destination resolver: given a track's audio nodes, returns the AudioParam references to modulate.
- * Uses Tone.InputNode as the common type since Tone.js Param/Signal generics are complex.
+ * Destination: given a track's audio nodes, an AudioParam / AudioNode
+ * to modulate.
+ *
+ * The `ToneInputNode` branch is a transitional type-only shim — still
+ * required because some upstream engines (Subtractive/Synth/etc.) are
+ * Tone-wrapped during the 5-phase migration. Those engines' return
+ * types flow through here untouched; at runtime we skip any target
+ * that isn't a genuinely-native AudioParam/AudioNode instance, so
+ * unmigrated routes degrade silently rather than crashing.
+ *
+ * This `tone` import is erased by TS at build time — no runtime dep.
  */
+export type ModulationTarget = AudioParam | AudioNode | ToneInputNode;
+
 export interface ModulationTargets {
-  pitch?: Tone.InputNode;
-  filterCutoff?: Tone.InputNode;
-  filterResonance?: Tone.InputNode;
-  amp?: Tone.InputNode;
-  pan?: Tone.InputNode;
-  oscLevel?: Tone.InputNode;
-  lfo1Rate?: Tone.InputNode;
-  lfo2Rate?: Tone.InputNode;
-  fmIndex?: Tone.InputNode;
-  wtPosition?: Tone.InputNode;
+  pitch?: ModulationTarget;
+  filterCutoff?: ModulationTarget;
+  filterResonance?: ModulationTarget;
+  amp?: ModulationTarget;
+  pan?: ModulationTarget;
+  oscLevel?: ModulationTarget;
+  lfo1Rate?: ModulationTarget;
+  lfo2Rate?: ModulationTarget;
+  fmIndex?: ModulationTarget;
+  wtPosition?: ModulationTarget;
 }
 
-interface SourceNode {
-  node: Tone.LFO | Tone.Signal;
-  dispose: () => void;
-}
+type LfoSourceNode = {
+  kind: 'lfo';
+  osc: OscillatorNode;
+  output: AudioNode;
+};
+
+type SignalSourceNode = {
+  kind: 'signal';
+  constant: ConstantSourceNode;
+  output: AudioNode;
+};
+
+type SourceNode = LfoSourceNode | SignalSourceNode;
 
 interface SlotConnection {
-  scaler: Tone.Multiply;
   dispose: () => void;
 }
 
@@ -50,6 +69,47 @@ interface TrackModulation {
   sources: Map<ModulationSource, SourceNode>;
   connections: SlotConnection[];
   settings: ModulationSettings;
+}
+
+/**
+ * Build a WaveShaper curve that linearly remaps its [-1, 1] input
+ * range to [0, 1] — the unipolar fold Tone.Scale(0, 1) used to do.
+ *
+ * Returns the strict `Float32Array<ArrayBuffer>` variant required by
+ * `WaveShaperNode.curve` in TS 5.7's generic TypedArray typings.
+ */
+function buildUnipolarCurve(): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(3);
+  curve[0] = 0;
+  curve[1] = 0.5;
+  curve[2] = 1;
+  return curve;
+}
+
+/**
+ * Connect a native AudioNode to `target`. The target can be a native
+ * AudioParam / AudioNode, or — during the Tone migration — a Tone
+ * wrapper that native `.connect()` doesn't understand. We `try` the
+ * connection and silently drop it on failure so an unmigrated engine
+ * doesn't crash the audio graph; the scaler node still gets created,
+ * just with no downstream. Returns `true` iff the connect succeeded.
+ */
+function connectToTarget(output: AudioNode, target: ModulationTarget): boolean {
+  try {
+    // The union type defeats TS's overload resolution here; cast to
+    // `never` to let the runtime's overload handling pick the right
+    // signature (AudioParam vs AudioNode).
+    output.connect(target as never);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function disconnectFromTarget(output: AudioNode, target: ModulationTarget): void {
+  try {
+    output.disconnect(target as never);
+  } catch { /* already disconnected or never connected */ }
 }
 
 class ModulationEngine {
@@ -69,36 +129,31 @@ class ModulationEngine {
 
     if (settings.slots.length === 0) return;
 
+    const ctx = getAudioEngine().ctx;
     const sources = new Map<ModulationSource, SourceNode>();
     const connections: SlotConnection[] = [];
 
-    // Create source nodes on demand
     const getSource = (source: ModulationSource): SourceNode | null => {
-      if (sources.has(source)) return sources.get(source)!;
+      const cached = sources.get(source);
+      if (cached) return cached;
 
       let sourceNode: SourceNode | null = null;
 
       switch (source) {
         case 'lfo1': {
-          const lfo = new Tone.LFO({
-            frequency: settings.lfo1.rateHz,
-            type: settings.lfo1.waveform as Tone.ToneOscillatorType,
-            min: -1,
-            max: 1,
-          });
-          lfo.start();
-          sourceNode = { node: lfo, dispose: () => { lfo.stop(); lfo.dispose(); } };
+          const osc = ctx.createOscillator();
+          osc.type = settings.lfo1.waveform as OscillatorType;
+          osc.frequency.value = settings.lfo1.rateHz;
+          osc.start();
+          sourceNode = { kind: 'lfo', osc, output: osc };
           break;
         }
         case 'lfo2': {
-          const lfo = new Tone.LFO({
-            frequency: settings.lfo2.rateHz,
-            type: settings.lfo2.waveform as Tone.ToneOscillatorType,
-            min: -1,
-            max: 1,
-          });
-          lfo.start();
-          sourceNode = { node: lfo, dispose: () => { lfo.stop(); lfo.dispose(); } };
+          const osc = ctx.createOscillator();
+          osc.type = settings.lfo2.waveform as OscillatorType;
+          osc.frequency.value = settings.lfo2.rateHz;
+          osc.start();
+          sourceNode = { kind: 'lfo', osc, output: osc };
           break;
         }
         case 'macro1':
@@ -106,8 +161,10 @@ class ModulationEngine {
         case 'macro3':
         case 'macro4': {
           const idx = parseInt(source.replace('macro', '')) - 1;
-          const sig = new Tone.Signal(settings.macros[idx] ?? 0);
-          sourceNode = { node: sig, dispose: () => sig.dispose() };
+          const constant = ctx.createConstantSource();
+          constant.offset.value = settings.macros[idx] ?? 0;
+          constant.start();
+          sourceNode = { kind: 'signal', constant, output: constant };
           break;
         }
         // Velocity, modWheel, envelope sources need per-note triggering — defer to future
@@ -115,9 +172,7 @@ class ModulationEngine {
           return null;
       }
 
-      if (sourceNode) {
-        sources.set(source, sourceNode);
-      }
+      sources.set(source, sourceNode);
       return sourceNode;
     };
 
@@ -129,39 +184,43 @@ class ModulationEngine {
       const target = this.resolveTarget(slot.destination, targets);
       if (!target) continue;
 
-      // For unipolar (bipolar=false) LFO sources, remap LFO output from [-1,1] to [0,1]
-      // using Tone.Scale before the amount scaler.
-      const isLfoSource = slot.source === 'lfo1' || slot.source === 'lfo2';
-      // sourceNode is the raw source output (LFO or Signal); captured for explicit disconnect on dispose.
-      const sourceNode = source.node as unknown as Tone.ToneAudioNode;
-      let upstream: Tone.ToneAudioNode = sourceNode;
+      // For unipolar (bipolar=false) LFO sources, fold output from
+      // [-1, 1] to [0, 1] via a WaveShaper before the amount scaler.
+      const isLfoSource = source.kind === 'lfo';
+      let upstream: AudioNode = source.output;
+
       if (!slot.bipolar && isLfoSource) {
-        const scaleNode = new Tone.Scale(0, 1); // maps [-1,1] → [0,1]
-        sourceNode.connect(scaleNode as unknown as Tone.InputNode);
-        upstream = scaleNode as unknown as Tone.ToneAudioNode;
+        const shaper = ctx.createWaveShaper();
+        shaper.curve = buildUnipolarCurve();
+        source.output.connect(shaper);
+        upstream = shaper;
         connections.push({
-          scaler: scaleNode as unknown as Tone.Multiply,
           dispose: () => {
-            // Disconnect source → scaleNode before disposal to avoid dangling connections.
-            try { sourceNode.disconnect(scaleNode as unknown as Tone.InputNode); } catch { /* already disconnected */ }
-            scaleNode.dispose();
+            try { source.output.disconnect(shaper); } catch { /* already disconnected */ }
+            try { shaper.disconnect(); } catch { /* already disconnected */ }
           },
         });
       }
 
-      // Create scaling node: upstream * amount → destination.
-      // Capture upstream in a const for the dispose closure.
+      // Scaling node: upstream × amount → destination.
+      const scaler = ctx.createGain();
+      scaler.gain.value = slot.amount;
       const slotUpstream = upstream;
-      const scaler = new Tone.Multiply(slot.amount);
       slotUpstream.connect(scaler);
-      scaler.connect(target);
+      const connected = connectToTarget(scaler, target);
+      // If the target wasn't a native connectable, leave the scaler
+      // orphaned but registered for disposal — cheaper than rolling
+      // back the upstream chain above, and its dispose path will
+      // disconnect everything cleanly on removeTrack.
+      if (!connected) {
+        // No target connection made — nothing more to do for this slot.
+      }
 
       connections.push({
-        scaler,
         dispose: () => {
-          // Disconnect upstream → scaler before disposal.
           try { slotUpstream.disconnect(scaler); } catch { /* already disconnected */ }
-          scaler.dispose();
+          disconnectFromTarget(scaler, target);
+          try { scaler.disconnect(); } catch { /* already disconnected */ }
         },
       });
     }
@@ -178,8 +237,8 @@ class ModulationEngine {
 
     const sourceKey = `macro${macroIndex + 1}` as ModulationSource;
     const source = track.sources.get(sourceKey);
-    if (source && source.node instanceof Tone.Signal) {
-      source.node.value = Math.max(0, Math.min(1, value));
+    if (source && source.kind === 'signal') {
+      source.constant.offset.value = Math.max(0, Math.min(1, value));
     }
   }
 
@@ -192,8 +251,8 @@ class ModulationEngine {
 
     const sourceKey = lfoIndex === 0 ? 'lfo1' : 'lfo2';
     const source = track.sources.get(sourceKey);
-    if (source && source.node instanceof Tone.LFO) {
-      source.node.frequency.value = rateHz;
+    if (source && source.kind === 'lfo') {
+      source.osc.frequency.value = rateHz;
     }
   }
 
@@ -208,7 +267,13 @@ class ModulationEngine {
       conn.dispose();
     }
     for (const source of track.sources.values()) {
-      source.dispose();
+      if (source.kind === 'lfo') {
+        try { source.osc.stop(); } catch { /* already stopped */ }
+        try { source.osc.disconnect(); } catch { /* already disconnected */ }
+      } else {
+        try { source.constant.stop(); } catch { /* already stopped */ }
+        try { source.constant.disconnect(); } catch { /* already disconnected */ }
+      }
     }
     this.tracks.delete(trackId);
   }
@@ -225,7 +290,7 @@ class ModulationEngine {
   private resolveTarget(
     dest: ModulationDestination,
     targets: ModulationTargets,
-  ): Tone.InputNode | null {
+  ): ModulationTarget | null {
     switch (dest) {
       case 'pitch': return targets.pitch ?? null;
       case 'filterCutoff': return targets.filterCutoff ?? null;

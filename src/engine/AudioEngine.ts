@@ -1,5 +1,6 @@
 import { TrackNode } from './TrackNode';
 import { ReturnTrackNode } from './ReturnTrackNode';
+import { configureNativeDsp } from './dsp/configureNativeDsp';
 import type {
   AudioWarpMarker,
   GainEnvelopePoint,
@@ -162,8 +163,12 @@ export class AudioEngine {
   constructor() {
     this.ctx = new AudioContext({ sampleRate: 48000 });
     this._playbackLatencyCompensation = (this.ctx.outputLatency ?? 0) + (this.ctx.baseLatency ?? 0);
-    // Phase 5P: Tone.setContext / Tone.getContext().lookAhead removed
-    // — every engine now uses the native context directly.
+    // Phase 5P: install the native DSP factory bound to *this* context
+    // so every effect/synth node EffectsEngine builds via
+    // `getDSPFactory()` shares the engine's AudioContext. Without
+    // this, `getDSPFactory()` would lazy-create a second
+    // AudioContext and cross-context connections would throw.
+    configureNativeDsp(this.ctx);
     this.masterInputGain = this.ctx.createGain();
     this.masterDryGain = this.ctx.createGain();
     this.masterProcessedGain = this.ctx.createGain();

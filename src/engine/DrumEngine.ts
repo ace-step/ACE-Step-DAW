@@ -72,8 +72,7 @@ function makeSoftClipCurve(amount: number): Float32Array<ArrayBuffer> {
   return curve as Float32Array<ArrayBuffer>;
 }
 
-function createPadEffectChain(connectTo?: AudioNode): PadEffectChain {
-  const ctx = getAudioEngine().ctx;
+function createPadEffectChain(ctx: AudioContext, connectTo?: AudioNode): PadEffectChain {
 
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
@@ -158,8 +157,7 @@ export const BEAT_PAD_KEYS: string[] = [
 
 // ─── Synthesized Drum Sound Generators ──────────────────────────────────────
 
-function createKick808(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createKick808(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const synth = new NativeMembraneSynth(ctx, {
     pitchDecay: 0.08,
     octaves: 6,
@@ -172,8 +170,7 @@ function createKick808(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createKickAcoustic(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createKickAcoustic(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const synth = new NativeMembraneSynth(ctx, {
     pitchDecay: 0.05,
     octaves: 4,
@@ -186,8 +183,7 @@ function createKickAcoustic(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createSnare808(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createSnare808(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.15 },
   });
@@ -208,8 +204,7 @@ function createSnare808(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createSnareAcoustic(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createSnareAcoustic(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
   });
@@ -230,8 +225,7 @@ function createSnareAcoustic(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createHiHatClosed(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createHiHatClosed(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.03 },
   });
@@ -242,8 +236,7 @@ function createHiHatClosed(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createHiHatOpen(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createHiHatOpen(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.2 },
   });
@@ -254,8 +247,7 @@ function createHiHatOpen(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createClap(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createClap(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.08 },
   });
@@ -266,8 +258,7 @@ function createClap(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createRim(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createRim(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const synth = new NativeMetalSynth(ctx, {
     frequency: 400,
     envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
@@ -281,8 +272,7 @@ function createRim(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createTomHigh(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createTomHigh(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const synth = new NativeMembraneSynth(ctx, {
     pitchDecay: 0.04,
     octaves: 3,
@@ -295,8 +285,7 @@ function createTomHigh(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createTomLow(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createTomLow(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const synth = new NativeMembraneSynth(ctx, {
     pitchDecay: 0.04,
     octaves: 3,
@@ -309,8 +298,7 @@ function createTomLow(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createCrash(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createCrash(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 1.5, sustain: 0, release: 1.0 },
   });
@@ -332,8 +320,7 @@ function createCrash(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createRide(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createRide(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const metal = new NativeMetalSynth(ctx, {
     frequency: 400,
     envelope: { attack: 0.001, decay: 0.6, release: 0.3 },
@@ -347,8 +334,7 @@ function createRide(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createShaker(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createShaker(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.005, decay: 0.06, sustain: 0, release: 0.04 },
   });
@@ -359,8 +345,7 @@ function createShaker(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createCowbell(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createCowbell(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const synth = new NativeMetalSynth(ctx, {
     frequency: 560,
     envelope: { attack: 0.001, decay: 0.2, release: 0.1 },
@@ -374,8 +359,7 @@ function createCowbell(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createConga(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createConga(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const synth = new NativeMembraneSynth(ctx, {
     pitchDecay: 0.03,
     octaves: 2,
@@ -388,8 +372,7 @@ function createConga(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createBongo(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createBongo(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const synth = new NativeMembraneSynth(ctx, {
     pitchDecay: 0.02,
     octaves: 2,
@@ -402,8 +385,7 @@ function createBongo(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createTambourine(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createTambourine(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.08 },
   });
@@ -414,8 +396,7 @@ function createTambourine(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-function createPerc(connectTo?: AudioNode): DrumVoice {
-  const ctx = getAudioEngine().ctx;
+function createPerc(ctx: AudioContext, connectTo?: AudioNode): DrumVoice {
   const synth = new NativeMetalSynth(ctx, {
     frequency: 200,
     envelope: { attack: 0.001, decay: 0.08, release: 0.04 },
@@ -429,7 +410,7 @@ function createPerc(connectTo?: AudioNode): DrumVoice {
   };
 }
 
-type VoiceFactory = (connectTo?: AudioNode) => DrumVoice;
+type VoiceFactory = (ctx: AudioContext, connectTo?: AudioNode) => DrumVoice;
 
 const KIT_FACTORIES: Record<DrumKitName, VoiceFactory[]> = {
   '808': [
@@ -458,8 +439,20 @@ const KIT_FACTORIES: Record<DrumKitName, VoiceFactory[]> = {
   ],
 };
 
-export function createDrumVoicesForKit(kit: DrumKitName, connectTo?: AudioNode): DrumVoice[] {
-  return KIT_FACTORIES[kit].map((factory) => factory(connectTo));
+/**
+ * Build voices for the given kit, bound to `ctx`. Pass the same ctx
+ * as whichever AudioNode `connectTo` lives on (live or offline) to
+ * avoid cross-context connection errors. When `ctx` is omitted, we
+ * fall back to the live engine's context for back-compat with UI
+ * call sites.
+ */
+export function createDrumVoicesForKit(
+  kit: DrumKitName,
+  connectTo?: AudioNode,
+  ctx?: AudioContext,
+): DrumVoice[] {
+  const audioCtx = ctx ?? getAudioEngine().ctx;
+  return KIT_FACTORIES[kit].map((factory) => factory(audioCtx, connectTo));
 }
 
 // ─── Pattern Presets ─────────────────────────────────────────────────────────
@@ -583,14 +576,15 @@ class DrumEngine {
 
     this.disposeTrack(trackId);
 
+    const ctx = getAudioEngine().ctx;
     const chains: PadEffectChain[] = [];
     const factories = KIT_FACTORIES[kit];
     const voices: DrumVoice[] = [];
 
     for (let i = 0; i < factories.length; i++) {
-      const chain = createPadEffectChain();
+      const chain = createPadEffectChain(ctx);
       chains.push(chain);
-      const voice = factories[i](chain.filter);
+      const voice = factories[i](ctx, chain.filter);
       voices.push(voice);
     }
 

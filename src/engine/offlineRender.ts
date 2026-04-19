@@ -152,7 +152,14 @@ export async function renderSequencerTrackOffline(
 
   const voices: ReturnType<typeof createDrumVoicesForKit> = [];
   try {
-    const kitVoices = createDrumVoicesForKit(drumKit, masterGain);
+    // Pass the offline ctx so drum voices are built against the
+    // same context as `masterGain`; otherwise cross-context
+    // connect() throws.
+    const kitVoices = createDrumVoicesForKit(
+      drumKit,
+      masterGain,
+      offlineCtx as unknown as AudioContext,
+    );
     voices.push(...kitVoices);
 
     const totalSteps = pattern.stepsPerBar * pattern.bars;

@@ -2,6 +2,7 @@ import * as Tone from 'tone';
 import type { ToneAudioBuffer } from 'tone';
 import { createDrumVoicesForKit } from './DrumEngine';
 import { createSynthForPreset } from './SynthEngine';
+import { midiToFrequency } from '../utils/pitch';
 import type { DrumKitName, MidiNote, SamplerConfig, SequencerPattern, SynthPreset } from '../types/project';
 
 const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
@@ -44,31 +45,33 @@ export async function renderMidiTrackOffline(
   totalDuration: number,
   sampleRate: number = 48000,
 ): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    const synth = createSynthForPreset(synthPreset);
-    const gain = new Tone.Gain(0.55).toDestination();
-    synth.connect(gain);
+  // Phase 5L: drop Tone.Offline in favour of the native
+  // OfflineAudioContext — NativeBasicPolySynth is created against
+  // this offline context, and notes are scheduled directly at
+  // their start times (AudioParam automation is sample-accurate
+  // under offline rendering).
+  const length = Math.max(1, Math.ceil(totalDuration * sampleRate));
+  const offlineCtx = new OfflineAudioContext(2, length, sampleRate);
+  const secondsPerBeat = 60 / bpm;
 
-    transport.bpm.value = bpm;
-    const secondsPerBeat = 60 / bpm;
+  const synth = createSynthForPreset(synthPreset, offlineCtx);
+  const gain = offlineCtx.createGain();
+  gain.gain.value = 0.55;
+  synth.connect(gain);
+  gain.connect(offlineCtx.destination);
 
-    for (const note of notes) {
-      const noteDuration = Math.max(0, note.durationBeats * secondsPerBeat);
-      const noteStart = clipStartTime + note.startBeat * secondsPerBeat;
-      const noteEnd = noteStart + noteDuration;
-      if (noteDuration <= 0 || noteEnd <= 0 || noteStart >= totalDuration) continue;
+  for (const note of notes) {
+    const noteDuration = Math.max(0, note.durationBeats * secondsPerBeat);
+    const noteStart = clipStartTime + note.startBeat * secondsPerBeat;
+    const noteEnd = noteStart + noteDuration;
+    if (noteDuration <= 0 || noteEnd <= 0 || noteStart >= totalDuration) continue;
 
-      const velocity = Math.max(0, Math.min(1, note.velocity));
-      const frequency = Tone.Frequency(note.pitch, 'midi').toFrequency();
-      transport.schedule((time) => {
-        synth.triggerAttackRelease(frequency, noteDuration, time, velocity);
-      }, noteStart);
-    }
+    const velocity = Math.max(0, Math.min(1, note.velocity));
+    const frequency = midiToFrequency(note.pitch);
+    synth.triggerAttackRelease(frequency, noteDuration, noteStart, velocity);
+  }
 
-    transport.start(0);
-  }, totalDuration, 2, sampleRate);
-
-  return toAudioBuffer(buffer);
+  return offlineCtx.startRendering();
 }
 
 export async function renderSamplerTrackOffline(

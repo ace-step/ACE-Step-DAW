@@ -3,10 +3,45 @@
  * input level metering, and real-time waveform capture.
  */
 
-import * as Tone from 'tone';
 import { createDebugLogger } from '../utils/debugLogger';
+import { getAudioEngine } from '../hooks/useAudioEngine';
 
 const log = createDebugLogger('recording-engine');
+
+/**
+ * Fire a short percussive click using only native Web Audio —
+ * drop-in replacement for the `Tone.MembraneSynth.triggerAttackRelease`
+ * pattern used by the count-in and metronome below.
+ *
+ * Models a kick-like click: starts at `startFreq`, exponentially
+ * sweeps to `endFreq` over `decayMs`, with a linear attack and
+ * exponential amplitude decay. Fresh nodes per trigger — the
+ * oscillator stops itself so there is nothing to dispose.
+ */
+function playClick(
+  ctx: AudioContext,
+  destination: AudioNode,
+  startFreq: number,
+  endFreq: number,
+  decayMs: number,
+  volume: number,
+): void {
+  const now = ctx.currentTime;
+  const endTime = now + decayMs / 1000;
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(startFreq, now);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(endFreq, 1), endTime);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(volume, now + 0.001);
+  gain.gain.exponentialRampToValueAtTime(0.0001, endTime);
+
+  osc.connect(gain).connect(destination);
+  osc.start(now);
+  osc.stop(endTime + 0.02);
+}
 
 export interface AudioInputDevice {
   deviceId: string;
@@ -404,21 +439,15 @@ class RecordingEngine {
     const totalBeats = bars * beatsPerBar;
     const beatDuration = 60 / bpm;
 
-    await Tone.start();
-
-    const clickHi = new Tone.MembraneSynth({
-      pitchDecay: 0.01,
-      octaves: 6,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
-    }).toDestination();
-
-    const clickLo = new Tone.MembraneSynth({
-      pitchDecay: 0.01,
-      octaves: 4,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
-    }).toDestination();
+    const engine = getAudioEngine();
+    await engine.resume();
+    const ctx = engine.ctx;
+    // Hi click (downbeat) and lo click (other beats) — pitch
+    // parameters picked to match the old Tone.MembraneSynth
+    // (pitchDecay 0.01, octaves 6/4 from C5/C4) closely enough to
+    // keep the perceptual "kick click" character.
+    const clickHi = () => playClick(ctx, ctx.destination, 800, 120, 60, 0.6);
+    const clickLo = () => playClick(ctx, ctx.destination, 400, 90, 60, 0.5);
 
     for (let i = 0; i < totalBeats; i++) {
       const bar = Math.floor(i / beatsPerBar);
@@ -426,17 +455,15 @@ class RecordingEngine {
       onBeat(bar, beat, totalBeats - i);
 
       if (beat === 0) {
-        clickHi.triggerAttackRelease('C5', '32n');
+        clickHi();
       } else {
-        clickLo.triggerAttackRelease('C4', '32n');
+        clickLo();
       }
 
       await new Promise<void>(resolve => setTimeout(resolve, beatDuration * 1000));
     }
 
     this.isCountingIn = false;
-    clickHi.dispose();
-    clickLo.dispose();
   }
 
   get countingIn() { return this.isCountingIn; }
@@ -444,36 +471,32 @@ class RecordingEngine {
   // --- Metronome ---
 
   startMetronome(bpm: number, beatsPerBar: number): () => void {
-    const clickHi = new Tone.MembraneSynth({
-      pitchDecay: 0.008,
-      octaves: 6,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
-    }).toDestination();
-    clickHi.volume.value = -6;
-
-    const clickLo = new Tone.MembraneSynth({
-      pitchDecay: 0.008,
-      octaves: 4,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.01 },
-    }).toDestination();
-    clickLo.volume.value = -10;
+    // Recording-time metronome. Not sample-accurate — the Rust
+    // engine owns the sample-accurate metronome in Phase 3E; this
+    // is the pre-roll clicker that plays wallclock-driven during
+    // a recording session.
+    const engine = getAudioEngine();
+    const ctx = engine.ctx;
+    // -6 dB ≈ 0.5 linear, -10 dB ≈ 0.316 linear (matches the old
+    // Tone.MembraneSynth volume.value settings).
+    const hiVolume = 0.5;
+    const loVolume = 0.316;
+    const clickHi = () => playClick(ctx, ctx.destination, 800, 120, 50, hiVolume);
+    const clickLo = () => playClick(ctx, ctx.destination, 400, 90, 40, loVolume);
 
     let beat = 0;
-    const id = Tone.getTransport().scheduleRepeat((time) => {
+    const beatInterval = (60 / bpm) * 1000;
+    const intervalId = setInterval(() => {
       if (beat % beatsPerBar === 0) {
-        clickHi.triggerAttackRelease('C5', '32n', time);
+        clickHi();
       } else {
-        clickLo.triggerAttackRelease('C4', '32n', time);
+        clickLo();
       }
       beat++;
-    }, `${beatsPerBar}n`);
+    }, beatInterval);
 
     return () => {
-      Tone.getTransport().clear(id);
-      clickHi.dispose();
-      clickLo.dispose();
+      clearInterval(intervalId);
     };
   }
 

@@ -2,8 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Mocks must be hoisted — no top-level variable references ─────────────────
 
-vi.mock('tone', () => {
-  const _mockCtx = {
+// Shared mock AudioContext used by both the `tone` mock (for
+// `Tone.getContext().rawContext`, only read by test assertions now)
+// and the `useAudioEngine` mock (for `getAudioEngine().ctx`, the
+// real code path after the 5D migration). Must be defined via
+// `vi.hoisted` so the hoisted `vi.mock(...)` factories can see it.
+const { _mockCtx } = vi.hoisted(() => {
+  const ctx = {
     currentTime: 0,
     destination: {},
     createGain: vi.fn(() => ({
@@ -39,6 +44,10 @@ vi.mock('tone', () => {
       };
     }),
   };
+  return { _mockCtx: ctx };
+});
+
+vi.mock('tone', () => {
   return {
     getContext: vi.fn().mockReturnValue({
       state: 'running',
@@ -55,6 +64,7 @@ vi.mock('../../services/audioFileManager', () => ({
 
 vi.mock('../../hooks/useAudioEngine', () => ({
   getAudioEngine: vi.fn().mockReturnValue({
+    ctx: _mockCtx,
     resume: vi.fn(),
     decodeAudioData: vi.fn(),
   }),

@@ -38,6 +38,19 @@ describe('midiToFrequency', () => {
   it('returns NaN for NaN input', () => {
     expect(midiToFrequency(NaN)).toBeNaN();
   });
+
+  it('returns 0 for -Infinity (no audible pitch)', () => {
+    // Codex P3 regression (PR #1723): the docstring documents
+    // this behavior; pin it in a test so a future cleanup can't
+    // silently change it.
+    expect(midiToFrequency(-Infinity)).toBe(0);
+  });
+
+  it('returns +Infinity for +Infinity input', () => {
+    // Mathematical consequence of `2^(Infinity/12)` — documented
+    // for completeness; callers shouldn't pass this.
+    expect(midiToFrequency(Infinity)).toBe(Infinity);
+  });
 });
 
 describe('frequencyToMidi', () => {

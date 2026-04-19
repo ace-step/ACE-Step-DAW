@@ -144,9 +144,21 @@ export class NativeWavetableSynth {
 
     const t = time ?? this._ctx.currentTime;
     const env = this._envelope;
-    voice.gain.gain.cancelScheduledValues(t);
-    voice.gain.gain.setValueAtTime(voice.gain.gain.value, t);
-    voice.gain.gain.linearRampToValueAtTime(0, t + env.release);
+    // `AudioParam.value` reflects the current time's computed value,
+    // not the value at `t` — so naively anchoring via
+    // `setValueAtTime(value, t)` after `cancelScheduledValues` drops
+    // the scheduled ADSR mid-ramp. `cancelAndHoldAtTime(t)` is the
+    // correct primitive: it cancels future events while preserving
+    // whatever value the scheduled ramp would reach at `t`. Fall
+    // back to the old approach for environments that don't expose it.
+    const gainParam = voice.gain.gain;
+    if (typeof gainParam.cancelAndHoldAtTime === 'function') {
+      gainParam.cancelAndHoldAtTime(t);
+    } else {
+      gainParam.cancelScheduledValues(t);
+      gainParam.setValueAtTime(gainParam.value, t);
+    }
+    gainParam.linearRampToValueAtTime(0, t + env.release);
 
     const osc = voice.osc;
     osc.onended = () => {
@@ -259,10 +271,15 @@ class WavetableEngine {
     const instance = this.instances.get(trackId);
     if (!instance) return;
 
-    instance.settings = { ...settings };
-    instance.currentPosition = settings.position;
+    // Clamp here to match `setPosition` — an out-of-range value on a
+    // persisted project or a bad upstream call would otherwise be
+    // cached in `currentPosition` without clamping, even though
+    // `computePartialsAtPosition` clamps internally for the wave itself.
+    const clamped = Math.max(0, Math.min(1, settings.position));
+    instance.settings = { ...settings, position: clamped };
+    instance.currentPosition = clamped;
 
-    const partials = computePartialsAtPosition(settings.waveforms, settings.position);
+    const partials = computePartialsAtPosition(settings.waveforms, clamped);
     instance.synth.setPartials(partials);
     instance.synth.setEnvelope(settings.ampEnvelope);
     instance.gain.gain.value = settings.outputGain;

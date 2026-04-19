@@ -163,9 +163,24 @@ describe('PreviewEngine', () => {
       expect(stopSpy).toHaveBeenCalled();
     });
 
-    it('uses project BPM for timing', async () => {
-      await engine.playPresetPreview('subtractive', 'Bass', 90);
-      expect(engine.isPlaying).toBe(true);
+    it('schedules note timers scaled by BPM', async () => {
+      // Spy on setTimeout so we can verify BPM actually feeds the
+      // schedule instead of just asserting `isPlaying`. The Bass
+      // pattern's 2nd note is at startBeat=1, so its scheduled
+      // delay is exactly `60/bpm * 1000` ms — a clean witness
+      // that BPM propagated to the pattern scheduler.
+      const spy = vi.spyOn(globalThis, 'setTimeout');
+
+      await engine.playPresetPreview('subtractive', 'Bass', 120);
+      const delay120 = spy.mock.calls[1]?.[1] as number;
+      spy.mockClear();
+
+      await engine.playPresetPreview('subtractive', 'Bass', 60);
+      const delay60 = spy.mock.calls[1]?.[1] as number;
+      spy.mockRestore();
+
+      expect(delay120).toBe(500); // 60 / 120 * 1000
+      expect(delay60).toBe(1000); // 60 /  60 * 1000
     });
 
     it('creates an FMSynth path for fm preset', async () => {

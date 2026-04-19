@@ -47,8 +47,10 @@ export function frequencyToMidi(hz: number): number {
  * Convert a MIDI note number to its scientific pitch name
  * (e.g. 60 → "C4", 61 → "C#4", 69 → "A4"). MIDI 0 maps to "C-1".
  *
- * Used as a bridge into APIs that accept note names instead of raw
- * MIDI numbers (e.g. NativeSynths' triggerAttackRelease).
+ * Bridges into APIs that take note names instead of MIDI numbers
+ * (e.g. NativeSynths' `triggerAttackRelease`). Non-integer inputs are
+ * rounded with `Math.round`; values outside the MIDI range are clamped
+ * to [0, 127] so callers never produce malformed note strings.
  */
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 

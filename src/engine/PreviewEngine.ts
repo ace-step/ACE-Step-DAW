@@ -277,9 +277,17 @@ export class PreviewEngine {
     }
     this._scheduledIds = [];
 
-    // Release all notes (PolySynth only — FMSynth has no releaseAll)
-    if (this._synth && 'releaseAll' in this._synth) {
-      (this._synth as IDSPPolySynth).releaseAll();
+    // Cut any sounding notes before disposal so rapid preset auditions
+    // don't leave oscillators ringing until their scheduled stop.
+    // PolySynth uses `releaseAll()`; NativeFMSynth has a single-note
+    // `triggerRelease()` (acts as an "all notes off" since the synth
+    // is monophonic).
+    if (this._synth) {
+      if ('releaseAll' in this._synth) {
+        (this._synth as IDSPPolySynth).releaseAll();
+      } else if ('triggerRelease' in this._synth) {
+        (this._synth as IDSPFMSynth).triggerRelease();
+      }
     }
 
     this._disposeSynth();

@@ -1,41 +1,63 @@
+/**
+ * WavetableEngine — unit tests
+ *
+ * Phase 5J migration: the engine now runs its own NativeWavetableSynth
+ * over `getAudioEngine().ctx`. Tests observe via the mocked context's
+ * factory spies; most behaviour that used to assert on Tone class
+ * calls becomes "did the right context method get invoked?".
+ */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mockSynthSet = vi.fn();
-const mockSynthConnect = vi.fn();
-const mockSynthDispose = vi.fn();
-const mockSynthTriggerAttackRelease = vi.fn();
-const mockSynthTriggerAttack = vi.fn();
-const mockSynthTriggerRelease = vi.fn();
-const mockSynthReleaseAll = vi.fn();
-
-const mockGainConnect = vi.fn();
-const mockGainToDestination = vi.fn();
-const mockGainDispose = vi.fn();
-const mockGainValue = { value: 0 };
-
-vi.mock('tone', () => {
+const { mockCtx, mocks } = vi.hoisted(() => {
+  const makeAudioParam = () => ({
+    value: 0,
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+    cancelScheduledValues: vi.fn(),
+  });
+  const mocks = {
+    oscStart: vi.fn(),
+    oscStop: vi.fn(),
+    oscConnect: vi.fn(),
+    oscDisconnect: vi.fn(),
+    oscSetPeriodicWave: vi.fn(),
+    gainConnect: vi.fn(),
+    gainDisconnect: vi.fn(),
+    createPeriodicWave: vi.fn(),
+  };
+  const makeGain = () => ({
+    gain: makeAudioParam(),
+    connect: mocks.gainConnect,
+    disconnect: mocks.gainDisconnect,
+  });
+  const makeOsc = () => ({
+    frequency: makeAudioParam(),
+    start: mocks.oscStart,
+    stop: mocks.oscStop,
+    connect: mocks.oscConnect,
+    disconnect: mocks.oscDisconnect,
+    setPeriodicWave: mocks.oscSetPeriodicWave,
+    onended: null as (() => void) | null,
+  });
   return {
-    PolySynth: class MockPolySynth {
-      set = mockSynthSet;
-      connect = mockSynthConnect;
-      dispose = mockSynthDispose;
-      triggerAttackRelease = mockSynthTriggerAttackRelease;
-      triggerAttack = mockSynthTriggerAttack;
-      triggerRelease = mockSynthTriggerRelease;
-      releaseAll = mockSynthReleaseAll;
+    mockCtx: {
+      state: 'running' as AudioContextState,
+      currentTime: 0,
+      destination: {} as AudioNode,
+      createGain: vi.fn(makeGain),
+      createOscillator: vi.fn(makeOsc),
+      createPeriodicWave: mocks.createPeriodicWave.mockReturnValue({} as PeriodicWave),
     },
-    Synth: class MockSynth {},
-    Gain: class MockGain {
-      gain = mockGainValue;
-      connect = mockGainConnect;
-      toDestination = mockGainToDestination;
-      dispose = mockGainDispose;
-    },
-    Frequency: vi.fn().mockReturnValue({ toFrequency: () => 440 }),
-    getContext: vi.fn().mockReturnValue({ state: 'running' }),
-    start: vi.fn(),
+    mocks,
   };
 });
+
+vi.mock('../../hooks/useAudioEngine', () => ({
+  getAudioEngine: vi.fn(() => ({
+    ctx: mockCtx,
+    resume: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
 import { wavetableEngine } from '../WavetableEngine';
 import type { WavetableSettings } from '../../types/project';
@@ -53,6 +75,9 @@ const makeSettings = (overrides?: Partial<WavetableSettings>): WavetableSettings
 describe('WavetableEngine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // mockReturnValue is re-applied after clearAllMocks to keep the
+    // factory returning a valid PeriodicWave stand-in.
+    mocks.createPeriodicWave.mockReturnValue({} as PeriodicWave);
   });
 
   afterEach(() => {
@@ -60,15 +85,11 @@ describe('WavetableEngine', () => {
   });
 
   describe('ensureTrackSynth', () => {
-    it('creates a synth with custom partials', () => {
+    it('creates a synth built from partials (via createPeriodicWave)', () => {
       const settings = makeSettings();
       const synth = wavetableEngine.ensureTrackSynth('test-track', settings);
       expect(synth).not.toBeUndefined();
-      expect(mockSynthSet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          oscillator: expect.objectContaining({ type: 'custom' }),
-        }),
-      );
+      expect(mocks.createPeriodicWave).toHaveBeenCalled();
     });
 
     it('returns existing synth on second call', () => {
@@ -80,24 +101,22 @@ describe('WavetableEngine', () => {
 
     it('connects to provided output node', () => {
       const settings = makeSettings();
-      const mockOutput = {} as unknown as import('tone').InputNode;
+      const mockOutput = {} as AudioNode;
       wavetableEngine.ensureTrackSynth('test-track', settings, mockOutput);
-      expect(mockGainConnect).toHaveBeenCalledWith(mockOutput);
+      // Last GainNode.connect() call should target the provided output.
+      expect(mocks.gainConnect).toHaveBeenCalledWith(mockOutput);
     });
   });
 
   describe('setPosition', () => {
-    it('updates partials when position changes', () => {
+    it('rebuilds the periodic wave when position changes', () => {
       const settings = makeSettings({ waveforms: [WAVEFORM_SINE, WAVEFORM_SAW, WAVEFORM_SQUARE] });
       wavetableEngine.ensureTrackSynth('test-track', settings);
-      vi.clearAllMocks();
+      mocks.createPeriodicWave.mockClear();
+      mocks.createPeriodicWave.mockReturnValue({} as PeriodicWave);
 
       wavetableEngine.setPosition('test-track', 0.5);
-      expect(mockSynthSet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          oscillator: expect.objectContaining({ type: 'custom' }),
-        }),
-      );
+      expect(mocks.createPeriodicWave).toHaveBeenCalledTimes(1);
       expect(wavetableEngine.getPosition('test-track')).toBe(0.5);
     });
 
@@ -111,38 +130,44 @@ describe('WavetableEngine', () => {
     });
 
     it('is a no-op for unknown track', () => {
+      mocks.createPeriodicWave.mockClear();
       wavetableEngine.setPosition('nonexistent', 0.5);
-      expect(mockSynthSet).not.toHaveBeenCalled();
+      expect(mocks.createPeriodicWave).not.toHaveBeenCalled();
     });
   });
 
   describe('noteOn / noteOff', () => {
-    it('triggers attack on note-on', () => {
+    it('starts an oscillator on note-on', () => {
       wavetableEngine.ensureTrackSynth('test-track', makeSettings());
+      mocks.oscStart.mockClear();
       wavetableEngine.noteOn('test-track', 60, 100);
-      expect(mockSynthTriggerAttack).toHaveBeenCalled();
+      expect(mocks.oscStart).toHaveBeenCalled();
+      expect(mocks.oscSetPeriodicWave).toHaveBeenCalled();
     });
 
-    it('triggers release on note-off', () => {
+    it('stops the oscillator on note-off', () => {
       wavetableEngine.ensureTrackSynth('test-track', makeSettings());
+      wavetableEngine.noteOn('test-track', 60, 100);
+      mocks.oscStop.mockClear();
       wavetableEngine.noteOff('test-track', 60);
-      expect(mockSynthTriggerRelease).toHaveBeenCalled();
+      expect(mocks.oscStop).toHaveBeenCalled();
     });
 
     it('is a no-op for unknown track', () => {
+      mocks.oscStart.mockClear();
       wavetableEngine.noteOn('nonexistent', 60);
       wavetableEngine.noteOff('nonexistent', 60);
-      expect(mockSynthTriggerAttack).not.toHaveBeenCalled();
+      expect(mocks.oscStart).not.toHaveBeenCalled();
     });
   });
 
   describe('removeTrackSynth', () => {
-    it('disposes synth and gain', () => {
+    it('disposes the synth and gain', () => {
       wavetableEngine.ensureTrackSynth('test-track', makeSettings());
+      mocks.gainDisconnect.mockClear();
       wavetableEngine.removeTrackSynth('test-track');
-      expect(mockSynthReleaseAll).toHaveBeenCalled();
-      expect(mockSynthDispose).toHaveBeenCalled();
-      expect(mockGainDispose).toHaveBeenCalled();
+      // Per-voice gain disconnects + per-instance gain disconnect: at least one.
+      expect(mocks.gainDisconnect).toHaveBeenCalled();
     });
 
     it('makes getSynth return null after removal', () => {

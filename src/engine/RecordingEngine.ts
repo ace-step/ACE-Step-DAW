@@ -449,33 +449,39 @@ class RecordingEngine {
     const totalBeats = bars * beatsPerBar;
     const beatDuration = 60 / bpm;
 
-    const engine = getAudioEngine();
-    await engine.resume();
-    const ctx = engine.ctx;
-    // Hi click (downbeat) and lo click (other beats) — pitch
-    // sweeps match the old Tone.MembraneSynth character
-    // (pitchDecay 0.01, octaves 6/4 from C5/C4): ~3139 → 523 Hz
-    // over 10 ms for hi, ~1046 → 261 Hz for lo. Previous values
-    // (800→120, 400→90 over 60 ms) sounded too low and soft
-    // (codex P3 on PR #1731).
-    const clickHi = () => playClick(ctx, ctx.destination, 3139, 523, 10, 0.6);
-    const clickLo = () => playClick(ctx, ctx.destination, 1046, 261, 10, 0.5);
+    try {
+      const engine = getAudioEngine();
+      await engine.resume();
+      const ctx = engine.ctx;
+      // Hi click (downbeat) and lo click (other beats) — pitch
+      // sweeps match the old Tone.MembraneSynth character
+      // (pitchDecay 0.01, octaves 6/4 from C5/C4): ~3139 → 523 Hz
+      // over 10 ms for hi, ~1046 → 261 Hz for lo. Previous values
+      // (800→120, 400→90 over 60 ms) sounded too low and soft
+      // (codex P3 on PR #1731).
+      const clickHi = () => playClick(ctx, ctx.destination, 3139, 523, 10, 0.6);
+      const clickLo = () => playClick(ctx, ctx.destination, 1046, 261, 10, 0.5);
 
-    for (let i = 0; i < totalBeats; i++) {
-      const bar = Math.floor(i / beatsPerBar);
-      const beat = i % beatsPerBar;
-      onBeat(bar, beat, totalBeats - i);
+      for (let i = 0; i < totalBeats; i++) {
+        const bar = Math.floor(i / beatsPerBar);
+        const beat = i % beatsPerBar;
+        onBeat(bar, beat, totalBeats - i);
 
-      if (beat === 0) {
-        clickHi();
-      } else {
-        clickLo();
+        if (beat === 0) {
+          clickHi();
+        } else {
+          clickLo();
+        }
+
+        await new Promise<void>(resolve => setTimeout(resolve, beatDuration * 1000));
       }
-
-      await new Promise<void>(resolve => setTimeout(resolve, beatDuration * 1000));
+    } finally {
+      // Always reset isCountingIn, even if engine.resume() rejects
+      // or onBeat throws — otherwise the engine can get stuck
+      // reporting `countingIn === true` forever (Copilot review
+      // on PR #1731).
+      this.isCountingIn = false;
     }
-
-    this.isCountingIn = false;
   }
 
   get countingIn() { return this.isCountingIn; }
@@ -492,6 +498,11 @@ class RecordingEngine {
     // wallclock-driven click beneath the sample-accurate playback
     // metronome (codex P2 note on PR #1731).
     const engine = getAudioEngine();
+    // Fire-and-forget resume — if the user hasn't triggered a
+    // gesture yet the ctx may be suspended and clicks would be
+    // silent. `resume()` is a no-op when already running (Copilot
+    // review on PR #1731).
+    void engine.resume();
     const ctx = engine.ctx;
     // -6 dB ≈ 0.5 linear, -10 dB ≈ 0.316 linear (matches old
     // Tone.MembraneSynth volume.value settings).

@@ -200,8 +200,8 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
       // Create the audio adapter and register with the plugin engine
       // so audio routing (effects) and MIDI (instruments) work through the graph
       try {
-        const { getContext } = await import('tone');
-        const ctx = getContext().rawContext as AudioContext;
+        const { getAudioEngine } = await import('../hooks/useAudioEngine');
+        const ctx = getAudioEngine().ctx;
         const adapter = new VST3PluginAdapter(
           instanceId,
           { ...pluginInfo, uid: pluginInfo.id },

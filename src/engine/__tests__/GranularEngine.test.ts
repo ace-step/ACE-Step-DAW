@@ -52,16 +52,9 @@ const { _mockCtx } = vi.hoisted(() => {
   return { _mockCtx: ctx };
 });
 
-vi.mock('tone', () => {
-  return {
-    getContext: vi.fn().mockReturnValue({
-      state: 'running',
-      rawContext: _mockCtx,
-    }),
-    start: vi.fn(),
-    __mockCtx: _mockCtx,
-  };
-});
+// Phase 5Q: the `tone` module is no longer installed. The hoisted
+// `_mockCtx` is consumed directly — GranularEngine pulls its ctx
+// from `getAudioEngine()` already (5D migration).
 
 vi.mock('../../services/audioFileManager', () => ({
   loadAudioBlobByKey: vi.fn().mockResolvedValue(null),
@@ -75,12 +68,12 @@ vi.mock('../../hooks/useAudioEngine', () => ({
   }),
 }));
 
-import * as ToneMock from 'tone';
 import { granularEngine, DEFAULT_GRANULAR_SETTINGS, createGranularSettings } from '../GranularEngine';
 import type { GranularSettings } from '../../types/project';
 
-// Access the mock context for assertions
-const mockCtx = (ToneMock as unknown as { __mockCtx: Record<string, unknown> }).__mockCtx as {
+// Access the mock context for assertions — directly via the hoisted
+// reference instead of round-tripping through the ex-tone mock.
+const mockCtx = _mockCtx as {
   currentTime: number;
   createGain: ReturnType<typeof vi.fn>;
   createStereoPanner: ReturnType<typeof vi.fn>;

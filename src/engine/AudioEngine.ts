@@ -1,4 +1,3 @@
-import * as Tone from 'tone';
 import { TrackNode } from './TrackNode';
 import { ReturnTrackNode } from './ReturnTrackNode';
 import type {
@@ -163,10 +162,8 @@ export class AudioEngine {
   constructor() {
     this.ctx = new AudioContext({ sampleRate: 48000 });
     this._playbackLatencyCompensation = (this.ctx.outputLatency ?? 0) + (this.ctx.baseLatency ?? 0);
-    // Share our AudioContext with Tone.js so EffectsEngine nodes live on the same graph
-    Tone.setContext(this.ctx as unknown as Tone.BaseContext);
-    // Configure Tone.js lookahead for stable scheduling under UI load
-    try { Tone.getContext().lookAhead = AudioEngine.LOOK_AHEAD; } catch { /* test env */ }
+    // Phase 5P: Tone.setContext / Tone.getContext().lookAhead removed
+    // — every engine now uses the native context directly.
     this.masterInputGain = this.ctx.createGain();
     this.masterDryGain = this.ctx.createGain();
     this.masterProcessedGain = this.ctx.createGain();

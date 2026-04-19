@@ -38,9 +38,12 @@ export function useAudioEngine() {
 
   const resumeOnGesture = useCallback(async () => {
     // AudioEngine.resume() resumes the underlying AudioContext that
-    // Tone.js also uses (configured via configureNativeDsp in
-    // AudioEngine construction), so a separate Tone.start() is
-    // redundant. Verified by codex review on PR #1723.
+    // Tone.js also uses — AudioEngine's constructor calls
+    // `Tone.setContext(ctx)` so `Tone.start()` (which is literally
+    // `globalContext.resume()` in tone@15.1.22) would resume the
+    // same context. The parallel `Promise.all([engine.resume(),
+    // Tone.start()])` was redundant work. Verified by codex review
+    // on PR #1727.
     await engineRef.current.resume();
     const latency = engineRef.current.refreshPlaybackLatencyCompensation();
     const store = (await import('../store/projectStore')).useProjectStore.getState();

@@ -188,9 +188,10 @@ describe('playback latency calibration', () => {
 
     expect(mockEngineResume).toHaveBeenCalledTimes(1);
     // Phase 5C: useAudioEngine no longer calls Tone.start() directly.
-    // AudioEngine.resume() resumes the shared AudioContext that Tone
-    // also uses, so Tone.start is redundant. toneStart mock should
-    // not have been invoked.
+    // This unit asserts only the direct API surface — the underlying
+    // shared-context contract (AudioEngine calls Tone.setContext on
+    // the same AudioContext, so resuming the context is sufficient)
+    // is verified elsewhere; here `AudioEngine` is mocked.
     expect(toneStart).not.toHaveBeenCalled();
   });
 

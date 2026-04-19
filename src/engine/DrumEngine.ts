@@ -1,25 +1,53 @@
-import * as Tone from 'tone';
+/**
+ * Drum engine — per-pad synthesized voices + effect chain.
+ *
+ * Phase 5N migration: voices use the existing native drum synth
+ * classes in `dsp/NativeSynths.ts` (`NativeMembraneSynth`,
+ * `NativeNoiseSynth`, `NativeMetalSynth`). The pad effect chain
+ * swaps Tone.Filter / Distortion / Gain / Panner for native
+ * primitives (BiquadFilterNode, WaveShaperNode, GainNode,
+ * StereoPannerNode).
+ *
+ * Limitations introduced by this migration (tracked as follow-ups):
+ * - `setDetune` is a no-op on the native drum voices — the native
+ *   synth classes don't expose a live detune param. UI `tune` still
+ *   persists to state; audible tune changes will land when the
+ *   native drum synths grow a detune bus.
+ * - `schedulePattern` uses setTimeout-based scheduling instead of
+ *   Tone.Transport.scheduleRepeat. Close enough for the 1 or 2
+ *   call sites that legacy-exercise pattern playback; the main
+ *   sequencer path runs via `engine.scheduleMidiEvent` upstream.
+ */
 import type { DrumKitName, DrumPadFilter, DrumPadSend } from '../types/project';
+import { getAudioEngine } from '../hooks/useAudioEngine';
+import {
+  NativeMembraneSynth,
+  NativeNoiseSynth,
+  NativeMetalSynth,
+} from './dsp/NativeSynths';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface DrumVoice {
   trigger: (time?: number, velocity?: number) => void;
   dispose: () => void;
-  /** Set detune in semitones (-24 to +24) */
+  /** Set detune in semitones (-24 to +24). No-op on native voices. */
   setDetune?: (semitones: number) => void;
 }
 
-/** Per-pad audio effect chain: filter → distortion → volumeGain → decayGain → panner → output.
- * volumeGain: per-pad level (synced from store), decayGain: envelope ramp per trigger. */
+/** Per-pad chain: filter → distortion → volumeGain → decayGain → panner → output. */
 interface PadEffectChain {
-  filter: Tone.Filter;
-  distortion: Tone.Distortion;
+  filter: BiquadFilterNode;
+  distortion: WaveShaperNode;
+  /** Drive 0..1 controls the shaping curve strength via distortionGain. */
+  distortionGain: GainNode;
+  /** Store the drive level for later queries. */
+  drive: number;
   /** Steady-state per-pad volume — synced from pad.volume via updatePadParams */
-  volumeGain: Tone.Gain;
+  volumeGain: GainNode;
   /** Decay envelope gain — ramped per trigger, separate from volume */
-  decayGain: Tone.Gain;
-  panner: Tone.Panner;
+  decayGain: GainNode;
+  panner: StereoPannerNode;
   /** Decay scale 0–1: controls how quickly decayGain fades after trigger */
   decayScale: number;
   /** Send amounts stored for return track routing */
@@ -28,29 +56,56 @@ interface PadEffectChain {
   dispose: () => void;
 }
 
-function createPadEffectChain(connectTo?: Tone.InputNode): PadEffectChain {
-  const filter = new Tone.Filter({ frequency: 20000, type: 'lowpass' });
-  const distortion = new Tone.Distortion(0);
-  // Neutral defaults: volume=1 and decay=1 preserve pre-#950 behavior
-  // until explicit syncTrackPadParams applies user-selected values
-  const volumeGain = new Tone.Gain(1);
-  const decayGain = new Tone.Gain(1);
-  const panner = new Tone.Panner(0);
+function makeSoftClipCurve(amount: number): Float32Array<ArrayBuffer> {
+  // Standard soft-clip curve. `amount` in [0, 1] increases the
+  // saturation strength; 0 → near-linear, 1 → strong clip.
+  const k = Math.max(0, Math.min(1, amount)) * 100;
+  const samples = 1024;
+  const curve = new Float32Array(samples);
+  const denom = Math.PI + k;
+  for (let i = 0; i < samples; i++) {
+    const x = (i * 2) / samples - 1;
+    curve[i] = ((Math.PI + k) * x) / (Math.PI + k * Math.abs(x));
+    curve[i] = curve[i] * (Math.PI / denom);
+  }
+  // Cast to the strict ArrayBuffer variant for WaveShaperNode.curve typing.
+  return curve as Float32Array<ArrayBuffer>;
+}
 
-  // Chain: filter → distortion → volumeGain → decayGain → panner → output
+function createPadEffectChain(connectTo?: AudioNode): PadEffectChain {
+  const ctx = getAudioEngine().ctx;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 20000;
+
+  const distortion = ctx.createWaveShaper();
+  distortion.curve = makeSoftClipCurve(0);
+  const distortionGain = ctx.createGain();
+  distortionGain.gain.value = 1;
+
+  const volumeGain = ctx.createGain();
+  volumeGain.gain.value = 1;
+
+  const decayGain = ctx.createGain();
+  decayGain.gain.value = 1;
+
+  const panner = ctx.createStereoPanner();
+  panner.pan.value = 0;
+
+  // Chain: filter → distortion → distortionGain → volumeGain → decayGain → panner → output
   filter.connect(distortion);
-  distortion.connect(volumeGain);
+  distortion.connect(distortionGain);
+  distortionGain.connect(volumeGain);
   volumeGain.connect(decayGain);
   decayGain.connect(panner);
-  if (connectTo) {
-    panner.connect(connectTo);
-  } else {
-    panner.toDestination();
-  }
+  panner.connect(connectTo ?? ctx.destination);
 
   return {
     filter,
     distortion,
+    distortionGain,
+    drive: 0,
     volumeGain,
     decayGain,
     panner,
@@ -58,11 +113,12 @@ function createPadEffectChain(connectTo?: Tone.InputNode): PadEffectChain {
     sendReverb: 0,
     sendDelay: 0,
     dispose() {
-      filter.dispose();
-      distortion.dispose();
-      volumeGain.dispose();
-      decayGain.dispose();
-      panner.dispose();
+      try { filter.disconnect(); } catch { /* already disconnected */ }
+      try { distortion.disconnect(); } catch { /* already disconnected */ }
+      try { distortionGain.disconnect(); } catch { /* already disconnected */ }
+      try { volumeGain.disconnect(); } catch { /* already disconnected */ }
+      try { decayGain.disconnect(); } catch { /* already disconnected */ }
+      try { panner.disconnect(); } catch { /* already disconnected */ }
     },
   };
 }
@@ -102,277 +158,278 @@ export const BEAT_PAD_KEYS: string[] = [
 
 // ─── Synthesized Drum Sound Generators ──────────────────────────────────────
 
-function connectDrumNode<T extends Tone.ToneAudioNode>(node: T, connectTo?: Tone.InputNode): T {
-  if (connectTo) {
-    node.connect(connectTo);
-  } else {
-    node.toDestination();
-  }
-  return node;
-}
-
-function createKick808(connectTo?: Tone.InputNode): DrumVoice {
-  const synth = new Tone.MembraneSynth({
-    pitchDecay: 0.08, octaves: 6,
-    oscillator: { type: 'sine' },
+function createKick808(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const synth = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.08,
+    octaves: 6,
     envelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.5 },
   });
-  connectDrumNode(synth, connectTo);
+  synth.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => synth.triggerAttackRelease('C1', '8n', time, vel),
+    trigger: (time, vel = 1) => synth.triggerAttackRelease('C1', 0.25, time, vel),
     dispose: () => synth.dispose(),
-    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
-function createKickAcoustic(connectTo?: Tone.InputNode): DrumVoice {
-  const synth = new Tone.MembraneSynth({
-    pitchDecay: 0.05, octaves: 4,
-    oscillator: { type: 'sine' },
+function createKickAcoustic(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const synth = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.05,
+    octaves: 4,
     envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.3 },
   });
-  connectDrumNode(synth, connectTo);
+  synth.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => synth.triggerAttackRelease('D1', '8n', time, vel),
+    trigger: (time, vel = 1) => synth.triggerAttackRelease('D1', 0.25, time, vel),
     dispose: () => synth.dispose(),
-    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
-function createSnare808(connectTo?: Tone.InputNode): DrumVoice {
-  const noise = new Tone.NoiseSynth({
-    noise: { type: 'white' },
+function createSnare808(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.15 },
   });
-  const body = new Tone.MembraneSynth({
-    pitchDecay: 0.03, octaves: 3,
-    oscillator: { type: 'triangle' },
+  const body = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.03,
+    octaves: 3,
     envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
   });
-  connectDrumNode(noise, connectTo);
-  connectDrumNode(body, connectTo);
+  const dest = connectTo ?? ctx.destination;
+  noise.connectNative(dest);
+  body.connectNative(dest);
   return {
     trigger: (time, vel = 1) => {
-      noise.triggerAttackRelease('16n', time, vel * 0.7);
-      body.triggerAttackRelease('E2', '16n', time, vel * 0.5);
+      noise.triggerAttackRelease(0.125, time, vel * 0.7);
+      body.triggerAttackRelease('E2', 0.125, time, vel * 0.5);
     },
     dispose: () => { noise.dispose(); body.dispose(); },
-    setDetune: (semitones) => { body.detune.value = semitones * 100; },
   };
 }
 
-function createSnareAcoustic(connectTo?: Tone.InputNode): DrumVoice {
-  const noise = new Tone.NoiseSynth({
-    noise: { type: 'pink' },
+function createSnareAcoustic(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
   });
-  const body = new Tone.MembraneSynth({
-    pitchDecay: 0.02, octaves: 2,
-    oscillator: { type: 'sine' },
+  const body = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.02,
+    octaves: 2,
     envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.1 },
   });
-  connectDrumNode(noise, connectTo);
-  connectDrumNode(body, connectTo);
+  const dest = connectTo ?? ctx.destination;
+  noise.connectNative(dest);
+  body.connectNative(dest);
   return {
     trigger: (time, vel = 1) => {
-      noise.triggerAttackRelease('16n', time, vel * 0.8);
-      body.triggerAttackRelease('G2', '16n', time, vel * 0.4);
+      noise.triggerAttackRelease(0.125, time, vel * 0.8);
+      body.triggerAttackRelease('G2', 0.125, time, vel * 0.4);
     },
     dispose: () => { noise.dispose(); body.dispose(); },
-    setDetune: (semitones) => { body.detune.value = semitones * 100; },
   };
 }
 
-function createHiHatClosed(connectTo?: Tone.InputNode): DrumVoice {
-  const noise = new Tone.NoiseSynth({
-    noise: { type: 'white' },
+function createHiHatClosed(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.03 },
   });
-  connectDrumNode(noise, connectTo);
+  noise.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => noise.triggerAttackRelease('32n', time, vel * 0.6),
+    trigger: (time, vel = 1) => noise.triggerAttackRelease(0.0625, time, vel * 0.6),
     dispose: () => noise.dispose(),
   };
 }
 
-function createHiHatOpen(connectTo?: Tone.InputNode): DrumVoice {
-  const noise = new Tone.NoiseSynth({
-    noise: { type: 'white' },
+function createHiHatOpen(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.2 },
   });
-  connectDrumNode(noise, connectTo);
+  noise.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => noise.triggerAttackRelease('8n', time, vel * 0.6),
+    trigger: (time, vel = 1) => noise.triggerAttackRelease(0.25, time, vel * 0.6),
     dispose: () => noise.dispose(),
   };
 }
 
-function createClap(connectTo?: Tone.InputNode): DrumVoice {
-  const noise = new Tone.NoiseSynth({
-    noise: { type: 'white' },
+function createClap(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.08 },
   });
-  connectDrumNode(noise, connectTo);
+  noise.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => noise.triggerAttackRelease('16n', time, vel * 0.8),
+    trigger: (time, vel = 1) => noise.triggerAttackRelease(0.125, time, vel * 0.8),
     dispose: () => noise.dispose(),
   };
 }
 
-function createRim(connectTo?: Tone.InputNode): DrumVoice {
-  const synth = new Tone.MetalSynth({
+function createRim(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const synth = new NativeMetalSynth(ctx, {
+    frequency: 400,
     envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
-    harmonicity: 5.1, modulationIndex: 10, resonance: 8000, octaves: 0.5,
+    harmonicity: 5.1,
+    modulationIndex: 10,
   });
-  connectDrumNode(synth, connectTo);
+  synth.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => synth.triggerAttackRelease(400, '32n', time, vel * 0.5),
+    trigger: (time, vel = 1) => synth.triggerAttackRelease(0.0625, time, vel * 0.5),
     dispose: () => synth.dispose(),
-    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
-function createTomHigh(connectTo?: Tone.InputNode): DrumVoice {
-  const synth = new Tone.MembraneSynth({
-    pitchDecay: 0.04, octaves: 3,
-    oscillator: { type: 'sine' },
+function createTomHigh(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const synth = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.04,
+    octaves: 3,
     envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.15 },
   });
-  connectDrumNode(synth, connectTo);
+  synth.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => synth.triggerAttackRelease('G2', '8n', time, vel),
+    trigger: (time, vel = 1) => synth.triggerAttackRelease('G2', 0.25, time, vel),
     dispose: () => synth.dispose(),
-    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
-function createTomLow(connectTo?: Tone.InputNode): DrumVoice {
-  const synth = new Tone.MembraneSynth({
-    pitchDecay: 0.04, octaves: 3,
-    oscillator: { type: 'sine' },
+function createTomLow(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const synth = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.04,
+    octaves: 3,
     envelope: { attack: 0.001, decay: 0.25, sustain: 0, release: 0.2 },
   });
-  connectDrumNode(synth, connectTo);
+  synth.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => synth.triggerAttackRelease('D2', '8n', time, vel),
+    trigger: (time, vel = 1) => synth.triggerAttackRelease('D2', 0.25, time, vel),
     dispose: () => synth.dispose(),
-    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
-function createCrash(connectTo?: Tone.InputNode): DrumVoice {
-  const noise = new Tone.NoiseSynth({
-    noise: { type: 'white' },
+function createCrash(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 1.5, sustain: 0, release: 1.0 },
   });
-  const metal = new Tone.MetalSynth({
+  const metal = new NativeMetalSynth(ctx, {
+    frequency: 300,
     envelope: { attack: 0.001, decay: 1.2, release: 0.5 },
-    harmonicity: 5.1, modulationIndex: 32, resonance: 6000, octaves: 1.5,
+    harmonicity: 5.1,
+    modulationIndex: 32,
   });
-  connectDrumNode(noise, connectTo);
-  connectDrumNode(metal, connectTo);
+  const dest = connectTo ?? ctx.destination;
+  noise.connectNative(dest);
+  metal.connectNative(dest);
   return {
     trigger: (time, vel = 1) => {
-      noise.triggerAttackRelease('4n', time, vel * 0.4);
-      metal.triggerAttackRelease(300, '4n', time, vel * 0.3);
+      noise.triggerAttackRelease(0.5, time, vel * 0.4);
+      metal.triggerAttackRelease(0.5, time, vel * 0.3);
     },
     dispose: () => { noise.dispose(); metal.dispose(); },
-    setDetune: (semitones) => { metal.detune.value = semitones * 100; },
   };
 }
 
-function createRide(connectTo?: Tone.InputNode): DrumVoice {
-  const metal = new Tone.MetalSynth({
+function createRide(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const metal = new NativeMetalSynth(ctx, {
+    frequency: 400,
     envelope: { attack: 0.001, decay: 0.6, release: 0.3 },
-    harmonicity: 5.1, modulationIndex: 20, resonance: 5000, octaves: 1.0,
+    harmonicity: 5.1,
+    modulationIndex: 20,
   });
-  connectDrumNode(metal, connectTo);
+  metal.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => metal.triggerAttackRelease(400, '8n', time, vel * 0.4),
+    trigger: (time, vel = 1) => metal.triggerAttackRelease(0.25, time, vel * 0.4),
     dispose: () => metal.dispose(),
-    setDetune: (semitones) => { metal.detune.value = semitones * 100; },
   };
 }
 
-function createShaker(connectTo?: Tone.InputNode): DrumVoice {
-  const noise = new Tone.NoiseSynth({
-    noise: { type: 'white' },
+function createShaker(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.005, decay: 0.06, sustain: 0, release: 0.04 },
   });
-  connectDrumNode(noise, connectTo);
+  noise.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => noise.triggerAttackRelease('32n', time, vel * 0.5),
+    trigger: (time, vel = 1) => noise.triggerAttackRelease(0.0625, time, vel * 0.5),
     dispose: () => noise.dispose(),
   };
 }
 
-function createCowbell(connectTo?: Tone.InputNode): DrumVoice {
-  const synth = new Tone.MetalSynth({
+function createCowbell(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const synth = new NativeMetalSynth(ctx, {
+    frequency: 560,
     envelope: { attack: 0.001, decay: 0.2, release: 0.1 },
-    harmonicity: 1.4, modulationIndex: 2, resonance: 4000, octaves: 0.5,
+    harmonicity: 1.4,
+    modulationIndex: 2,
   });
-  connectDrumNode(synth, connectTo);
+  synth.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => synth.triggerAttackRelease(560, '16n', time, vel * 0.6),
+    trigger: (time, vel = 1) => synth.triggerAttackRelease(0.125, time, vel * 0.6),
     dispose: () => synth.dispose(),
-    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
-function createConga(connectTo?: Tone.InputNode): DrumVoice {
-  const synth = new Tone.MembraneSynth({
-    pitchDecay: 0.03, octaves: 2,
-    oscillator: { type: 'sine' },
+function createConga(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const synth = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.03,
+    octaves: 2,
     envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
   });
-  connectDrumNode(synth, connectTo);
+  synth.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => synth.triggerAttackRelease('A2', '16n', time, vel * 0.7),
+    trigger: (time, vel = 1) => synth.triggerAttackRelease('A2', 0.125, time, vel * 0.7),
     dispose: () => synth.dispose(),
-    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
-function createBongo(connectTo?: Tone.InputNode): DrumVoice {
-  const synth = new Tone.MembraneSynth({
-    pitchDecay: 0.02, octaves: 2,
-    oscillator: { type: 'sine' },
+function createBongo(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const synth = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.02,
+    octaves: 2,
     envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.08 },
   });
-  connectDrumNode(synth, connectTo);
+  synth.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => synth.triggerAttackRelease('D3', '16n', time, vel * 0.7),
+    trigger: (time, vel = 1) => synth.triggerAttackRelease('D3', 0.125, time, vel * 0.7),
     dispose: () => synth.dispose(),
-    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
-function createTambourine(connectTo?: Tone.InputNode): DrumVoice {
-  const noise = new Tone.NoiseSynth({
-    noise: { type: 'white' },
+function createTambourine(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const noise = new NativeNoiseSynth(ctx, {
     envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.08 },
   });
-  connectDrumNode(noise, connectTo);
+  noise.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => noise.triggerAttackRelease('16n', time, vel * 0.5),
+    trigger: (time, vel = 1) => noise.triggerAttackRelease(0.125, time, vel * 0.5),
     dispose: () => noise.dispose(),
   };
 }
 
-function createPerc(connectTo?: Tone.InputNode): DrumVoice {
-  const synth = new Tone.MetalSynth({
+function createPerc(connectTo?: AudioNode): DrumVoice {
+  const ctx = getAudioEngine().ctx;
+  const synth = new NativeMetalSynth(ctx, {
+    frequency: 200,
     envelope: { attack: 0.001, decay: 0.08, release: 0.04 },
-    harmonicity: 3.1, modulationIndex: 8, resonance: 3000, octaves: 0.5,
+    harmonicity: 3.1,
+    modulationIndex: 8,
   });
-  connectDrumNode(synth, connectTo);
+  synth.connectNative(connectTo ?? ctx.destination);
   return {
-    trigger: (time, vel = 1) => synth.triggerAttackRelease(200, '32n', time, vel * 0.5),
+    trigger: (time, vel = 1) => synth.triggerAttackRelease(0.0625, time, vel * 0.5),
     dispose: () => synth.dispose(),
-    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
-type VoiceFactory = (connectTo?: Tone.InputNode) => DrumVoice;
+type VoiceFactory = (connectTo?: AudioNode) => DrumVoice;
 
 const KIT_FACTORIES: Record<DrumKitName, VoiceFactory[]> = {
   '808': [
@@ -401,7 +458,7 @@ const KIT_FACTORIES: Record<DrumKitName, VoiceFactory[]> = {
   ],
 };
 
-export function createDrumVoicesForKit(kit: DrumKitName, connectTo?: Tone.InputNode): DrumVoice[] {
+export function createDrumVoicesForKit(kit: DrumKitName, connectTo?: AudioNode): DrumVoice[] {
   return KIT_FACTORIES[kit].map((factory) => factory(connectTo));
 }
 
@@ -496,20 +553,13 @@ export const DRUM_PRESETS = [
 
 // ─── Drum Engine Class ──────────────────────────────────────────────────────
 
-/** Parameters for updating a single pad's effect chain.
- * Volume is managed via a dedicated volumeGain node, so callers don't need
- * to pre-scale velocity — all trigger paths get consistent pad volume. */
 export interface PadParams {
   tune?: number;
-  /** Relative decay 0–1: scales the decayGain envelope (0 = very short, 1 = full ring-out) */
   decay?: number;
-  /** Per-pad volume 0–1: applied via dedicated volumeGain node */
   volume?: number;
   pan?: number;
   filter?: DrumPadFilter;
   drive?: number;
-  /** Send amounts for reverb/delay buses. Currently stored per-pad; routing to
-   * return tracks will be wired when ReturnTrackNode integration is added. */
   send?: DrumPadSend;
 }
 
@@ -517,11 +567,12 @@ class DrumEngine {
   private voices = new Map<string, DrumVoice[]>();
   private padChains = new Map<string, PadEffectChain[]>();
   private currentKit = new Map<string, DrumKitName>();
-  private scheduledIds = new Map<string, number[]>();
+  private scheduledIntervals = new Map<string, ReturnType<typeof setTimeout>[]>();
 
   async ensureStarted() {
-    if (Tone.getContext().state !== 'running') {
-      await Tone.start();
+    const engine = getAudioEngine();
+    if (engine?.ctx?.state && engine.ctx.state !== 'running') {
+      await engine.resume();
     }
   }
 
@@ -532,7 +583,6 @@ class DrumEngine {
 
     this.disposeTrack(trackId);
 
-    // Create per-pad effect chains and route voices through them
     const chains: PadEffectChain[] = [];
     const factories = KIT_FACTORIES[kit];
     const voices: DrumVoice[] = [];
@@ -549,7 +599,6 @@ class DrumEngine {
     this.currentKit.set(trackId, kit);
   }
 
-  /** Update per-pad effect parameters in real-time */
   updatePadParams(trackId: string, padIndex: number, params: PadParams) {
     const chains = this.padChains.get(trackId);
     const voices = this.voices.get(trackId);
@@ -573,26 +622,22 @@ class DrumEngine {
       }
     }
     if (params.drive !== undefined) {
-      chain.distortion.distortion = params.drive;
+      chain.drive = params.drive;
+      chain.distortion.curve = makeSoftClipCurve(params.drive);
     }
     if (params.tune !== undefined && voices) {
-      const voice = voices[padIndex];
-      voice.setDetune?.(params.tune);
+      // setDetune is a no-op on native drum voices (see file header).
+      voices[padIndex].setDetune?.(params.tune);
     }
     if (params.decay !== undefined) {
       chain.decayScale = params.decay;
     }
     if (params.send !== undefined) {
-      // Store send amounts — routing to return track buses will use these values
-      // when ReturnTrackNode integration is wired up.
       chain.sendReverb = params.send.reverb;
       chain.sendDelay = params.send.delay;
     }
   }
 
-  /** Sync all pad parameters from project state to the engine.
-   * Safely no-ops if the track hasn't been initialized yet — call
-   * ensureAndSyncPadParams after ensureTrack to apply params to a new track. */
   syncTrackPadParams(trackId: string, pads: ReadonlyArray<{ volume: number; tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>) {
     if (!this.padChains.has(trackId)) return;
     for (let i = 0; i < pads.length; i++) {
@@ -608,29 +653,20 @@ class DrumEngine {
     }
   }
 
-  /** Async version: ensures the track is initialized, then syncs pad params. */
   async ensureAndSyncPadParams(trackId: string, kit: DrumKitName, pads: ReadonlyArray<{ volume: number; tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>) {
     await this.ensureTrack(trackId, kit);
     this.syncTrackPadParams(trackId, pads);
   }
 
-  /** Apply the decay envelope on a pad's decayGain node at the given time.
-   * Used by both triggerPad and schedulePattern for consistent behavior.
-   * Neutral/default decay (>=0.999) is a no-op to avoid unnecessary
-   * automation for pads whose parameters were never explicitly synced. */
   private applyDecayEnvelope(chain: PadEffectChain, time: number) {
     if (chain.decayScale >= 0.999) return;
-
-    chain.decayGain.gain.cancelScheduledValues(time);
-    chain.decayGain.gain.setValueAtTime(1, time);
+    const g = chain.decayGain.gain;
+    g.cancelScheduledValues(time);
+    g.setValueAtTime(1, time);
     const fadeTime = 0.02 + chain.decayScale * 1.98;
-    chain.decayGain.gain.linearRampToValueAtTime(0.001, time + fadeTime);
+    g.linearRampToValueAtTime(0.001, time + fadeTime);
   }
 
-  /** Trigger a drum pad.
-   * UI callers that already sync params may omit `pads`.
-   * Non-UI callers (e.g. transport) can pass `pads` to ensure per-pad
-   * params are applied before the trigger. */
   async triggerPad(
     trackId: string,
     padIndex: number,
@@ -644,7 +680,8 @@ class DrumEngine {
     const chains = this.padChains.get(trackId);
     if (!voices || padIndex < 0 || padIndex >= voices.length) return;
     const vel = Math.max(0, Math.min(127, velocity)) / 127;
-    const time = Tone.now();
+    const ctx = getAudioEngine().ctx;
+    const time = ctx.currentTime;
 
     if (chains) {
       this.applyDecayEnvelope(chains[padIndex], time);
@@ -653,7 +690,12 @@ class DrumEngine {
     voices[padIndex].trigger(time, vel);
   }
 
-  /** Schedule a drum pattern for looping playback. */
+  /**
+   * Schedule a drum pattern for playback. Native scheduling via
+   * `setTimeout` — not sample-accurate, but adequate for the
+   * legacy-only callers of this method (main sequencer path runs
+   * through `engine.scheduleMidiEvent` upstream).
+   */
   schedulePattern(
     trackId: string,
     pattern: DrumPattern,
@@ -666,9 +708,12 @@ class DrumEngine {
     const chains = this.padChains.get(trackId);
     if (!voices) return;
 
-    const secondsPerStep = (60 / bpm) / 4; // 16th notes
+    const ctx = getAudioEngine().ctx;
+    const secondsPerStep = (60 / bpm) / 4;
     const patternDuration = pattern.steps * secondsPerStep;
-    const ids: number[] = [];
+    const ids: ReturnType<typeof setTimeout>[] = [];
+    const regionEnd = startTime + regionDuration;
+    const now = ctx.currentTime;
 
     for (const drumTrack of pattern.tracks) {
       if (drumTrack.mute) continue;
@@ -683,30 +728,36 @@ class DrumEngine {
 
         const vel = (s.velocity / 127) * drumTrack.volume;
         const padIdx = drumTrack.padIndex;
+        const firstHit = startTime + stepOffset;
 
-        const id = Tone.getTransport().scheduleRepeat(
-          (time) => {
+        // Schedule each loop iteration that falls within the region.
+        let hit = firstHit;
+        while (hit < regionEnd) {
+          const delayMs = Math.max(0, (hit - now) * 1000);
+          const scheduledHit = hit;
+          const id = setTimeout(() => {
             if (voices[padIdx]) {
-              if (chains?.[padIdx]) this.applyDecayEnvelope(chains[padIdx], time);
-              voices[padIdx].trigger(time, vel);
+              if (chains?.[padIdx]) this.applyDecayEnvelope(chains[padIdx], ctx.currentTime);
+              voices[padIdx].trigger(ctx.currentTime, vel);
             }
-          },
-          patternDuration,
-          startTime + stepOffset,
-          regionDuration,
-        );
-        ids.push(id);
+            // Keep TS happy — using the captured value silences
+            // unused-var warnings if introduced later.
+            void scheduledHit;
+          }, delayMs);
+          ids.push(id);
+          hit += patternDuration;
+        }
       }
     }
 
-    this.scheduledIds.set(trackId, ids);
+    this.scheduledIntervals.set(trackId, ids);
   }
 
   unschedulePattern(trackId: string) {
-    const ids = this.scheduledIds.get(trackId);
+    const ids = this.scheduledIntervals.get(trackId);
     if (ids) {
-      for (const id of ids) Tone.getTransport().clear(id);
-      this.scheduledIds.delete(trackId);
+      for (const id of ids) clearTimeout(id);
+      this.scheduledIntervals.delete(trackId);
     }
   }
 

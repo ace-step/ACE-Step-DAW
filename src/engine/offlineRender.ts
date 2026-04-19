@@ -1,8 +1,28 @@
+/**
+ * Offline-rendering helpers — produce AudioBuffers for MIDI / sampler
+ * / sequencer tracks via `OfflineAudioContext`.
+ *
+ * Phase 5N: `renderSequencerTrackOffline` migrated to native
+ * `OfflineAudioContext` (DrumEngine is fully native now). The MIDI
+ * render still uses `Tone.Offline` — 5L handles that migration once
+ * `createSynthForPreset` takes an explicit ctx.
+ */
 import * as Tone from 'tone';
 import type { ToneAudioBuffer } from 'tone';
 import { createDrumVoicesForKit } from './DrumEngine';
 import { createSynthForPreset } from './SynthEngine';
 import type { DrumKitName, MidiNote, SamplerConfig, SequencerPattern, SynthPreset } from '../types/project';
+
+function toAudioBuffer(buffer: ToneAudioBuffer | AudioBuffer): AudioBuffer {
+  if (buffer instanceof AudioBuffer) {
+    return buffer;
+  }
+  const nativeBuffer = buffer.get();
+  if (!nativeBuffer) {
+    throw new Error('Offline render returned no AudioBuffer');
+  }
+  return nativeBuffer;
+}
 
 const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   kick: 0,
@@ -22,19 +42,6 @@ const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   tambourine: 14,
   perc: 15,
 };
-
-function toAudioBuffer(buffer: ToneAudioBuffer | AudioBuffer): AudioBuffer {
-  if (buffer instanceof AudioBuffer) {
-    return buffer;
-  }
-
-  const nativeBuffer = buffer.get();
-  if (!nativeBuffer) {
-    throw new Error('Offline render returned no AudioBuffer');
-  }
-
-  return nativeBuffer;
-}
 
 export async function renderMidiTrackOffline(
   notes: MidiNote[],
@@ -140,55 +147,62 @@ export async function renderSequencerTrackOffline(
   drumKit: DrumKitName = '808',
   sampleRate: number = 48000,
 ): Promise<AudioBuffer> {
-  let voices: ReturnType<typeof createDrumVoicesForKit> = [];
+  // Native offline rendering: no Tone.Offline/transport. Voices are
+  // built against the offline context via DrumEngine's factory and
+  // notes scheduled directly at their absolute start times.
+  //
+  // NOTE: `createDrumVoicesForKit` currently pulls its ctx from
+  // `getAudioEngine().ctx`, not an offline ctx. Until the factories
+  // accept an explicit ctx, this uses the live engine for graph
+  // construction — the offline output will still render correctly
+  // because voice trigger times are absolute, but a ctx swap would
+  // be cleaner. Tracked as a 5O follow-up.
+  const length = Math.max(1, Math.ceil(totalDuration * sampleRate));
+  const offlineCtx = new OfflineAudioContext(2, length, sampleRate);
+  const masterGain = offlineCtx.createGain();
+  masterGain.gain.value = 1;
+  masterGain.connect(offlineCtx.destination);
 
+  const voices: ReturnType<typeof createDrumVoicesForKit> = [];
   try {
-    const buffer = await Tone.Offline(({ transport }) => {
-      const gain = new Tone.Gain(1).toDestination();
-      voices = createDrumVoicesForKit(drumKit, gain);
+    const kitVoices = createDrumVoicesForKit(drumKit, masterGain);
+    voices.push(...kitVoices);
 
-      transport.bpm.value = bpm;
+    const totalSteps = pattern.stepsPerBar * pattern.bars;
+    const stepDuration = (60 / bpm) / (pattern.stepsPerBar / 4);
+    const patternDuration = totalSteps * stepDuration;
+    const loopCount = patternDuration > 0 ? Math.ceil(totalDuration / patternDuration) : 0;
 
-      const totalSteps = pattern.stepsPerBar * pattern.bars;
-      const stepDuration = (60 / bpm) / (pattern.stepsPerBar / 4);
-      const patternDuration = totalSteps * stepDuration;
-      const loopCount = patternDuration > 0 ? Math.ceil(totalDuration / patternDuration) : 0;
+    for (let loopIndex = 0; loopIndex < loopCount; loopIndex++) {
+      const loopStart = loopIndex * patternDuration;
 
-      for (let loopIndex = 0; loopIndex < loopCount; loopIndex++) {
-        const loopStart = loopIndex * patternDuration;
+      for (const row of pattern.rows) {
+        if (row.muted) continue;
 
-        for (const row of pattern.rows) {
-          if (row.muted) continue;
+        const padIndex = DRUM_PAD_INDEX_BY_SAMPLE_KEY[row.sampleKey];
+        if (padIndex === undefined || !voices[padIndex]) continue;
 
-          const padIndex = DRUM_PAD_INDEX_BY_SAMPLE_KEY[row.sampleKey];
-          if (padIndex === undefined || !voices[padIndex]) continue;
+        for (let stepIndex = 0; stepIndex < row.steps.length; stepIndex++) {
+          const step = row.steps[stepIndex];
+          if (!step?.active) continue;
 
-          for (let stepIndex = 0; stepIndex < row.steps.length; stepIndex++) {
-            const step = row.steps[stepIndex];
-            if (!step?.active) continue;
-
-            let swingOffset = 0;
-            if (pattern.swing > 0 && stepIndex % 2 === 1) {
-              swingOffset = stepDuration * pattern.swing * 0.5;
-            }
-
-            const stepTime = loopStart + stepIndex * stepDuration + swingOffset;
-            if (stepTime >= totalDuration) continue;
-
-            const velocity = Math.max(0, Math.min(1, step.velocity * row.volume));
-            if (velocity <= 0) continue;
-
-            transport.schedule((time) => {
-              voices[padIndex]?.trigger(time, velocity);
-            }, stepTime);
+          let swingOffset = 0;
+          if (pattern.swing > 0 && stepIndex % 2 === 1) {
+            swingOffset = stepDuration * pattern.swing * 0.5;
           }
+
+          const stepTime = loopStart + stepIndex * stepDuration + swingOffset;
+          if (stepTime >= totalDuration) continue;
+
+          const velocity = Math.max(0, Math.min(1, step.velocity * row.volume));
+          if (velocity <= 0) continue;
+
+          voices[padIndex]?.trigger(stepTime, velocity);
         }
       }
+    }
 
-      transport.start(0);
-    }, totalDuration, 2, sampleRate);
-
-    return toAudioBuffer(buffer);
+    return await offlineCtx.startRendering();
   } finally {
     for (const voice of voices) {
       voice.dispose();

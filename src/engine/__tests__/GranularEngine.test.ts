@@ -9,6 +9,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // `vi.hoisted` so the hoisted `vi.mock(...)` factories can see it.
 const { _mockCtx } = vi.hoisted(() => {
   const ctx = {
+    // `state: 'running'` mirrors the old `Tone.getContext()` mock
+    // and keeps `GranularEngine.ensureStarted()` from always calling
+    // `resume()` in future tests that exercise the start path.
+    // Codex P3 on PR #1729.
+    state: 'running' as AudioContextState,
     currentTime: 0,
     destination: {},
     createGain: vi.fn(() => ({

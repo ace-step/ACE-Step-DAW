@@ -1,5 +1,4 @@
 import { useRef, useEffect, useCallback } from 'react';
-import * as Tone from 'tone';
 import { AudioEngine } from '../engine/AudioEngine';
 import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
@@ -38,10 +37,11 @@ export function useAudioEngine() {
   }, []);
 
   const resumeOnGesture = useCallback(async () => {
-    await Promise.all([
-      engineRef.current.resume(),
-      Tone.start(),
-    ]);
+    // AudioEngine.resume() resumes the underlying AudioContext that
+    // Tone.js also uses (configured via configureNativeDsp in
+    // AudioEngine construction), so a separate Tone.start() is
+    // redundant. Verified by codex review on PR #1723.
+    await engineRef.current.resume();
     const latency = engineRef.current.refreshPlaybackLatencyCompensation();
     const store = (await import('../store/projectStore')).useProjectStore.getState();
     store.detectPlaybackLatency(latency);

@@ -187,7 +187,11 @@ describe('playback latency calibration', () => {
     });
 
     expect(mockEngineResume).toHaveBeenCalledTimes(1);
-    expect(toneStart).toHaveBeenCalledTimes(1);
+    // Phase 5C: useAudioEngine no longer calls Tone.start() directly.
+    // AudioEngine.resume() resumes the shared AudioContext that Tone
+    // also uses, so Tone.start is redundant. toneStart mock should
+    // not have been invoked.
+    expect(toneStart).not.toHaveBeenCalled();
   });
 
   it('keeps the fallback state when the browser exposes no latency values on resume', async () => {

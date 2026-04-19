@@ -3,30 +3,34 @@ import { createPresetPartials, createDefaultAdditiveSettings } from '../Additive
 
 // Phase 5F migration: AdditiveEngine no longer imports Tone
 // directly — it pulls the AudioContext from `getAudioEngine().ctx`.
-// Mock that singleton accessor to return a minimal ctx with the
-// factories the engine uses (createGain / createOscillator).
-const makeMockGain = () => ({
-  gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
-  connect: vi.fn(),
-  disconnect: vi.fn(),
+// Use `vi.hoisted` so the mock factories don't close over
+// module-level consts that may be undefined at hoist time
+// (Copilot review on PR #1733, matching the GranularEngine test
+// pattern).
+const { mockCtx } = vi.hoisted(() => {
+  const makeMockGain = () => ({
+    gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  });
+  const makeMockOsc = () => ({
+    type: 'sine' as OscillatorType,
+    frequency: { value: 440 },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  });
+  return {
+    mockCtx: {
+      state: 'running' as AudioContextState,
+      currentTime: 0,
+      destination: {},
+      createGain: vi.fn(makeMockGain),
+      createOscillator: vi.fn(makeMockOsc),
+    },
+  };
 });
-
-const makeMockOsc = () => ({
-  type: 'sine' as OscillatorType,
-  frequency: { value: 440 },
-  connect: vi.fn(),
-  disconnect: vi.fn(),
-  start: vi.fn(),
-  stop: vi.fn(),
-});
-
-const mockCtx = {
-  state: 'running' as AudioContextState,
-  currentTime: 0,
-  destination: {},
-  createGain: vi.fn(makeMockGain),
-  createOscillator: vi.fn(makeMockOsc),
-};
 
 vi.mock('../../hooks/useAudioEngine', () => ({
   getAudioEngine: vi.fn(() => ({

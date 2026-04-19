@@ -60,3 +60,7 @@ coverage/
 
 # OpenSpec change proposals (working directory, not committed)
 openspec/changes/
+
+# Scratch files from dev tools
+engine-sync-*.long-type-*.txt
+.claude/scheduled_tasks.lock

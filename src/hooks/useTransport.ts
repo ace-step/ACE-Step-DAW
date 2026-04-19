@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from 'react';
-import * as Tone from 'tone';
 import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
@@ -23,6 +22,7 @@ import {
 import { stopStrudelEditorPlayback } from '../engine/strudelEditorPlayback';
 import { useRecording } from './useRecording';
 import { beatToTime } from '../utils/tempoMap';
+import { midiToFrequency } from '../utils/pitch';
 import { getPlaybackLatencyCompensationSeconds } from '../utils/playbackLatency';
 import type { Clip, Project, Track } from '../types/project';
 import {
@@ -157,7 +157,6 @@ export function useTransport() {
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
     await engine.resume();
-    await Tone.start();
     await synthEngine.ensureStarted();
     await subtractiveEngine.ensureStarted();
     await samplerEngine.ensureStarted();
@@ -415,7 +414,7 @@ export function useTransport() {
             const trackNode = engine.getOrCreateTrackNode(track.id);
             samplerEngine.ensureTrackSampler(
               track.id, samplerConfig, sampleBuffer,
-              trackNode.inputGain as unknown as Tone.InputNode,
+              trackNode.inputGain as unknown as AudioNode,
             );
           }
         } else if (!vst3Instrument && track.instrument?.kind === 'subtractive') {
@@ -423,7 +422,7 @@ export function useTransport() {
           subtractiveEngine.ensureTrackSynth(
             track.id,
             track.instrument.settings,
-            trackNode.inputGain as unknown as Tone.InputNode,
+            trackNode.inputGain as unknown as AudioNode,
           );
           // Apply modulation matrix if configured
           if (track.instrument.settings.modulation?.slots.length) {
@@ -436,13 +435,13 @@ export function useTransport() {
           const trackNode = engine.getOrCreateTrackNode(track.id);
           synthEngine.ensureFmSynth(
             track.id, track.instrument.settings,
-            trackNode.inputGain as unknown as Tone.InputNode,
+            trackNode.inputGain as unknown as AudioNode,
           );
         } else if (!vst3Instrument && track.instrument?.kind === 'wavetable') {
           const trackNode = engine.getOrCreateTrackNode(track.id);
           wavetableEngine.ensureTrackSynth(
             track.id, track.instrument.settings,
-            trackNode.inputGain as unknown as Tone.InputNode,
+            trackNode.inputGain as unknown as AudioNode,
           );
         } else if (!vst3Instrument && track.instrument?.kind === 'granular' && track.granularConfig) {
           const sampleBlob = await loadAudioBlobByKey(track.granularConfig.audioKey);
@@ -546,7 +545,7 @@ export function useTransport() {
                   subtractiveEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
                 });
               } else if (track.instrument?.kind === 'fm') {
-                const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+                const freq = midiToFrequency(note.pitch);
                 engine.scheduleMidiEvent(scheduledStart, () => {
                   const fmSynth = synthEngine.getFmSynth(trackId);
                   if (fmSynth) {
@@ -554,7 +553,7 @@ export function useTransport() {
                   }
                 });
               } else if (track.instrument?.kind === 'wavetable') {
-                const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+                const freq = midiToFrequency(note.pitch);
                 engine.scheduleMidiEvent(scheduledStart, () => {
                   const wtSynth = wavetableEngine.getSynth(trackId);
                   if (wtSynth) {
@@ -566,7 +565,7 @@ export function useTransport() {
                   granularEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
                 });
               } else {
-                const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+                const freq = midiToFrequency(note.pitch);
                 const previousOverlap = note.isSlide
                   ? [...notes]
                       .slice(0, noteIndex)
@@ -781,7 +780,6 @@ export function useTransport() {
     if (!scrubProject) return;
 
     await engine.resume();
-    await Tone.start();
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
     const resumePlayback = transport.isPlaying || engine.playing;

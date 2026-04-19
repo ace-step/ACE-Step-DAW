@@ -15,6 +15,7 @@ const makeMockOsc = () => ({
   type: 'sine' as OscillatorType,
   frequency: { value: 440 },
   connect: vi.fn(),
+  disconnect: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
 });

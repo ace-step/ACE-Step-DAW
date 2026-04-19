@@ -119,6 +119,14 @@ class AdditiveEngine {
     const ctx = getAudioEngine().ctx;
     const output = ctx.createGain();
     output.gain.value = outputLevel;
+    // Connect to the supplied track node when available; otherwise
+    // route directly to ctx.destination. This bypasses Tone's
+    // DestinationClass wrapper (which had its own volume/mute) —
+    // no audible impact in this app because master gain is handled
+    // by AudioEngine's master bus on the connectTo path, and the
+    // fallback is reachable only from _lazyInit (notes triggered
+    // before ensureTrack was called with a connectTo). Codex P1 on
+    // PR #1733.
     output.connect(connectTo ?? ctx.destination);
 
     const instance: AdditiveInstance = {

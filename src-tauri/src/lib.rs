@@ -20,6 +20,9 @@ use crate::commands::audio::{
     audio_transport_set_tempo_map, audio_transport_set_time_signature_map,
     audio_transport_stop, EngineState, TransportEmitterState,
 };
+use crate::commands::plugin::{
+    plugin_list_cached, plugin_rescan, plugin_scan, PluginScannerState,
+};
 
 /// Greet command — placeholder to verify IPC works.
 #[tauri::command]
@@ -37,6 +40,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(EngineState::new())
         .manage(TransportEmitterState::new())
+        .manage(PluginScannerState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
             is_desktop,
@@ -75,6 +79,9 @@ pub fn run() {
             audio_transport_set_punch_enabled,
             audio_transport_set_count_in,
             audio_transport_get_count_in,
+            plugin_scan,
+            plugin_list_cached,
+            plugin_rescan,
         ])
         .setup(|app| {
             // Focus main window on startup

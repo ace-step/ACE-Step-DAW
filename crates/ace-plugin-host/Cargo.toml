@@ -1,0 +1,18 @@
+[package]
+name = "ace-plugin-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "VST3 plugin host for ACE-Step DAW — pure Rust, no C++ bridge"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+walkdir = "2"
+plist = "1"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"

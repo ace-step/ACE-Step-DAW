@@ -21,7 +21,8 @@ use crate::commands::audio::{
     audio_transport_stop, EngineState, TransportEmitterState,
 };
 use crate::commands::plugin::{
-    plugin_list_cached, plugin_rescan, plugin_scan, PluginScannerState,
+    plugin_instantiate, plugin_list_cached, plugin_list_instances, plugin_release, plugin_rescan,
+    plugin_scan, PluginHostState, PluginScannerState,
 };
 
 /// Greet command — placeholder to verify IPC works.
@@ -41,6 +42,7 @@ pub fn run() {
         .manage(EngineState::new())
         .manage(TransportEmitterState::new())
         .manage(PluginScannerState::new())
+        .manage(PluginHostState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
             is_desktop,
@@ -82,6 +84,9 @@ pub fn run() {
             plugin_scan,
             plugin_list_cached,
             plugin_rescan,
+            plugin_instantiate,
+            plugin_release,
+            plugin_list_instances,
         ])
         .setup(|app| {
             // Focus main window on startup

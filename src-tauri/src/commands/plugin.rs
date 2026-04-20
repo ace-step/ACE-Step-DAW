@@ -1,17 +1,22 @@
-//! Tauri IPC commands exposing the `ace-plugin-host` scanner to the
-//! webview. The scanner itself is stateful (owns an in-memory cache),
-//! so a single `Arc<PluginScanner>` is shared via managed state.
+//! Tauri IPC commands exposing the `ace-plugin-host` scanner and
+//! instance registry to the webview.
 //!
-//! Phase 4A-2 scope — scanning only. Plugin instantiation lives in a
-//! later subphase.
+//! Two independent managed states:
+//! - `PluginScannerState` (Phase 4A-2) owns the scan-result cache
+//! - `PluginHostState`    (Phase 4A-3) owns the live VST3 instances
+//!
+//! They're deliberately separate so scanning can't block on plugin
+//! loading and vice versa.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use ace_plugin_host::{PluginInfo, PluginScanner, ScanProgress};
+use ace_plugin_host::{
+    InstanceInfo, PluginHost, PluginHostError, PluginInfo, PluginScanner, ScanProgress,
+};
 
 /// Event name emitted once per discovered bundle during `plugin_rescan`.
 /// Matches the camelCase convention of every other cross-process event.
@@ -51,6 +56,31 @@ impl std::fmt::Display for PluginCommandError {
 }
 
 impl std::error::Error for PluginCommandError {}
+
+impl From<PluginHostError> for PluginCommandError {
+    fn from(e: PluginHostError) -> Self {
+        Self {
+            message: e.to_string(),
+        }
+    }
+}
+
+/// Managed-state wrapper around the process-wide instance registry.
+/// Like the scanner, the host owns its own synchronisation so the
+/// wrapper only needs an `Arc`.
+pub struct PluginHostState(pub Arc<PluginHost>);
+
+impl PluginHostState {
+    pub fn new() -> Self {
+        Self(Arc::new(PluginHost::new()))
+    }
+}
+
+impl Default for PluginHostState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Resolve the list of directories to scan. Empty / None → platform
 /// defaults (currently macOS-only, extended in a later subphase).
@@ -110,6 +140,48 @@ pub fn plugin_rescan(
     };
 
     Ok(scanner.scan_with_progress(&dirs, Some(&callback)))
+}
+
+// ---------------------------------------------------------------------------
+// 4A-3: plugin instantiation
+// ---------------------------------------------------------------------------
+
+/// Load a `.vst3` bundle and register the resulting instance. The
+/// returned `InstanceInfo` is the frontend's entire view of the
+/// plugin — the actual COM handles stay in `PluginHostState` and
+/// are addressed by `instance_id`.
+#[tauri::command]
+pub fn plugin_instantiate(
+    bundle_path: String,
+    state: State<'_, PluginHostState>,
+) -> Result<InstanceInfo, PluginCommandError> {
+    // SAFETY: `load_plugin` is unsafe because it dlopens native code;
+    // the Tauri boundary is the trust boundary. `bundle_path` is
+    // supplied by the frontend, which should only source it from
+    // previous scan results — we do not validate further here because
+    // the user may legitimately drag a bundle from an arbitrary path.
+    let info = unsafe { state.0.instantiate(Path::new(&bundle_path)) }?;
+    Ok(info)
+}
+
+/// Release the instance identified by `instance_id`. Dropping the
+/// last reference unloads the plugin's dylib.
+#[tauri::command]
+pub fn plugin_release(
+    instance_id: String,
+    state: State<'_, PluginHostState>,
+) -> Result<(), PluginCommandError> {
+    state.0.release(&instance_id)?;
+    Ok(())
+}
+
+/// Snapshot of every live plugin instance. Order is unspecified —
+/// stable sort on the frontend if needed.
+#[tauri::command]
+pub fn plugin_list_instances(
+    state: State<'_, PluginHostState>,
+) -> Result<Vec<InstanceInfo>, PluginCommandError> {
+    Ok(state.0.list()?)
 }
 
 #[cfg(test)]
@@ -188,5 +260,33 @@ mod tests {
         // list_cached's zero-dir scan should surface the warmed cache.
         let cached = state.0.scan(&[]);
         assert_eq!(cached, fresh);
+    }
+
+    // ── PluginHostState (4A-3) ───────────────────────────────────────
+
+    #[test]
+    fn host_state_list_instances_is_empty_on_fresh_state() {
+        let state = PluginHostState::new();
+        let instances = state.0.list().expect("list must succeed on fresh state");
+        assert!(instances.is_empty());
+    }
+
+    #[test]
+    fn host_state_release_unknown_instance_errors() {
+        let state = PluginHostState::new();
+        let err = state.0.release("no-such-instance").unwrap_err();
+        assert!(
+            matches!(err, PluginHostError::UnknownInstance(ref id) if id == "no-such-instance"),
+            "expected UnknownInstance, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn plugin_command_error_converts_from_host_error_with_message() {
+        let host_err = PluginHostError::UnknownInstance("abc".into());
+        let cmd_err: PluginCommandError = host_err.into();
+        // Confirm the display message round-trips so the UI can show
+        // something sensible in an error toast.
+        assert!(cmd_err.message.contains("abc"));
     }
 }

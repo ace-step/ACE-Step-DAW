@@ -36,4 +36,18 @@ pub enum PluginHostError {
     /// result of a panic inside another command on the same state.
     #[error("plugin host registry is unavailable")]
     RegistryUnavailable,
+
+    /// A processing-lifecycle call was made out of order — e.g.
+    /// `activate()` before `setup_processing()`, or `process_block()`
+    /// while the instance is not active. The payload is a short
+    /// human-readable hint describing the expected state.
+    #[error("invalid plugin lifecycle: {0}")]
+    InvalidLifecycle(String),
+
+    /// `IAudioProcessor::setupProcessing` returned non-OK. Unlike a
+    /// non-OK `process()` (which we downgrade to silence), a failed
+    /// setup is fatal — the plugin cannot render audio at the requested
+    /// sample rate / block size and callers should surface an error.
+    #[error("plugin setup failed: {0}")]
+    SetupFailed(String),
 }

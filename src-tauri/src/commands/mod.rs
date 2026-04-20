@@ -2,3 +2,4 @@
 //! `lib.rs` stays a thin registration table.
 
 pub mod audio;
+pub mod plugin;

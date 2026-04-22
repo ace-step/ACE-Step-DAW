@@ -127,12 +127,12 @@ pub(crate) fn validate_main_bus(
 ) -> Result<&OutputBusInfo, PluginHostError> {
     let main = busses.first().ok_or_else(|| {
         PluginHostError::SetupFailed(
-            "plugin exposes no audio output bus (unsupported until sidechain / MIDI-FX work lands)".into(),
+            "plugin exposes no audio output bus (MIDI-FX / no-audio-output plugins are not yet supported)".into(),
         )
     })?;
     if main.channels == 0 || main.channels > 2 {
         return Err(PluginHostError::SetupFailed(format!(
-            "plugin main output bus is {}-channel; 4B-3a supports only mono (1) or stereo (2) (surround lands in a later sub-phase)",
+            "plugin main output bus is {}-channel; 4B-3a supports only mono or stereo main busses (surround / >2-channel layouts land in a later sub-phase)",
             main.channels
         )));
     }

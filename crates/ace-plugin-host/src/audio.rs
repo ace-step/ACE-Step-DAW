@@ -30,6 +30,31 @@ use vst3::Steinberg::kResultOk;
 
 use crate::error::PluginHostError;
 use crate::loader::Vst3PluginInstance;
+use crate::types::OutputBusInfo;
+
+/// Pure-logic guard that `setup_processing` delegates to. Extracted
+/// so it can be exercised without a real plugin — the real lifecycle
+/// calls COM methods and is only runnable against a loaded bundle.
+///
+/// Validates that the plugin's discovered bus topology is hostable
+/// under 4B-1's stereo-only contract. Returns the main output bus
+/// on success so callers can keep using it.
+pub(crate) fn validate_stereo_main_bus(
+    busses: &[OutputBusInfo],
+) -> Result<&OutputBusInfo, PluginHostError> {
+    let main = busses.first().ok_or_else(|| {
+        PluginHostError::SetupFailed(
+            "plugin exposes no audio output bus (unsupported in 4B-1 — requires bus-arrangement negotiation, landing in 4B-3)".into(),
+        )
+    })?;
+    if main.channels != 2 {
+        return Err(PluginHostError::SetupFailed(format!(
+            "plugin main output bus is {}-channel; 4B-1 only supports stereo (bus-arrangement negotiation lands in 4B-3)",
+            main.channels
+        )));
+    }
+    Ok(main)
+}
 
 /// Sample rate + maximum block size the plugin should prepare for.
 /// Mirrors the shape of Steinberg's `ProcessSetup` but lives at our
@@ -208,6 +233,55 @@ mod tests {
         assert_eq!(OutputBusConfig::new(2).unwrap().channels, 2);
     }
 
+    fn mk_bus(channels: u32) -> OutputBusInfo {
+        OutputBusInfo {
+            name: "main".into(),
+            channels,
+            index: 0,
+        }
+    }
+
+    #[test]
+    fn validate_stereo_main_bus_accepts_stereo() {
+        let busses = vec![mk_bus(2)];
+        assert!(validate_stereo_main_bus(&busses).is_ok());
+    }
+
+    #[test]
+    fn validate_stereo_main_bus_rejects_empty_bus_list() {
+        let err = validate_stereo_main_bus(&[]).unwrap_err();
+        assert!(matches!(err, PluginHostError::SetupFailed(_)));
+    }
+
+    #[test]
+    fn validate_stereo_main_bus_rejects_mono() {
+        let busses = vec![mk_bus(1)];
+        let err = validate_stereo_main_bus(&busses).unwrap_err();
+        match err {
+            PluginHostError::SetupFailed(msg) => assert!(msg.contains("1-channel")),
+            other => panic!("expected SetupFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_stereo_main_bus_rejects_surround() {
+        let busses = vec![mk_bus(6)];
+        let err = validate_stereo_main_bus(&busses).unwrap_err();
+        match err {
+            PluginHostError::SetupFailed(msg) => assert!(msg.contains("6-channel")),
+            other => panic!("expected SetupFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_stereo_main_bus_only_checks_main_bus() {
+        // Aux busses beyond the main stereo one are allowed — 4B-3
+        // will route them, but they shouldn't block the stereo-main
+        // contract.
+        let busses = vec![mk_bus(2), mk_bus(2), mk_bus(2)];
+        assert!(validate_stereo_main_bus(&busses).is_ok());
+    }
+
     #[test]
     fn processing_state_default_is_cold() {
         let s = ProcessingState::default();
@@ -249,6 +323,15 @@ impl Vst3PluginInstance {
         // construct one without going through `new()`. Guard the COM
         // call regardless so we never pass garbage to the plugin.
         let _ = AudioConfig::new(config.sample_rate, config.block_size)?;
+
+        // 4B-1 is stereo-main-bus only. Without bus-arrangement
+        // negotiation (`IAudioProcessor::setBusArrangements`, lands in
+        // 4B-3), we can't reliably host mono effects, MIDI FX with no
+        // audio output, or multi-out / surround plugins — they'll
+        // either reject our `process()` call or render into the wrong
+        // layout. Fail fast here rather than letting them reach
+        // `process_block` with a mis-shaped bus.
+        validate_stereo_main_bus(&self.output_busses)?;
 
         let mut state = self.processing_state().lock().map_err(|_| {
             PluginHostError::RegistryUnavailable
@@ -405,9 +488,14 @@ impl Vst3PluginInstance {
         channels: u32,
         samples: u32,
     ) -> Result<Vec<f32>, PluginHostError> {
-        if !(1..=2).contains(&channels) {
+        // 4B-1 is stereo-only — mono input would require
+        // `IAudioProcessor::setBusArrangements` to negotiate a mono
+        // main input, which we don't call yet, so most stereo plugins
+        // would either reject the block or read out-of-bounds. Bus
+        // negotiation lands in 4B-3.
+        if channels != 2 {
             return Err(PluginHostError::InvalidLifecycle(format!(
-                "process_block only supports 1 or 2 channels (got {channels})"
+                "process_block only supports stereo (channels == 2) in 4B-1; got {channels} — bus-arrangement negotiation lands in 4B-3"
             )));
         }
 

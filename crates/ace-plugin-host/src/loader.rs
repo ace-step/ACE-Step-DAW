@@ -45,6 +45,11 @@ pub struct Vst3PluginInstance {
     pub instance_id: String,
     pub plugin_uid: String,
     pub bundle_path: PathBuf,
+    /// Output-bus topology captured at load time. Used by
+    /// `setup_processing` to fail-fast on non-stereo plugins while
+    /// 4B-1 is still stereo-only; bus-arrangement negotiation lands
+    /// in 4B-3.
+    pub output_busses: Vec<OutputBusInfo>,
     /// Processing lifecycle state. Guarded by a `Mutex` so the VST3
     /// spec's serialisation requirement for `setupProcessing` /
     /// `setActive` / `process` is enforced at our layer.
@@ -269,6 +274,7 @@ pub unsafe fn load_plugin(
         instance_id: instance_id.to_string(),
         plugin_uid: uid_str,
         bundle_path: bundle_path.to_path_buf(),
+        output_busses: info.output_busses.clone(),
         processing_state: Mutex::new(ProcessingState::default()),
     };
 

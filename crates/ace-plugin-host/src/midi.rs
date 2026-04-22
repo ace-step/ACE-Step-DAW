@@ -367,4 +367,24 @@ mod tests {
         let result = unsafe { el.addEvent(std::ptr::null_mut()) };
         assert_eq!(result, kInvalidArgument);
     }
+
+    /// Regression test for Codex P2: drained MIDI must be sorted by
+    /// `sample_offset` before converting, because VST3 plugins
+    /// iterate the host's IEventList forward by index and don't
+    /// re-sort internally. Out-of-order input has been observed to
+    /// cause missed note-offs and stuck notes in real-world plugins.
+    #[test]
+    fn sort_by_sample_offset_is_deterministic() {
+        // Producer pushed note-off BEFORE note-on for the same pitch,
+        // e.g. because two threads raced on queuing.
+        let mut events = [
+            MidiEvent::note_off(0, 60, 0, 256),
+            MidiEvent::note_on(0, 60, 100, 0),
+            MidiEvent::note_on(0, 64, 80, 128),
+        ];
+        events.sort_by_key(|e| e.sample_offset);
+        assert_eq!(events[0].sample_offset, 0);
+        assert_eq!(events[1].sample_offset, 128);
+        assert_eq!(events[2].sample_offset, 256);
+    }
 }

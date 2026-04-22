@@ -490,14 +490,21 @@ impl Vst3PluginInstance {
         channels: u32,
         samples: u32,
     ) -> Result<Vec<f32>, PluginHostError> {
-        // 4B-1 is stereo-only — mono input would require
-        // `IAudioProcessor::setBusArrangements` to negotiate a mono
-        // main input, which we don't call yet, so most stereo plugins
-        // would either reject the block or read out-of-bounds. Bus
-        // negotiation lands in 4B-3.
-        if channels != 2 {
+        // Branch on the plugin's audio-input-bus topology, captured at
+        // load time:
+        //
+        // - Pure instrument (no audio input bus): ignore `channels`
+        //   and `input`; send `numInputs: 0` + `inputs: null`. VST3
+        //   plugins with no audio input will reject a non-zero
+        //   `numInputs`, so this distinction is load-bearing for
+        //   synths / samplers / MIDI-FX.
+        // - Effect (has audio input bus): require `channels == 2`,
+        //   stereo main input. Mono / surround support lands in 4B-3
+        //   alongside `setBusArrangements` negotiation.
+        let is_instrument = self.is_instrument();
+        if !is_instrument && channels != 2 {
             return Err(PluginHostError::InvalidLifecycle(format!(
-                "process_block only supports stereo (channels == 2) in 4B-1; got {channels} — bus-arrangement negotiation lands in 4B-3"
+                "process_block only supports stereo (channels == 2) for effect plugins in 4B-2a; got {channels} — bus-arrangement negotiation lands in 4B-3"
             )));
         }
 
@@ -526,39 +533,51 @@ impl Vst3PluginInstance {
             }
         }
 
-        let num_channels = channels as usize;
         let num_samples = samples as usize;
         let output_stereo = 2usize;
-        let expected_input_len = num_channels * num_samples;
 
-        if input.len() < expected_input_len {
-            return Err(PluginHostError::InvalidLifecycle(format!(
-                "input buffer too small: have {} interleaved f32 elements, need {} ({} channels × {} samples)",
-                input.len(),
-                expected_input_len,
-                num_channels,
-                num_samples
-            )));
-        }
-
-        // De-interleave input into per-channel buffers.
-        let mut input_channels: Vec<Vec<f32>> = vec![vec![0.0f32; num_samples]; num_channels];
-        for s in 0..num_samples {
-            for ch in 0..num_channels {
-                input_channels[ch][s] = input[s * num_channels + ch];
+        // Input-side setup — only validate + de-interleave for effect
+        // plugins. Instruments get `numInputs: 0` below and never
+        // dereference the input buffers.
+        let input_channels: Vec<Vec<f32>> = if is_instrument {
+            Vec::new()
+        } else {
+            let num_channels = channels as usize;
+            let expected_input_len = num_channels * num_samples;
+            if input.len() < expected_input_len {
+                return Err(PluginHostError::InvalidLifecycle(format!(
+                    "input buffer too small: have {} interleaved f32 elements, need {} ({} channels × {} samples)",
+                    input.len(),
+                    expected_input_len,
+                    num_channels,
+                    num_samples
+                )));
             }
-        }
+            let mut channels_buf: Vec<Vec<f32>> =
+                vec![vec![0.0f32; num_samples]; num_channels];
+            for s in 0..num_samples {
+                for ch in 0..num_channels {
+                    channels_buf[ch][s] = input[s * num_channels + ch];
+                }
+            }
+            channels_buf
+        };
 
-        let mut input_ptrs: Vec<*mut f32> = input_channels
+        let mut input_channels_owned = input_channels;
+        let mut input_ptrs: Vec<*mut f32> = input_channels_owned
             .iter_mut()
             .map(|c| c.as_mut_ptr())
             .collect();
 
         let mut input_bus = AudioBusBuffers {
-            numChannels: num_channels as i32,
+            numChannels: if is_instrument { 0 } else { channels as i32 },
             silenceFlags: 0,
             __field0: AudioBusBuffers__type0 {
-                channelBuffers32: input_ptrs.as_mut_ptr(),
+                channelBuffers32: if is_instrument {
+                    ptr::null_mut()
+                } else {
+                    input_ptrs.as_mut_ptr()
+                },
             },
         };
 
@@ -577,13 +596,18 @@ impl Vst3PluginInstance {
             },
         };
 
-        // Drain any queued MIDI events into a fresh `EventList`.
+        // Drain any queued MIDI events, sort by sampleOffset, then
+        // convert into VST3 `Event`s. VST3 plugins iterate the host's
+        // `IEventList` forward by index and do not re-sort, so an
+        // out-of-order list can mis-fire notes or terminate them
+        // prematurely — sorting here makes block-local timing
+        // deterministic regardless of queue-insertion order.
         // Unsupported message types (CC, pitchbend, sysex in 4B-2a)
-        // are silently dropped by the converter; we'll extend as the
-        // DAW adds needs. `event_list` must outlive `process_data`
-        // because the plugin may read from the COM pointer during
-        // `process()`.
-        let pending = self.drain_midi();
+        // are silently dropped by the converter. `event_list` must
+        // outlive `process_data` because the plugin may read from the
+        // COM pointer during `process()`.
+        let mut pending = self.drain_midi();
+        pending.sort_by_key(|e| e.sample_offset);
         let vst3_events: Vec<_> = pending
             .iter()
             .filter_map(midi_to_vst3_event)
@@ -603,9 +627,13 @@ impl Vst3PluginInstance {
             processMode: ProcessModes_::kRealtime as i32,
             symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
             numSamples: num_samples as i32,
-            numInputs: 1,
+            numInputs: if is_instrument { 0 } else { 1 },
             numOutputs: 1,
-            inputs: &mut input_bus,
+            inputs: if is_instrument {
+                ptr::null_mut()
+            } else {
+                &mut input_bus
+            },
             outputs: &mut output_bus,
             inputParameterChanges: ptr::null_mut(),
             outputParameterChanges: ptr::null_mut(),

@@ -52,6 +52,14 @@ pub struct Vst3PluginInstance {
     /// 4B-1 is still stereo-only; bus-arrangement negotiation lands
     /// in 4B-3.
     pub output_busses: Vec<OutputBusInfo>,
+    /// Channel count of the main audio input bus, or `None` for pure
+    /// instruments (synths / samplers that expose no audio input).
+    /// Captured at load time so `process_block` can choose between
+    /// the effect path (`numInputs: 1` with a stereo input bus) and
+    /// the instrument path (`numInputs: 0`, `inputs: null`). VST3
+    /// plugins with no audio input bus reject calls with a non-zero
+    /// `numInputs`, so this distinction is load-bearing for synths.
+    pub input_main_channels: Option<u32>,
     /// Processing lifecycle state. Guarded by a `Mutex` so the VST3
     /// spec's serialisation requirement for `setupProcessing` /
     /// `setActive` / `process` is enforced at our layer.
@@ -99,6 +107,13 @@ impl Vst3PluginInstance {
     #[cfg(test)]
     pub(crate) fn midi_queue_len(&self) -> usize {
         self.midi_queue.len()
+    }
+
+    /// True when the plugin exposes no audio input bus — i.e. a
+    /// synth, sampler, or MIDI-FX. `process_block` sends
+    /// `numInputs: 0` with a null `inputs` pointer for these.
+    pub fn is_instrument(&self) -> bool {
+        self.input_main_channels.is_none()
     }
 }
 
@@ -282,12 +297,14 @@ pub unsafe fn load_plugin(
     // 9. Snapshot parameter + bus + latency data for the UI.
     let parameters = extract_parameters(&controller);
     let output_busses = extract_output_busses(&component);
+    let input_main_channels = extract_main_input_channels(&component);
     let latency_samples = processor.getLatencySamples();
     let tail_samples = processor.getTailSamples();
 
     info!(
         params = parameters.len(),
         output_busses = output_busses.len(),
+        input_main = ?input_main_channels,
         latency = latency_samples,
         tail = tail_samples,
         "plugin loaded"
@@ -312,6 +329,7 @@ pub unsafe fn load_plugin(
         plugin_uid: uid_str,
         bundle_path: bundle_path.to_path_buf(),
         output_busses: info.output_busses.clone(),
+        input_main_channels,
         processing_state: Mutex::new(ProcessingState::default()),
         midi_queue: SegQueue::new(),
     };
@@ -352,6 +370,37 @@ fn extract_parameters(controller: &Option<ComPtr<IEditController>>) -> Vec<Param
     }
 
     params
+}
+
+/// Channel count of the main audio *input* bus, or `None` if the
+/// plugin exposes no audio input (pure instrument case). Only the
+/// main bus (index 0) is returned in 4B-2a — sidechain inputs are a
+/// separate concern tracked by a later sub-phase.
+fn extract_main_input_channels(component: &ComPtr<IComponent>) -> Option<u32> {
+    let num_inputs = unsafe {
+        component.getBusCount(
+            MediaTypes_::kAudio as i32,
+            BusDirections_::kInput as i32,
+        )
+    };
+    if num_inputs <= 0 {
+        return None;
+    }
+
+    let mut info: BusInfo = unsafe { std::mem::zeroed() };
+    let result = unsafe {
+        component.getBusInfo(
+            MediaTypes_::kAudio as i32,
+            BusDirections_::kInput as i32,
+            0,
+            &mut info,
+        )
+    };
+    if result != kResultOk {
+        warn!(result, "getBusInfo(input,0) failed; treating plugin as instrument");
+        return None;
+    }
+    Some(info.channelCount as u32)
 }
 
 fn extract_output_busses(component: &ComPtr<IComponent>) -> Vec<OutputBusInfo> {

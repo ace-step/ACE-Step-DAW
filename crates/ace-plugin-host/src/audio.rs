@@ -9,8 +9,9 @@
 //! Scope is deliberately narrow:
 //!
 //! - Stereo-only main bus I/O (multi-output busses land in 4B-3)
-//! - Empty `inputEvents` / `inputParameterChanges` (MIDI + automation
-//!   land in 4B-2)
+//! - 4B-2a adds MIDI note-on / note-off via `IEventList`;
+//!   `inputParameterChanges` stays null until 4B-2b ships the
+//!   host-side `IParameterChanges` wrapper.
 //! - No sidechain, no PDC, no sandbox (later sub-phases of #1524)
 //!
 //! Ported from `companion/src/audio_thread.rs::process_vst3_multi`,
@@ -23,13 +24,14 @@ use std::ptr;
 
 use tracing::warn;
 use vst3::Steinberg::Vst::{
-    AudioBusBuffers, AudioBusBuffers__type0, IAudioProcessorTrait, IComponentTrait, ProcessData,
-    ProcessModes_, ProcessSetup, SymbolicSampleSizes_,
+    AudioBusBuffers, AudioBusBuffers__type0, IAudioProcessorTrait, IComponentTrait, IEventList,
+    ProcessData, ProcessModes_, ProcessSetup, SymbolicSampleSizes_,
 };
 use vst3::Steinberg::kResultOk;
 
 use crate::error::PluginHostError;
 use crate::loader::Vst3PluginInstance;
+use crate::midi::{midi_to_vst3_event, EventList};
 use crate::types::OutputBusInfo;
 
 /// Pure-logic guard that `setup_processing` delegates to. Extracted
@@ -575,6 +577,28 @@ impl Vst3PluginInstance {
             },
         };
 
+        // Drain any queued MIDI events into a fresh `EventList`.
+        // Unsupported message types (CC, pitchbend, sysex in 4B-2a)
+        // are silently dropped by the converter; we'll extend as the
+        // DAW adds needs. `event_list` must outlive `process_data`
+        // because the plugin may read from the COM pointer during
+        // `process()`.
+        let pending = self.drain_midi();
+        let vst3_events: Vec<_> = pending
+            .iter()
+            .filter_map(midi_to_vst3_event)
+            .collect();
+        let event_list = if vst3_events.is_empty() {
+            None
+        } else {
+            Some(EventList::with_events(vst3_events))
+        };
+        let input_events_ptr = event_list
+            .as_ref()
+            .and_then(|el| el.to_com_ptr::<IEventList>())
+            .map(|p| p.as_ptr())
+            .unwrap_or(ptr::null_mut());
+
         let mut process_data = ProcessData {
             processMode: ProcessModes_::kRealtime as i32,
             symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
@@ -585,7 +609,7 @@ impl Vst3PluginInstance {
             outputs: &mut output_bus,
             inputParameterChanges: ptr::null_mut(),
             outputParameterChanges: ptr::null_mut(),
-            inputEvents: ptr::null_mut(),
+            inputEvents: input_events_ptr,
             outputEvents: ptr::null_mut(),
             processContext: ptr::null_mut(),
         };
@@ -594,7 +618,8 @@ impl Vst3PluginInstance {
         // `Vec<f32>`s outlive the call; the pointer arrays in
         // `input_ptrs` / `output_ptrs` are heap-stable for the duration
         // of `process()` because their owning `Vec`s are not modified
-        // between construction and this call.
+        // between construction and this call. `event_list` lives in
+        // this function's stack frame and outlives `process_data`.
         let result = unsafe { self.processor.process(&mut process_data) };
         if result != kResultOk {
             warn!(
@@ -612,7 +637,8 @@ impl Vst3PluginInstance {
                 out[s * output_stereo + ch] = output_channels[ch][s];
             }
         }
-        // `state` guard dropped here — after process() returns.
+        // `state` guard + `event_list` dropped here — after process().
+        drop(event_list);
         drop(state);
         Ok(out)
     }
@@ -625,6 +651,7 @@ impl Vst3PluginInstance {
 #[cfg(test)]
 mod smoke {
     use super::*;
+    use crate::midi::MidiEvent;
     use std::path::Path;
 
     /// Runs the full lifecycle against a real plugin when one is
@@ -670,5 +697,48 @@ mod smoke {
         // process_block after deactivate errors.
         let err = instance.process_block(&input, 2, 512).unwrap_err();
         assert!(matches!(err, PluginHostError::InvalidLifecycle(_)));
+    }
+
+    /// Queues a MIDI note-on / note-off pair and runs one block.
+    /// The plugin under test (ACE Bridge) is primarily an audio
+    /// effect, so we can't assert on output semantics — but we can
+    /// assert that the `process()` call succeeded with `inputEvents`
+    /// populated, that the queue was drained, and no COM error was
+    /// returned. A future follow-up could add a sampler smoke plugin
+    /// for fuller MIDI-in assertions.
+    #[test]
+    fn midi_queued_events_are_drained_through_process_block() {
+        let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
+        let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
+            eprintln!("skipping: no known VST3 bundle installed");
+            return;
+        };
+
+        let (instance, _) = match unsafe { crate::loader::load_plugin(path, "midi-smoke") } {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("load failed (environment-specific, not fatal): {e}");
+                return;
+            }
+        };
+
+        instance
+            .setup_processing(AudioConfig::new(48000.0, 512).unwrap())
+            .unwrap();
+        instance.activate().unwrap();
+
+        instance.queue_midi(&[
+            MidiEvent::note_on(0, 60, 100, 0),
+            MidiEvent::note_off(0, 60, 0, 256),
+        ]);
+        assert_eq!(instance.midi_queue_len(), 2);
+
+        let input = vec![0.0f32; 2 * 512];
+        let out = instance.process_block(&input, 2, 512).unwrap();
+        assert_eq!(out.len(), 2 * 512);
+        // Queue should be fully drained after one process_block.
+        assert_eq!(instance.midi_queue_len(), 0);
+
+        instance.deactivate().unwrap();
     }
 }

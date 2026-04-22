@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::Mutex;
 
+use crossbeam::queue::SegQueue;
 use libloading::{Library, Symbol};
 use tracing::{debug, info, warn};
 use vst3::ComPtr;
@@ -32,6 +33,7 @@ use vst3::Steinberg::{
 use crate::audio::ProcessingState;
 use crate::error::PluginHostError;
 use crate::host_impl::AceHostApplication;
+use crate::midi::MidiEvent;
 use crate::types::{InstanceInfo, OutputBusInfo, ParamInfo};
 
 /// A loaded VST3 plugin instance + its COM handles. The `_library`
@@ -54,6 +56,14 @@ pub struct Vst3PluginInstance {
     /// spec's serialisation requirement for `setupProcessing` /
     /// `setActive` / `process` is enforced at our layer.
     processing_state: Mutex<ProcessingState>,
+    /// Lock-free queue of pending MIDI events. Producers push from
+    /// any thread (sequencer callback, MIDI-learn handler, test);
+    /// `process_block` drains it, converts to VST3 `Event`s, and
+    /// hands them to the plugin via `IEventList`. Events queued
+    /// while the plugin is not processing accumulate and fire on
+    /// the next `process_block` call — that's how DAWs typically
+    /// handle latched notes during transport start.
+    midi_queue: SegQueue<MidiEvent>,
 }
 
 impl Vst3PluginInstance {
@@ -62,6 +72,33 @@ impl Vst3PluginInstance {
     /// duplicating state here.
     pub(crate) fn processing_state(&self) -> &Mutex<ProcessingState> {
         &self.processing_state
+    }
+
+    /// Queue a batch of MIDI events to be delivered on the next
+    /// `process_block` call. Thread-safe: any producer (sequencer,
+    /// MIDI-learn, test harness) may push concurrently.
+    ///
+    /// Events are not de-duplicated or re-ordered here — VST3
+    /// plugins sort by `sampleOffset` themselves, and the wall-clock
+    /// arrival order is what determines which of two identical
+    /// offsets wins, which matches DAW expectations.
+    pub fn queue_midi(&self, events: &[MidiEvent]) {
+        for e in events {
+            self.midi_queue.push(*e);
+        }
+    }
+
+    pub(crate) fn drain_midi(&self) -> Vec<MidiEvent> {
+        let mut out = Vec::new();
+        while let Some(e) = self.midi_queue.pop() {
+            out.push(e);
+        }
+        out
+    }
+
+    #[cfg(test)]
+    pub(crate) fn midi_queue_len(&self) -> usize {
+        self.midi_queue.len()
     }
 }
 
@@ -276,6 +313,7 @@ pub unsafe fn load_plugin(
         bundle_path: bundle_path.to_path_buf(),
         output_busses: info.output_busses.clone(),
         processing_state: Mutex::new(ProcessingState::default()),
+        midi_queue: SegQueue::new(),
     };
 
     Ok((instance, info))
@@ -395,6 +433,42 @@ pub fn format_uid(uid: &[i8; 16]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::midi::MidiEvent;
+
+    #[test]
+    fn midi_queue_accumulates_and_drains_in_fifo_order() {
+        // Build an instance by hand-rolling via the smoke test path is
+        // not possible without COM — instead, use the real bundle-load
+        // path only if available; otherwise skip.
+        let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
+        let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
+            eprintln!("skipping: no known VST3 bundle installed");
+            return;
+        };
+        let (instance, _) = match unsafe { load_plugin(path, "midi-queue-test") } {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("load failed (environment-specific, not fatal): {e}");
+                return;
+            }
+        };
+
+        assert_eq!(instance.midi_queue_len(), 0);
+
+        instance.queue_midi(&[
+            MidiEvent::note_on(0, 60, 100, 0),
+            MidiEvent::note_on(1, 72, 80, 128),
+        ]);
+        instance.queue_midi(&[MidiEvent::note_off(0, 60, 0, 256)]);
+        assert_eq!(instance.midi_queue_len(), 3);
+
+        let drained = instance.drain_midi();
+        assert_eq!(drained.len(), 3);
+        assert_eq!(drained[0].data1, 60);
+        assert_eq!(drained[1].data1, 72);
+        assert_eq!(drained[2].data1, 60);
+        assert_eq!(instance.midi_queue_len(), 0);
+    }
 
     #[test]
     fn bundle_dylib_path_returns_none_for_missing_bundle() {

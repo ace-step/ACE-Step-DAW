@@ -24,6 +24,7 @@ pub mod error;
 pub mod host;
 pub mod host_impl;
 pub mod loader;
+pub mod midi;
 pub mod scanner;
 pub mod types;
 
@@ -32,5 +33,6 @@ pub use error::PluginHostError;
 pub use host::PluginHost;
 pub use host_impl::{AceComponentHandler, AceHostApplication, HostParamChange, ParamChangeCollector};
 pub use loader::{load_plugin, Vst3PluginInstance};
+pub use midi::{midi_to_vst3_event, EventList, MidiEvent};
 pub use scanner::{PluginScanner, ScanProgressCallback};
 pub use types::{InstanceInfo, OutputBusInfo, ParamInfo, PluginInfo, ScanProgress};

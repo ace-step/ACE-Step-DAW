@@ -809,8 +809,8 @@ mod smoke {
         // Pick the plugin's first parameter if any; otherwise skip
         // this assertion — some bundles expose no automatable params.
         if let Some(first) = info.parameters.first() {
-            instance.set_parameter(first.id, 0, 0.5);
-            instance.set_parameter(first.id, 128, 0.75);
+            instance.set_parameter(first.id, 0, 0.5).unwrap();
+            instance.set_parameter(first.id, 128, 0.75).unwrap();
             assert_eq!(instance.param_queue_len(), 2);
         } else {
             eprintln!("plugin exposes no parameters — skipping set_parameter assertion");

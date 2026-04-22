@@ -176,11 +176,22 @@ impl ParameterChanges {
     /// Pre-populate from already-grouped points. `grouped` is a list
     /// of `(param_id, sorted_points)` pairs. Each group becomes one
     /// `ParamValueQueue`.
+    ///
+    /// `to_com_ptr` failure on a child queue is treated as a
+    /// programming error (the `Class` impl advertises
+    /// `IParamValueQueue` so the cast must succeed for a correctly
+    /// linked build) — we `expect` rather than silently drop,
+    /// because partial automation is a nightmare to debug
+    /// downstream.
     pub fn with_groups(grouped: Vec<ParamGroup>) -> ComWrapper<Self> {
         let queues: Vec<ComPtr<IParamValueQueue>> = grouped
             .into_iter()
-            .filter_map(|(id, points)| {
-                ParamValueQueue::with_points(id, points).to_com_ptr::<IParamValueQueue>()
+            .map(|(id, points)| {
+                ParamValueQueue::with_points(id, points)
+                    .to_com_ptr::<IParamValueQueue>()
+                    .expect(
+                        "ParamValueQueue must expose IParamValueQueue — programming error",
+                    )
             })
             .collect();
         ComWrapper::new(Self {

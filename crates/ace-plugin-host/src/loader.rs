@@ -135,7 +135,19 @@ impl Vst3PluginInstance {
     /// Queue a parameter-automation point. VST3 `value` is always
     /// 0..1 normalised; callers get the raw range via `ParamInfo`.
     ///
-    /// Two things happen simultaneously:
+    /// Input validation:
+    ///
+    /// - Non-finite `value` (NaN / ±Inf) → rejected with
+    ///   `InvalidLifecycle`. Forwarding NaN to a plugin's DSP graph
+    ///   reliably destabilises it and often produces audio-thread
+    ///   panics.
+    /// - `value` outside `[0.0, 1.0]` → clamped silently. VST3's
+    ///   contract is that parameters are always normalised; out-of-
+    ///   range values are a common caller mistake (e.g. forgetting
+    ///   to divide by 127 for a MIDI CC mapping) and clamping is
+    ///   safer than rejecting.
+    ///
+    /// On success, two things happen simultaneously:
     ///
     /// 1. The point is pushed onto the audio-thread queue and will
     ///    be delivered via `inputParameterChanges` on the next
@@ -156,7 +168,19 @@ impl Vst3PluginInstance {
     /// Ordering contract mirrors `queue_midi`: unordered cross-thread
     /// pushes, deterministic sort by `(param_id, sample_offset)` at
     /// process time.
-    pub fn set_parameter(&self, param_id: u32, sample_offset: u32, value: f64) {
+    pub fn set_parameter(
+        &self,
+        param_id: u32,
+        sample_offset: u32,
+        value: f64,
+    ) -> Result<(), PluginHostError> {
+        if !value.is_finite() {
+            return Err(PluginHostError::InvalidLifecycle(format!(
+                "set_parameter value must be finite (got {value})"
+            )));
+        }
+        let clamped = value.clamp(0.0, 1.0);
+
         if sample_offset == 0 {
             if let Some(ctrl) = self.controller.as_ref() {
                 // SAFETY: `ctrl` is a live `ComPtr<IEditController>`
@@ -166,15 +190,16 @@ impl Vst3PluginInstance {
                 // state snapshots reflect the edit even when
                 // processing is stopped.
                 unsafe {
-                    ctrl.setParamNormalized(param_id, value);
+                    ctrl.setParamNormalized(param_id, clamped);
                 }
             }
         }
         self.param_queue.push(ParamPoint {
             param_id,
             sample_offset,
-            value,
+            value: clamped,
         });
+        Ok(())
     }
 
     pub(crate) fn drain_param_points(&self) -> Vec<ParamPoint> {
@@ -590,9 +615,9 @@ mod tests {
 
         assert_eq!(instance.param_queue_len(), 0);
 
-        instance.set_parameter(1, 0, 0.25);
-        instance.set_parameter(2, 128, 0.5);
-        instance.set_parameter(1, 256, 0.75);
+        instance.set_parameter(1, 0, 0.25).unwrap();
+        instance.set_parameter(2, 128, 0.5).unwrap();
+        instance.set_parameter(1, 256, 0.75).unwrap();
         assert_eq!(instance.param_queue_len(), 3);
 
         let drained = instance.drain_param_points();
@@ -603,6 +628,44 @@ mod tests {
         let ids: Vec<u32> = drained.iter().map(|p| p.param_id).collect();
         assert!(ids.contains(&1));
         assert!(ids.contains(&2));
+    }
+
+    #[test]
+    fn set_parameter_rejects_nan_and_inf_clamps_out_of_range() {
+        let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
+        let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
+            eprintln!("skipping: no known VST3 bundle installed");
+            return;
+        };
+        let (instance, _) = match unsafe { load_plugin(path, "param-validate-test") } {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("load failed (environment-specific, not fatal): {e}");
+                return;
+            }
+        };
+
+        // NaN / Inf rejected with InvalidLifecycle.
+        assert!(matches!(
+            instance.set_parameter(1, 0, f64::NAN),
+            Err(PluginHostError::InvalidLifecycle(_))
+        ));
+        assert!(matches!(
+            instance.set_parameter(1, 0, f64::INFINITY),
+            Err(PluginHostError::InvalidLifecycle(_))
+        ));
+        assert!(matches!(
+            instance.set_parameter(1, 0, f64::NEG_INFINITY),
+            Err(PluginHostError::InvalidLifecycle(_))
+        ));
+
+        // Out-of-range clamped silently.
+        assert!(instance.set_parameter(1, 0, -0.5).is_ok());
+        assert!(instance.set_parameter(1, 0, 1.5).is_ok());
+        let pts = instance.drain_param_points();
+        assert_eq!(pts.len(), 2);
+        assert!(pts.iter().any(|p| p.value == 0.0)); // -0.5 clamped
+        assert!(pts.iter().any(|p| p.value == 1.0)); // 1.5 clamped
     }
 
     #[test]

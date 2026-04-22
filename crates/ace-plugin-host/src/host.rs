@@ -163,8 +163,7 @@ impl PluginHost {
         value: f64,
     ) -> Result<(), PluginHostError> {
         self.lookup(instance_id)?
-            .set_parameter(param_id, sample_offset, value);
-        Ok(())
+            .set_parameter(param_id, sample_offset, value)
     }
 
     /// Drop a live instance. Releasing the only reference to its

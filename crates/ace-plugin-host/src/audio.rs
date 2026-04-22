@@ -31,7 +31,7 @@ use vst3::Steinberg::Vst::{
 };
 use vst3::Steinberg::kResultOk;
 
-use crate::arrangement::{arrangement_for_channel_count, channel_count};
+use crate::arrangement::{arrangement_for_channel_count, channel_count, EMPTY};
 use crate::error::PluginHostError;
 use crate::loader::Vst3PluginInstance;
 use crate::midi::{midi_to_vst3_event, EventList};
@@ -47,21 +47,22 @@ use crate::types::OutputBusInfo;
 /// the main output bus on success so callers can keep using it.
 /// Multi-output plugins (index-1+ aux busses present) are still
 /// rejected — 4B-3b relaxes that.
-/// Call `IAudioProcessor::setBusArrangements` with the channel
-/// counts discovered at load time. The plugin may accept our
-/// request outright, reject it, or silently adjust its internal
-/// arrangement. 4B-3a fails fast on non-OK — cleaner error surface
-/// than chasing `getBusArrangement` back-and-forth; Phase 5's
-/// engine can reroute to match the plugin's preferred layout if
-/// that becomes a real constraint.
+/// Call `IAudioProcessor::setBusArrangements` with the plugin's
+/// full bus topology. Bus 0 is the main I/O (mono or stereo per the
+/// negotiated arrangement); aux busses past index 0 are described
+/// as `EMPTY` (disconnected) so the plugin sees a spec-compliant
+/// multi-bus host without 4B-3a having to actually route aux audio.
 ///
-/// `num_in_channels == 0` means "pure instrument" — we pass an
-/// empty input-arrangement list rather than a disconnected stereo
-/// slot, matching how VST3 hosts describe MIDI-only plugins.
+/// Plugin rejection of our request is treated as non-fatal (logged,
+/// not errored): some real-world plugins decline and stay on their
+/// preferred defaults without actually misbehaving during process().
+/// 4B-3b or a later sub-phase can add `getBusArrangement` readback
+/// if the loose coupling ever produces audible glitches.
 pub(crate) fn negotiate_bus_arrangement(
     processor: &ComPtr<IAudioProcessor>,
     num_in_channels: u32,
     num_out_channels: u32,
+    num_output_busses: u32,
 ) -> Result<(), PluginHostError> {
     let out_arr = arrangement_for_channel_count(num_out_channels).ok_or_else(|| {
         PluginHostError::SetupFailed(format!(
@@ -78,7 +79,14 @@ pub(crate) fn negotiate_bus_arrangement(
             ))
         })?]
     };
-    let mut outputs: Vec<SpeakerArrangement> = vec![out_arr];
+
+    // Build the output arrangement array: main bus first, then one
+    // EMPTY slot per auxiliary bus. That tells the plugin "I'm
+    // describing all your outputs; the extras are disconnected".
+    let aux_count = num_output_busses.saturating_sub(1) as usize;
+    let mut outputs: Vec<SpeakerArrangement> = Vec::with_capacity(aux_count + 1);
+    outputs.push(out_arr);
+    outputs.extend(std::iter::repeat_n(EMPTY, aux_count));
 
     // SAFETY: `processor` is a live COM pointer; `inputs` and
     // `outputs` outlive the call.
@@ -95,17 +103,11 @@ pub(crate) fn negotiate_bus_arrangement(
         )
     };
     if result != kResultOk {
-        // Per VST3 spec, a non-OK return means the plugin declined
-        // our request and stays on its own preferred arrangement.
-        // That's not a fatal error — we already captured the plugin's
-        // bus topology at load time via `getBusInfo`, and any
-        // mismatch between what we requested and what the plugin
-        // actually uses shows up as a `validate_main_bus` rejection.
-        // Log so the mismatch is observable in traces, but proceed.
         warn!(
             result,
             num_in_channels,
             num_out_channels,
+            num_output_busses,
             "setBusArrangements declined — plugin keeps its default arrangement"
         );
     }
@@ -130,15 +132,17 @@ pub(crate) fn validate_main_bus(
     })?;
     if main.channels == 0 || main.channels > 2 {
         return Err(PluginHostError::SetupFailed(format!(
-            "plugin main output bus is {}-channel; 4B-3a supports only mono (1) or stereo (2) (surround/multi-out land in 4B-3b)",
+            "plugin main output bus is {}-channel; 4B-3a supports only mono (1) or stereo (2) (surround lands in a later sub-phase)",
             main.channels
         )));
     }
-    // Aux busses beyond the main bus are allowed in 4B-3a — we only
-    // actually render into the main bus (numOutputs=1) and leave
-    // auxiliaries disconnected. 4B-3b will wire them up. This
-    // matters for real-world plugins like ACE Bridge that expose
-    // several outs even though most hosts only feed the first.
+    // Multi-output plugins are accepted but their aux busses are
+    // described as EMPTY (disconnected) to both setBusArrangements
+    // and process(). The plugin sees a spec-compliant multi-bus
+    // topology but only renders into bus 0; 4B-3b will wire the aux
+    // busses into the caller's output. This unlocks real-world
+    // plugins like ACE Bridge that expose several outs without
+    // forcing callers through 4B-3b.
     Ok(main)
 }
 
@@ -363,11 +367,13 @@ mod tests {
     }
 
     #[test]
-    fn validate_main_bus_allows_aux_busses_past_main() {
-        // Multi-out plugins (e.g. ACE Bridge, drum racks) expose aux
-        // busses. 4B-3a only renders into the main bus, but we must
-        // not reject these plugins — 4B-3b will light up aux
-        // routing. Regression guard against over-strict validator.
+    fn validate_main_bus_accepts_multi_output_plugins() {
+        // Multi-out plugins (drum racks, stem splitters, ACE Bridge)
+        // are accepted: 4B-3a describes their aux busses as
+        // disconnected EMPTY busses to both `setBusArrangements`
+        // and `process()`, so strict plugins don't reject. Only the
+        // main bus is rendered; 4B-3b will route aux audio to the
+        // caller.
         let busses = vec![mk_bus(2), mk_bus(2), mk_bus(2)];
         assert!(validate_main_bus(&busses).is_ok());
     }
@@ -409,23 +415,21 @@ impl Vst3PluginInstance {
     /// changing sample rate or block size is supported — but only
     /// while the instance is *not* active (VST3 spec).
     pub fn setup_processing(&self, config: AudioConfig) -> Result<(), PluginHostError> {
-        // Re-validate: `AudioConfig` has public fields, so callers can
-        // construct one without going through `new()`. Guard the COM
-        // call regardless so we never pass garbage to the plugin.
+        // Pure-logic validation before we touch the plugin: bad
+        // `AudioConfig` or bad bus topology should produce a clean
+        // error without any COM side-effects.
         let _ = AudioConfig::new(config.sample_rate, config.block_size)?;
-
-        // Validate + negotiate the bus layout. 4B-3a supports a single
-        // main output bus of mono or stereo. Surround / multi-out
-        // land in 4B-3b.
         let main_out = validate_main_bus(&self.output_busses)?;
         let out_channels = main_out.channels;
-        // Input channel count is derived from the plugin's input bus
-        // topology: effect plugins get stereo/mono input, instruments
-        // skip the input bus entirely (numInputs=0 is handled in
-        // process_block).
         let in_channels = self.input_main_channels.unwrap_or(0);
-        negotiate_bus_arrangement(&self.processor, in_channels, out_channels)?;
 
+        // Take the processing-state lock before any COM call that
+        // mutates the plugin. setupProcessing / setBusArrangements
+        // are lifecycle operations and the VST3 spec requires them
+        // to be serialised with every other lifecycle + process
+        // call on the same instance. Taking the lock first also
+        // means the active-check below gates the plugin mutation,
+        // not just the state flip.
         let mut state = self.processing_state().lock().map_err(|_| {
             PluginHostError::RegistryUnavailable
         })?;
@@ -435,6 +439,17 @@ impl Vst3PluginInstance {
                 "cannot reconfigure while active — call deactivate() first".into(),
             ));
         }
+
+        // Now that we're holding the lock, negotiate the bus layout.
+        // 4B-3a supports a mono or stereo main bus; any aux busses
+        // past index 0 are described as disconnected.
+        let num_output_busses = self.output_busses.len() as u32;
+        negotiate_bus_arrangement(
+            &self.processor,
+            in_channels,
+            out_channels,
+            num_output_busses,
+        )?;
 
         let mut setup = ProcessSetup {
             processMode: ProcessModes_::kRealtime as i32,
@@ -690,13 +705,36 @@ impl Vst3PluginInstance {
             .map(|c| c.as_mut_ptr())
             .collect();
 
-        let mut output_bus = AudioBusBuffers {
+        // Build one AudioBusBuffers per output bus the plugin
+        // exposes. Bus 0 is real; aux busses past index 0 are
+        // disconnected (numChannels=0, channelBuffers32=null),
+        // matching the EMPTY SpeakerArrangement slots passed to
+        // setBusArrangements. This keeps strict plugins happy — the
+        // alternative (numOutputs=1 on a multi-out plugin) is
+        // technically malformed and will be rejected by spec-strict
+        // implementations. 4B-3b will replace the nulls with real
+        // aux buffers and actually return that audio.
+        let num_output_busses = self.output_busses.len().max(1);
+        let mut output_busses_data: Vec<AudioBusBuffers> =
+            Vec::with_capacity(num_output_busses);
+        output_busses_data.push(AudioBusBuffers {
             numChannels: output_main_channels as i32,
             silenceFlags: 0,
             __field0: AudioBusBuffers__type0 {
                 channelBuffers32: output_ptrs.as_mut_ptr(),
             },
+        });
+        let empty_bus = AudioBusBuffers {
+            numChannels: 0,
+            silenceFlags: 0,
+            __field0: AudioBusBuffers__type0 {
+                channelBuffers32: ptr::null_mut(),
+            },
         };
+        output_busses_data.extend(std::iter::repeat_n(
+            empty_bus,
+            num_output_busses.saturating_sub(1),
+        ));
 
         // Drain any queued MIDI events, filter to the current block's
         // window, sort by `sampleOffset`, then convert into VST3
@@ -779,13 +817,13 @@ impl Vst3PluginInstance {
             symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
             numSamples: num_samples as i32,
             numInputs: if is_instrument { 0 } else { 1 },
-            numOutputs: 1,
+            numOutputs: output_busses_data.len() as i32,
             inputs: if is_instrument {
                 ptr::null_mut()
             } else {
                 &mut input_bus
             },
-            outputs: &mut output_bus,
+            outputs: output_busses_data.as_mut_ptr(),
             inputParameterChanges: input_param_changes_ptr,
             outputParameterChanges: ptr::null_mut(),
             inputEvents: input_events_ptr,

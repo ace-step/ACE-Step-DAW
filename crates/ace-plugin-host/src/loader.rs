@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::Mutex;
 
+use crossbeam::queue::SegQueue;
 use libloading::{Library, Symbol};
 use tracing::{debug, info, warn};
 use vst3::ComPtr;
@@ -32,6 +33,7 @@ use vst3::Steinberg::{
 use crate::audio::ProcessingState;
 use crate::error::PluginHostError;
 use crate::host_impl::AceHostApplication;
+use crate::midi::MidiEvent;
 use crate::types::{InstanceInfo, OutputBusInfo, ParamInfo};
 
 /// A loaded VST3 plugin instance + its COM handles. The `_library`
@@ -50,10 +52,26 @@ pub struct Vst3PluginInstance {
     /// 4B-1 is still stereo-only; bus-arrangement negotiation lands
     /// in 4B-3.
     pub output_busses: Vec<OutputBusInfo>,
+    /// Channel count of the main audio input bus, or `None` for pure
+    /// instruments (synths / samplers that expose no audio input).
+    /// Captured at load time so `process_block` can choose between
+    /// the effect path (`numInputs: 1` with a stereo input bus) and
+    /// the instrument path (`numInputs: 0`, `inputs: null`). VST3
+    /// plugins with no audio input bus reject calls with a non-zero
+    /// `numInputs`, so this distinction is load-bearing for synths.
+    pub input_main_channels: Option<u32>,
     /// Processing lifecycle state. Guarded by a `Mutex` so the VST3
     /// spec's serialisation requirement for `setupProcessing` /
     /// `setActive` / `process` is enforced at our layer.
     processing_state: Mutex<ProcessingState>,
+    /// Lock-free queue of pending MIDI events. Producers push from
+    /// any thread (sequencer callback, MIDI-learn handler, test);
+    /// `process_block` drains it, converts to VST3 `Event`s, and
+    /// hands them to the plugin via `IEventList`. Events queued
+    /// while the plugin is not processing accumulate and fire on
+    /// the next `process_block` call — that's how DAWs typically
+    /// handle latched notes during transport start.
+    midi_queue: SegQueue<MidiEvent>,
 }
 
 impl Vst3PluginInstance {
@@ -62,6 +80,48 @@ impl Vst3PluginInstance {
     /// duplicating state here.
     pub(crate) fn processing_state(&self) -> &Mutex<ProcessingState> {
         &self.processing_state
+    }
+
+    /// Queue a batch of MIDI events to be delivered on the next
+    /// `process_block` call. Thread-safe: any producer (sequencer,
+    /// MIDI-learn, test harness) may push concurrently.
+    ///
+    /// Ordering contract:
+    /// - Events are enqueued as received and are not de-duplicated.
+    /// - `process_block` **sorts** the drained events by
+    ///   `sample_offset` before handing them to the plugin, so
+    ///   per-block timing is deterministic regardless of
+    ///   cross-producer interleaving.
+    /// - For events with *identical* `sample_offset` pushed from
+    ///   different threads, the tie-break follows `SegQueue`'s
+    ///   internal ordering (neither strictly FIFO nor LIFO across
+    ///   threads). Callers that need a deterministic tie-break
+    ///   should stamp a monotonic counter into the high bits of
+    ///   `sample_offset` themselves.
+    pub fn queue_midi(&self, events: &[MidiEvent]) {
+        for e in events {
+            self.midi_queue.push(*e);
+        }
+    }
+
+    pub(crate) fn drain_midi(&self) -> Vec<MidiEvent> {
+        let mut out = Vec::new();
+        while let Some(e) = self.midi_queue.pop() {
+            out.push(e);
+        }
+        out
+    }
+
+    #[cfg(test)]
+    pub(crate) fn midi_queue_len(&self) -> usize {
+        self.midi_queue.len()
+    }
+
+    /// True when the plugin exposes no audio input bus — i.e. a
+    /// synth, sampler, or MIDI-FX. `process_block` sends
+    /// `numInputs: 0` with a null `inputs` pointer for these.
+    pub fn is_instrument(&self) -> bool {
+        self.input_main_channels.is_none()
     }
 }
 
@@ -245,12 +305,14 @@ pub unsafe fn load_plugin(
     // 9. Snapshot parameter + bus + latency data for the UI.
     let parameters = extract_parameters(&controller);
     let output_busses = extract_output_busses(&component);
+    let input_main_channels = extract_main_input_channels(&component);
     let latency_samples = processor.getLatencySamples();
     let tail_samples = processor.getTailSamples();
 
     info!(
         params = parameters.len(),
         output_busses = output_busses.len(),
+        input_main = ?input_main_channels,
         latency = latency_samples,
         tail = tail_samples,
         "plugin loaded"
@@ -275,7 +337,9 @@ pub unsafe fn load_plugin(
         plugin_uid: uid_str,
         bundle_path: bundle_path.to_path_buf(),
         output_busses: info.output_busses.clone(),
+        input_main_channels,
         processing_state: Mutex::new(ProcessingState::default()),
+        midi_queue: SegQueue::new(),
     };
 
     Ok((instance, info))
@@ -314,6 +378,37 @@ fn extract_parameters(controller: &Option<ComPtr<IEditController>>) -> Vec<Param
     }
 
     params
+}
+
+/// Channel count of the main audio *input* bus, or `None` if the
+/// plugin exposes no audio input (pure instrument case). Only the
+/// main bus (index 0) is returned in 4B-2a — sidechain inputs are a
+/// separate concern tracked by a later sub-phase.
+fn extract_main_input_channels(component: &ComPtr<IComponent>) -> Option<u32> {
+    let num_inputs = unsafe {
+        component.getBusCount(
+            MediaTypes_::kAudio as i32,
+            BusDirections_::kInput as i32,
+        )
+    };
+    if num_inputs <= 0 {
+        return None;
+    }
+
+    let mut info: BusInfo = unsafe { std::mem::zeroed() };
+    let result = unsafe {
+        component.getBusInfo(
+            MediaTypes_::kAudio as i32,
+            BusDirections_::kInput as i32,
+            0,
+            &mut info,
+        )
+    };
+    if result != kResultOk {
+        warn!(result, "getBusInfo(input,0) failed; treating plugin as instrument");
+        return None;
+    }
+    Some(info.channelCount as u32)
 }
 
 fn extract_output_busses(component: &ComPtr<IComponent>) -> Vec<OutputBusInfo> {
@@ -395,6 +490,56 @@ pub fn format_uid(uid: &[i8; 16]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::midi::MidiEvent;
+
+    #[test]
+    fn midi_queue_accumulates_and_drains() {
+        // Build an instance by hand-rolling via the smoke test path is
+        // not possible without COM — instead, use the real bundle-load
+        // path only if available; otherwise skip.
+        //
+        // This asserts only that every queued event ends up in the
+        // drained vector. Order across multiple `queue_midi` calls
+        // on a single thread happens to be FIFO with `SegQueue`,
+        // but that's not part of the `queue_midi` contract (see its
+        // docs) — `process_block` sorts by `sample_offset` before
+        // handing events to the plugin, so the test checks the
+        // contract, not the incidental FIFO.
+        let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
+        let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
+            eprintln!("skipping: no known VST3 bundle installed");
+            return;
+        };
+        let (instance, _) = match unsafe { load_plugin(path, "midi-queue-test") } {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("load failed (environment-specific, not fatal): {e}");
+                return;
+            }
+        };
+
+        assert_eq!(instance.midi_queue_len(), 0);
+
+        instance.queue_midi(&[
+            MidiEvent::note_on(0, 60, 100, 0),
+            MidiEvent::note_on(1, 72, 80, 128),
+        ]);
+        instance.queue_midi(&[MidiEvent::note_off(0, 60, 0, 256)]);
+        assert_eq!(instance.midi_queue_len(), 3);
+
+        let mut drained = instance.drain_midi();
+        assert_eq!(drained.len(), 3);
+        // Sort by sample_offset before comparing — that matches how
+        // the plugin actually sees the events via process_block.
+        drained.sort_by_key(|e| e.sample_offset);
+        assert_eq!(drained[0].sample_offset, 0);
+        assert_eq!(drained[0].data1, 60);
+        assert_eq!(drained[1].sample_offset, 128);
+        assert_eq!(drained[1].data1, 72);
+        assert_eq!(drained[2].sample_offset, 256);
+        assert_eq!(drained[2].data1, 60);
+        assert_eq!(instance.midi_queue_len(), 0);
+    }
 
     #[test]
     fn bundle_dylib_path_returns_none_for_missing_bundle() {

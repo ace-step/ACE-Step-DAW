@@ -9,8 +9,9 @@
 //! Scope is deliberately narrow:
 //!
 //! - Stereo-only main bus I/O (multi-output busses land in 4B-3)
-//! - Empty `inputEvents` / `inputParameterChanges` (MIDI + automation
-//!   land in 4B-2)
+//! - 4B-2a adds MIDI note-on / note-off via `IEventList`;
+//!   `inputParameterChanges` stays null until 4B-2b ships the
+//!   host-side `IParameterChanges` wrapper.
 //! - No sidechain, no PDC, no sandbox (later sub-phases of #1524)
 //!
 //! Ported from `companion/src/audio_thread.rs::process_vst3_multi`,
@@ -23,13 +24,14 @@ use std::ptr;
 
 use tracing::warn;
 use vst3::Steinberg::Vst::{
-    AudioBusBuffers, AudioBusBuffers__type0, IAudioProcessorTrait, IComponentTrait, ProcessData,
-    ProcessModes_, ProcessSetup, SymbolicSampleSizes_,
+    AudioBusBuffers, AudioBusBuffers__type0, IAudioProcessorTrait, IComponentTrait, IEventList,
+    ProcessData, ProcessModes_, ProcessSetup, SymbolicSampleSizes_,
 };
 use vst3::Steinberg::kResultOk;
 
 use crate::error::PluginHostError;
 use crate::loader::Vst3PluginInstance;
+use crate::midi::{midi_to_vst3_event, EventList};
 use crate::types::OutputBusInfo;
 
 /// Pure-logic guard that `setup_processing` delegates to. Extracted
@@ -488,14 +490,21 @@ impl Vst3PluginInstance {
         channels: u32,
         samples: u32,
     ) -> Result<Vec<f32>, PluginHostError> {
-        // 4B-1 is stereo-only — mono input would require
-        // `IAudioProcessor::setBusArrangements` to negotiate a mono
-        // main input, which we don't call yet, so most stereo plugins
-        // would either reject the block or read out-of-bounds. Bus
-        // negotiation lands in 4B-3.
-        if channels != 2 {
+        // Branch on the plugin's audio-input-bus topology, captured at
+        // load time:
+        //
+        // - Pure instrument (no audio input bus): ignore `channels`
+        //   and `input`; send `numInputs: 0` + `inputs: null`. VST3
+        //   plugins with no audio input will reject a non-zero
+        //   `numInputs`, so this distinction is load-bearing for
+        //   synths / samplers / MIDI-FX.
+        // - Effect (has audio input bus): require `channels == 2`,
+        //   stereo main input. Mono / surround support lands in 4B-3
+        //   alongside `setBusArrangements` negotiation.
+        let is_instrument = self.is_instrument();
+        if !is_instrument && channels != 2 {
             return Err(PluginHostError::InvalidLifecycle(format!(
-                "process_block only supports stereo (channels == 2) in 4B-1; got {channels} — bus-arrangement negotiation lands in 4B-3"
+                "process_block only supports stereo (channels == 2) for effect plugins in 4B-2a; got {channels} — bus-arrangement negotiation lands in 4B-3"
             )));
         }
 
@@ -524,39 +533,51 @@ impl Vst3PluginInstance {
             }
         }
 
-        let num_channels = channels as usize;
         let num_samples = samples as usize;
         let output_stereo = 2usize;
-        let expected_input_len = num_channels * num_samples;
 
-        if input.len() < expected_input_len {
-            return Err(PluginHostError::InvalidLifecycle(format!(
-                "input buffer too small: have {} interleaved f32 elements, need {} ({} channels × {} samples)",
-                input.len(),
-                expected_input_len,
-                num_channels,
-                num_samples
-            )));
-        }
-
-        // De-interleave input into per-channel buffers.
-        let mut input_channels: Vec<Vec<f32>> = vec![vec![0.0f32; num_samples]; num_channels];
-        for s in 0..num_samples {
-            for ch in 0..num_channels {
-                input_channels[ch][s] = input[s * num_channels + ch];
+        // Input-side setup — only validate + de-interleave for effect
+        // plugins. Instruments get `numInputs: 0` below and never
+        // dereference the input buffers.
+        let input_channels: Vec<Vec<f32>> = if is_instrument {
+            Vec::new()
+        } else {
+            let num_channels = channels as usize;
+            let expected_input_len = num_channels * num_samples;
+            if input.len() < expected_input_len {
+                return Err(PluginHostError::InvalidLifecycle(format!(
+                    "input buffer too small: have {} interleaved f32 elements, need {} ({} channels × {} samples)",
+                    input.len(),
+                    expected_input_len,
+                    num_channels,
+                    num_samples
+                )));
             }
-        }
+            let mut channels_buf: Vec<Vec<f32>> =
+                vec![vec![0.0f32; num_samples]; num_channels];
+            for s in 0..num_samples {
+                for ch in 0..num_channels {
+                    channels_buf[ch][s] = input[s * num_channels + ch];
+                }
+            }
+            channels_buf
+        };
 
-        let mut input_ptrs: Vec<*mut f32> = input_channels
+        let mut input_channels_owned = input_channels;
+        let mut input_ptrs: Vec<*mut f32> = input_channels_owned
             .iter_mut()
             .map(|c| c.as_mut_ptr())
             .collect();
 
         let mut input_bus = AudioBusBuffers {
-            numChannels: num_channels as i32,
+            numChannels: if is_instrument { 0 } else { channels as i32 },
             silenceFlags: 0,
             __field0: AudioBusBuffers__type0 {
-                channelBuffers32: input_ptrs.as_mut_ptr(),
+                channelBuffers32: if is_instrument {
+                    ptr::null_mut()
+                } else {
+                    input_ptrs.as_mut_ptr()
+                },
             },
         };
 
@@ -575,17 +596,62 @@ impl Vst3PluginInstance {
             },
         };
 
+        // Drain any queued MIDI events, filter to the current block's
+        // window, sort by `sampleOffset`, then convert into VST3
+        // `Event`s. Three things worth calling out:
+        //
+        // 1. **Window filter**: events with `sample_offset >=
+        //    num_samples` belong to a later block — forwarding them
+        //    would cause plugins to schedule past the end of the
+        //    current buffer, producing incorrect timing or OOB
+        //    writes. The companion app didn't do this because its
+        //    block boundaries were always exactly `num_samples`; our
+        //    Phase 5 integration will hand us blocks whose size
+        //    varies with the audio callback.
+        // 2. **Sort**: VST3 plugins iterate the host's `IEventList`
+        //    forward by index and do not re-sort, so an out-of-order
+        //    list can mis-fire notes. The `SegQueue` has no
+        //    cross-producer ordering guarantees, so we sort here to
+        //    make block-local timing deterministic.
+        // 3. **Unsupported types**: CC / pitchbend / sysex (4B-2a
+        //    scope) are silently dropped by `midi_to_vst3_event`.
+        //
+        // `event_list` must outlive `process_data` because the plugin
+        // may read from the COM pointer during `process()`.
+        let mut pending = self.drain_midi();
+        let block_samples = samples;
+        pending.retain(|e| e.sample_offset < block_samples);
+        pending.sort_by_key(|e| e.sample_offset);
+        let vst3_events: Vec<_> = pending
+            .iter()
+            .filter_map(midi_to_vst3_event)
+            .collect();
+        let event_list = if vst3_events.is_empty() {
+            None
+        } else {
+            Some(EventList::with_events(vst3_events))
+        };
+        let input_events_ptr = event_list
+            .as_ref()
+            .and_then(|el| el.to_com_ptr::<IEventList>())
+            .map(|p| p.as_ptr())
+            .unwrap_or(ptr::null_mut());
+
         let mut process_data = ProcessData {
             processMode: ProcessModes_::kRealtime as i32,
             symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
             numSamples: num_samples as i32,
-            numInputs: 1,
+            numInputs: if is_instrument { 0 } else { 1 },
             numOutputs: 1,
-            inputs: &mut input_bus,
+            inputs: if is_instrument {
+                ptr::null_mut()
+            } else {
+                &mut input_bus
+            },
             outputs: &mut output_bus,
             inputParameterChanges: ptr::null_mut(),
             outputParameterChanges: ptr::null_mut(),
-            inputEvents: ptr::null_mut(),
+            inputEvents: input_events_ptr,
             outputEvents: ptr::null_mut(),
             processContext: ptr::null_mut(),
         };
@@ -594,7 +660,8 @@ impl Vst3PluginInstance {
         // `Vec<f32>`s outlive the call; the pointer arrays in
         // `input_ptrs` / `output_ptrs` are heap-stable for the duration
         // of `process()` because their owning `Vec`s are not modified
-        // between construction and this call.
+        // between construction and this call. `event_list` lives in
+        // this function's stack frame and outlives `process_data`.
         let result = unsafe { self.processor.process(&mut process_data) };
         if result != kResultOk {
             warn!(
@@ -612,7 +679,8 @@ impl Vst3PluginInstance {
                 out[s * output_stereo + ch] = output_channels[ch][s];
             }
         }
-        // `state` guard dropped here — after process() returns.
+        // `state` guard + `event_list` dropped here — after process().
+        drop(event_list);
         drop(state);
         Ok(out)
     }
@@ -625,6 +693,7 @@ impl Vst3PluginInstance {
 #[cfg(test)]
 mod smoke {
     use super::*;
+    use crate::midi::MidiEvent;
     use std::path::Path;
 
     /// Runs the full lifecycle against a real plugin when one is
@@ -670,5 +739,48 @@ mod smoke {
         // process_block after deactivate errors.
         let err = instance.process_block(&input, 2, 512).unwrap_err();
         assert!(matches!(err, PluginHostError::InvalidLifecycle(_)));
+    }
+
+    /// Queues a MIDI note-on / note-off pair and runs one block.
+    /// The plugin under test (ACE Bridge) is primarily an audio
+    /// effect, so we can't assert on output semantics — but we can
+    /// assert that the `process()` call succeeded with `inputEvents`
+    /// populated, that the queue was drained, and no COM error was
+    /// returned. A future follow-up could add a sampler smoke plugin
+    /// for fuller MIDI-in assertions.
+    #[test]
+    fn midi_queued_events_are_drained_through_process_block() {
+        let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
+        let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
+            eprintln!("skipping: no known VST3 bundle installed");
+            return;
+        };
+
+        let (instance, _) = match unsafe { crate::loader::load_plugin(path, "midi-smoke") } {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("load failed (environment-specific, not fatal): {e}");
+                return;
+            }
+        };
+
+        instance
+            .setup_processing(AudioConfig::new(48000.0, 512).unwrap())
+            .unwrap();
+        instance.activate().unwrap();
+
+        instance.queue_midi(&[
+            MidiEvent::note_on(0, 60, 100, 0),
+            MidiEvent::note_off(0, 60, 0, 256),
+        ]);
+        assert_eq!(instance.midi_queue_len(), 2);
+
+        let input = vec![0.0f32; 2 * 512];
+        let out = instance.process_block(&input, 2, 512).unwrap();
+        assert_eq!(out.len(), 2 * 512);
+        // Queue should be fully drained after one process_block.
+        assert_eq!(instance.midi_queue_len(), 0);
+
+        instance.deactivate().unwrap();
     }
 }

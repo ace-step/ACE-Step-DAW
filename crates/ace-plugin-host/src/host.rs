@@ -15,6 +15,7 @@ use crate::audio::AudioConfig;
 use crate::error::PluginHostError;
 use crate::host_impl::{HostParamChange, ParamChangeCollector};
 use crate::loader::{load_plugin, Vst3PluginInstance};
+use crate::midi::MidiEvent;
 use crate::types::InstanceInfo;
 
 /// Process-wide plugin instance registry. One live `PluginHost` is
@@ -137,6 +138,19 @@ impl PluginHost {
             .process_block(input, channels, samples)
     }
 
+    /// Queue MIDI events for delivery on the instance's next
+    /// `process_block` call. The queue is lock-free so multiple
+    /// producers (sequencer thread, MIDI-learn handler, test) can
+    /// push concurrently without blocking each other.
+    pub fn queue_instance_midi(
+        &self,
+        instance_id: &str,
+        events: &[MidiEvent],
+    ) -> Result<(), PluginHostError> {
+        self.lookup(instance_id)?.queue_midi(events);
+        Ok(())
+    }
+
     /// Drop a live instance. Releasing the only reference to its
     /// `Vst3PluginInstance` unloads the dylib. Unknown instance IDs
     /// produce an error so callers notice stale handles.
@@ -224,6 +238,15 @@ mod tests {
         let host = PluginHost::new();
         let err = host
             .process_instance_block("ghost", &[0.0; 1024], 2, 512)
+            .unwrap_err();
+        assert!(matches!(err, PluginHostError::UnknownInstance(_)));
+    }
+
+    #[test]
+    fn queue_midi_unknown_instance_errors_out() {
+        let host = PluginHost::new();
+        let err = host
+            .queue_instance_midi("ghost", &[MidiEvent::note_on(0, 60, 100, 0)])
             .unwrap_err();
         assert!(matches!(err, PluginHostError::UnknownInstance(_)));
     }

@@ -19,6 +19,7 @@
 //! in `src-tauri/` and depends on this crate through plain function
 //! calls, keeping the host logic unit-testable without a Tauri runtime.
 
+pub mod arrangement;
 pub mod audio;
 pub mod error;
 pub mod host;

@@ -34,7 +34,10 @@ pub mod types;
 pub use audio::{AudioConfig, OutputBusConfig, ProcessingState};
 pub use error::PluginHostError;
 pub use host::PluginHost;
-pub use host_impl::{AceComponentHandler, AceHostApplication, HostParamChange, ParamChangeCollector};
+pub use host_impl::{
+    AceComponentHandler, AceHostApplication, ComponentRestartCollector, HostComponentRestart,
+    HostParamChange, ParamChangeCollector, RESTART_LATENCY_CHANGED,
+};
 pub use loader::{load_plugin, Vst3PluginInstance};
 pub use midi::{midi_to_vst3_event, EventList, MidiEvent};
 pub use params::{ParamPoint, ParamValueQueue, ParameterChanges};

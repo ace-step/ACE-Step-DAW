@@ -30,9 +30,13 @@ use vst3::Steinberg::{
     PFactoryInfo,
 };
 
+use vst3::ComWrapper;
+
 use crate::audio::ProcessingState;
 use crate::error::PluginHostError;
-use crate::host_impl::AceHostApplication;
+use crate::host_impl::{
+    AceComponentHandler, AceHostApplication, ComponentRestartCollector, ParamChangeCollector,
+};
 use crate::midi::MidiEvent;
 use crate::params::ParamPoint;
 use crate::stream::MemoryStream;
@@ -46,6 +50,13 @@ pub struct Vst3PluginInstance {
     pub component: ComPtr<IComponent>,
     pub processor: ComPtr<IAudioProcessor>,
     pub controller: Option<ComPtr<IEditController>>,
+    /// Live `AceComponentHandler` wired into the plugin's controller
+    /// via `IEditController::setComponentHandler`. The `ComWrapper`
+    /// holds the handler's refcount — dropping the instance releases
+    /// the handler reference, which is what VST3 expects on teardown.
+    /// `None` when the plugin has no controller or setting the
+    /// handler was declined.
+    _component_handler: Option<ComWrapper<AceComponentHandler>>,
     pub instance_id: String,
     pub plugin_uid: String,
     pub bundle_path: PathBuf,
@@ -228,6 +239,20 @@ impl Vst3PluginInstance {
     #[cfg(test)]
     pub(crate) fn param_queue_len(&self) -> usize {
         self.param_queue.len()
+    }
+
+    /// Re-query the plugin's current processing latency (in samples).
+    /// Plugins can change this in response to parameter edits —
+    /// oversampling toggles, lookahead window changes — and notify
+    /// the host via `IComponentHandler::restartComponent(kLatencyChanged)`.
+    /// Consumers drain the restart collector and call this to refresh
+    /// their cached latency.
+    pub fn current_latency_samples(&self) -> u32 {
+        // SAFETY: `self.processor` is a live COM pointer; the
+        // `getLatencySamples` call is const on the plugin's side
+        // (doesn't mutate state) so it's safe to call without
+        // holding the lifecycle mutex.
+        unsafe { self.processor.getLatencySamples() }
     }
 
     /// Serialise the plugin's state to an opaque byte blob. Matches
@@ -510,6 +535,26 @@ pub unsafe fn load_plugin(
     bundle_path: &Path,
     instance_id: &str,
 ) -> Result<(Vst3PluginInstance, InstanceInfo), PluginHostError> {
+    load_plugin_with_collectors(bundle_path, instance_id, None, None)
+}
+
+/// Full-featured loader: same contract as `load_plugin` but wires
+/// the plugin's `IEditController::setComponentHandler` to an
+/// `AceComponentHandler` backed by the supplied collectors. The
+/// handler forwards plugin-side edits (performEdit) to
+/// `params`, and topology-change notifications (restartComponent) to
+/// `restarts`. Pass `None` for either collector to skip that wiring
+/// — the returned instance still works, just without the
+/// corresponding events surfacing.
+///
+/// # Safety
+/// Same as `load_plugin`.
+pub unsafe fn load_plugin_with_collectors(
+    bundle_path: &Path,
+    instance_id: &str,
+    params: Option<&ParamChangeCollector>,
+    restarts: Option<&ComponentRestartCollector>,
+) -> Result<(Vst3PluginInstance, InstanceInfo), PluginHostError> {
     // 1. Resolve + dlopen the dylib.
     let dylib_path = bundle_dylib_path(bundle_path).ok_or_else(|| {
         PluginHostError::InvalidBundle(format!(
@@ -614,6 +659,39 @@ pub unsafe fn load_plugin(
         debug!("IEditController not exposed via IComponent");
     }
 
+    // 8b. Wire our component handler into the controller so
+    //     plugin-side parameter edits and topology changes (e.g.
+    //     latency) surface through the shared collectors. Handler
+    //     lives in the instance for as long as the plugin does.
+    let component_handler = controller.as_ref().and_then(|ctrl| {
+        // Use collectors if provided; otherwise fall back to empty
+        // ones so the handler still implements the trait correctly
+        // — plugins never see a null handler pointer that way.
+        let params_ref = params.cloned().unwrap_or_default();
+        let restarts_ref = restarts.cloned().unwrap_or_default();
+        let handler = AceComponentHandler::with_collectors(
+            instance_id.to_string(),
+            &params_ref,
+            &restarts_ref,
+        );
+        let handler_ptr = handler
+            .to_com_ptr::<vst3::Steinberg::Vst::IComponentHandler>()
+            .map(|p| p.as_ptr());
+        if let Some(ptr) = handler_ptr {
+            // SAFETY: `ctrl` is a live ComPtr; `ptr` refers to the
+            // ComWrapper we hold and outlives this call.
+            let r = ctrl.setComponentHandler(ptr);
+            if r != kResultOk {
+                warn!(result = r, "setComponentHandler declined — plugin-side edits + restarts will not surface");
+                return None;
+            }
+            Some(handler)
+        } else {
+            warn!("AceComponentHandler could not expose IComponentHandler — plugin-side edits will not surface");
+            None
+        }
+    });
+
     // 9. Snapshot parameter + bus + latency data for the UI.
     let parameters = extract_parameters(&controller);
     let output_busses = extract_output_busses(&component);
@@ -645,6 +723,7 @@ pub unsafe fn load_plugin(
         component,
         processor,
         controller,
+        _component_handler: component_handler,
         instance_id: instance_id.to_string(),
         plugin_uid: uid_str,
         bundle_path: bundle_path.to_path_buf(),

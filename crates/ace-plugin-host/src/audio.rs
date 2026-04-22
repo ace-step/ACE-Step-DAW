@@ -596,17 +596,31 @@ impl Vst3PluginInstance {
             },
         };
 
-        // Drain any queued MIDI events, sort by sampleOffset, then
-        // convert into VST3 `Event`s. VST3 plugins iterate the host's
-        // `IEventList` forward by index and do not re-sort, so an
-        // out-of-order list can mis-fire notes or terminate them
-        // prematurely — sorting here makes block-local timing
-        // deterministic regardless of queue-insertion order.
-        // Unsupported message types (CC, pitchbend, sysex in 4B-2a)
-        // are silently dropped by the converter. `event_list` must
-        // outlive `process_data` because the plugin may read from the
-        // COM pointer during `process()`.
+        // Drain any queued MIDI events, filter to the current block's
+        // window, sort by `sampleOffset`, then convert into VST3
+        // `Event`s. Three things worth calling out:
+        //
+        // 1. **Window filter**: events with `sample_offset >=
+        //    num_samples` belong to a later block — forwarding them
+        //    would cause plugins to schedule past the end of the
+        //    current buffer, producing incorrect timing or OOB
+        //    writes. The companion app didn't do this because its
+        //    block boundaries were always exactly `num_samples`; our
+        //    Phase 5 integration will hand us blocks whose size
+        //    varies with the audio callback.
+        // 2. **Sort**: VST3 plugins iterate the host's `IEventList`
+        //    forward by index and do not re-sort, so an out-of-order
+        //    list can mis-fire notes. The `SegQueue` has no
+        //    cross-producer ordering guarantees, so we sort here to
+        //    make block-local timing deterministic.
+        // 3. **Unsupported types**: CC / pitchbend / sysex (4B-2a
+        //    scope) are silently dropped by `midi_to_vst3_event`.
+        //
+        // `event_list` must outlive `process_data` because the plugin
+        // may read from the COM pointer during `process()`.
         let mut pending = self.drain_midi();
+        let block_samples = samples;
+        pending.retain(|e| e.sample_offset < block_samples);
         pending.sort_by_key(|e| e.sample_offset);
         let vst3_events: Vec<_> = pending
             .iter()

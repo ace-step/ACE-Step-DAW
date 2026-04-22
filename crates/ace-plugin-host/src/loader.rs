@@ -86,10 +86,18 @@ impl Vst3PluginInstance {
     /// `process_block` call. Thread-safe: any producer (sequencer,
     /// MIDI-learn, test harness) may push concurrently.
     ///
-    /// Events are not de-duplicated or re-ordered here — VST3
-    /// plugins sort by `sampleOffset` themselves, and the wall-clock
-    /// arrival order is what determines which of two identical
-    /// offsets wins, which matches DAW expectations.
+    /// Ordering contract:
+    /// - Events are enqueued as received and are not de-duplicated.
+    /// - `process_block` **sorts** the drained events by
+    ///   `sample_offset` before handing them to the plugin, so
+    ///   per-block timing is deterministic regardless of
+    ///   cross-producer interleaving.
+    /// - For events with *identical* `sample_offset` pushed from
+    ///   different threads, the tie-break follows `SegQueue`'s
+    ///   internal ordering (neither strictly FIFO nor LIFO across
+    ///   threads). Callers that need a deterministic tie-break
+    ///   should stamp a monotonic counter into the high bits of
+    ///   `sample_offset` themselves.
     pub fn queue_midi(&self, events: &[MidiEvent]) {
         for e in events {
             self.midi_queue.push(*e);
@@ -485,10 +493,18 @@ mod tests {
     use crate::midi::MidiEvent;
 
     #[test]
-    fn midi_queue_accumulates_and_drains_in_fifo_order() {
+    fn midi_queue_accumulates_and_drains() {
         // Build an instance by hand-rolling via the smoke test path is
         // not possible without COM — instead, use the real bundle-load
         // path only if available; otherwise skip.
+        //
+        // This asserts only that every queued event ends up in the
+        // drained vector. Order across multiple `queue_midi` calls
+        // on a single thread happens to be FIFO with `SegQueue`,
+        // but that's not part of the `queue_midi` contract (see its
+        // docs) — `process_block` sorts by `sample_offset` before
+        // handing events to the plugin, so the test checks the
+        // contract, not the incidental FIFO.
         let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
         let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
             eprintln!("skipping: no known VST3 bundle installed");
@@ -511,10 +527,16 @@ mod tests {
         instance.queue_midi(&[MidiEvent::note_off(0, 60, 0, 256)]);
         assert_eq!(instance.midi_queue_len(), 3);
 
-        let drained = instance.drain_midi();
+        let mut drained = instance.drain_midi();
         assert_eq!(drained.len(), 3);
+        // Sort by sample_offset before comparing — that matches how
+        // the plugin actually sees the events via process_block.
+        drained.sort_by_key(|e| e.sample_offset);
+        assert_eq!(drained[0].sample_offset, 0);
         assert_eq!(drained[0].data1, 60);
+        assert_eq!(drained[1].sample_offset, 128);
         assert_eq!(drained[1].data1, 72);
+        assert_eq!(drained[2].sample_offset, 256);
         assert_eq!(drained[2].data1, 60);
         assert_eq!(instance.midi_queue_len(), 0);
     }

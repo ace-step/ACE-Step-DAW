@@ -74,6 +74,12 @@ pub fn midi_to_vst3_event(midi: &MidiEvent) -> Option<Event> {
     let message_type = midi.status & 0xF0;
     let channel = (midi.status & 0x0F) as i16;
 
+    // VST3's `Event::sampleOffset` is `i32`. Our input is `u32`, so
+    // any value past `i32::MAX` would wrap to negative — nonsensical
+    // as a block-relative offset and a source of plugin-side OOB
+    // scheduling bugs. Drop the event outright if it can't round-trip.
+    let sample_offset = i32::try_from(midi.sample_offset).ok()?;
+
     match message_type {
         0x90 => {
             // Note-on with velocity 0 is treated as note-off per the
@@ -84,14 +90,14 @@ pub fn midi_to_vst3_event(midi: &MidiEvent) -> Option<Event> {
                     channel,
                     midi.data1 as i16,
                     0.0,
-                    midi.sample_offset as i32,
+                    sample_offset,
                 ))
             } else {
                 Some(make_note_on_event(
                     channel,
                     midi.data1 as i16,
                     midi.data2 as f32 / 127.0,
-                    midi.sample_offset as i32,
+                    sample_offset,
                 ))
             }
         }
@@ -99,7 +105,7 @@ pub fn midi_to_vst3_event(midi: &MidiEvent) -> Option<Event> {
             channel,
             midi.data1 as i16,
             midi.data2 as f32 / 127.0,
-            midi.sample_offset as i32,
+            sample_offset,
         )),
         _ => None,
     }
@@ -269,6 +275,31 @@ mod tests {
         let midi = MidiEvent::note_on(0, 60, 0, 0);
         let event = midi_to_vst3_event(&midi).expect("velocity-0 note-on should convert");
         assert_eq!(event.r#type, EventTypes_::kNoteOffEvent as u16);
+    }
+
+    #[test]
+    fn midi_to_vst3_drops_events_with_sample_offset_past_i32_max() {
+        // u32 > i32::MAX would wrap to negative when cast — drop it
+        // rather than scheduling at a nonsensical offset.
+        let bad = MidiEvent {
+            status: 0x90,
+            data1: 60,
+            data2: 100,
+            sample_offset: (i32::MAX as u32) + 1,
+        };
+        assert!(midi_to_vst3_event(&bad).is_none());
+    }
+
+    #[test]
+    fn midi_to_vst3_accepts_sample_offset_at_i32_max() {
+        let ok = MidiEvent {
+            status: 0x90,
+            data1: 60,
+            data2: 100,
+            sample_offset: i32::MAX as u32,
+        };
+        let event = midi_to_vst3_event(&ok).expect("i32::MAX should round-trip");
+        assert_eq!(event.sampleOffset, i32::MAX);
     }
 
     #[test]

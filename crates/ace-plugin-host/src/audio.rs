@@ -52,6 +52,9 @@ impl Default for AudioConfig {
 impl AudioConfig {
     /// Build a config, rejecting obviously-broken values early so
     /// plugins don't see zero sample rates or absurd block sizes.
+    /// `block_size` is additionally bounded by `i32::MAX` because
+    /// VST3's `ProcessSetup::maxSamplesPerBlock` is a signed 32-bit
+    /// integer — larger values would silently overflow to negative.
     pub fn new(sample_rate: f64, block_size: u32) -> Result<Self, PluginHostError> {
         if !sample_rate.is_finite() || sample_rate <= 0.0 {
             return Err(PluginHostError::SetupFailed(format!(
@@ -62,6 +65,11 @@ impl AudioConfig {
             return Err(PluginHostError::SetupFailed(
                 "block_size must be non-zero".into(),
             ));
+        }
+        if block_size > i32::MAX as u32 {
+            return Err(PluginHostError::SetupFailed(format!(
+                "block_size {block_size} exceeds VST3's i32 maxSamplesPerBlock limit"
+            )));
         }
         Ok(Self {
             sample_rate,
@@ -77,6 +85,25 @@ impl AudioConfig {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OutputBusConfig {
     pub channels: u32,
+}
+
+impl OutputBusConfig {
+    /// Build a bus config, rejecting zero-channel busses (meaningless
+    /// in audio routing) and values larger than `i32::MAX` (since
+    /// VST3's `AudioBusBuffers::numChannels` is a signed int).
+    pub fn new(channels: u32) -> Result<Self, PluginHostError> {
+        if channels == 0 {
+            return Err(PluginHostError::SetupFailed(
+                "bus channels must be non-zero".into(),
+            ));
+        }
+        if channels > i32::MAX as u32 {
+            return Err(PluginHostError::SetupFailed(format!(
+                "bus channels {channels} exceeds VST3's i32 channelCount limit"
+            )));
+        }
+        Ok(Self { channels })
+    }
 }
 
 impl Default for OutputBusConfig {
@@ -147,6 +174,12 @@ mod tests {
     }
 
     #[test]
+    fn audio_config_rejects_block_size_exceeding_i32_max() {
+        let err = AudioConfig::new(48000.0, (i32::MAX as u32) + 1).unwrap_err();
+        assert!(matches!(err, PluginHostError::SetupFailed(_)));
+    }
+
+    #[test]
     fn audio_config_accepts_common_daw_settings() {
         let cfg = AudioConfig::new(48000.0, 1024).unwrap();
         assert_eq!(cfg.sample_rate, 48000.0);
@@ -156,6 +189,23 @@ mod tests {
     #[test]
     fn output_bus_config_defaults_to_stereo() {
         assert_eq!(OutputBusConfig::default().channels, 2);
+    }
+
+    #[test]
+    fn output_bus_config_rejects_zero_channels() {
+        let err = OutputBusConfig::new(0).unwrap_err();
+        assert!(matches!(err, PluginHostError::SetupFailed(_)));
+    }
+
+    #[test]
+    fn output_bus_config_rejects_channels_exceeding_i32_max() {
+        let err = OutputBusConfig::new((i32::MAX as u32) + 1).unwrap_err();
+        assert!(matches!(err, PluginHostError::SetupFailed(_)));
+    }
+
+    #[test]
+    fn output_bus_config_accepts_stereo() {
+        assert_eq!(OutputBusConfig::new(2).unwrap().channels, 2);
     }
 
     #[test]
@@ -190,11 +240,16 @@ mod tests {
 
 impl Vst3PluginInstance {
     /// Configure the plugin's audio pipeline. Must be called before
-    /// [`activate`](Self::activate). Re-calling resets `setup_done`
-    /// and re-runs `IAudioProcessor::setupProcessing`, so changing
-    /// sample rate or block size is supported — but only while the
-    /// instance is *not* active (VST3 spec).
+    /// [`activate`](Self::activate). Re-calling overwrites the stored
+    /// config and re-runs `IAudioProcessor::setupProcessing`, so
+    /// changing sample rate or block size is supported — but only
+    /// while the instance is *not* active (VST3 spec).
     pub fn setup_processing(&self, config: AudioConfig) -> Result<(), PluginHostError> {
+        // Re-validate: `AudioConfig` has public fields, so callers can
+        // construct one without going through `new()`. Guard the COM
+        // call regardless so we never pass garbage to the plugin.
+        let _ = AudioConfig::new(config.sample_rate, config.block_size)?;
+
         let mut state = self.processing_state().lock().map_err(|_| {
             PluginHostError::RegistryUnavailable
         })?;
@@ -230,6 +285,11 @@ impl Vst3PluginInstance {
     /// Must be preceded by [`setup_processing`](Self::setup_processing);
     /// otherwise returns `PluginHostError::InvalidLifecycle`.
     /// Calling a second time while already active is a no-op.
+    ///
+    /// The VST3 spec orders these calls as `setActive(1)` →
+    /// `setProcessing(1)`. If `setProcessing(1)` fails, we roll back
+    /// `setActive(0)` on a best-effort basis so the plugin isn't left
+    /// half-activated.
     pub fn activate(&self) -> Result<(), PluginHostError> {
         let mut state = self.processing_state().lock().map_err(|_| {
             PluginHostError::RegistryUnavailable
@@ -245,11 +305,25 @@ impl Vst3PluginInstance {
         }
 
         // SAFETY: COM calls on live pointers owned by this instance.
-        // The VST3 spec orders these as setActive(1) → setProcessing(1).
-        unsafe {
-            self.component.setActive(1);
-            self.processor.setProcessing(1);
+        let activate_result = unsafe { self.component.setActive(1) };
+        if activate_result != kResultOk {
+            return Err(PluginHostError::InvalidLifecycle(format!(
+                "setActive(1) returned {activate_result}"
+            )));
         }
+
+        let processing_result = unsafe { self.processor.setProcessing(1) };
+        if processing_result != kResultOk {
+            // Best-effort rollback — we already flipped the plugin's
+            // active bit, so leaving it that way would leak state.
+            unsafe {
+                self.component.setActive(0);
+            }
+            return Err(PluginHostError::InvalidLifecycle(format!(
+                "setProcessing(1) returned {processing_result}"
+            )));
+        }
+
         state.active = true;
         state.processing = true;
         Ok(())
@@ -257,6 +331,12 @@ impl Vst3PluginInstance {
 
     /// Reverse of [`activate`](Self::activate). Calling while already
     /// inactive is a no-op.
+    ///
+    /// Ordering per the VST3 spec: `setProcessing(0)` → `setActive(0)`.
+    /// If `setProcessing(0)` rejects, state flags stay as-is so a
+    /// retry can recover; if it succeeds but `setActive(0)` rejects,
+    /// we clear `processing` but leave `active = true` so the caller
+    /// knows the instance is still half-active.
     pub fn deactivate(&self) -> Result<(), PluginHostError> {
         let mut state = self.processing_state().lock().map_err(|_| {
             PluginHostError::RegistryUnavailable
@@ -267,13 +347,21 @@ impl Vst3PluginInstance {
         }
 
         // SAFETY: COM calls on live pointers owned by this instance.
-        // Reverse order: setProcessing(0) → setActive(0).
-        unsafe {
-            self.processor.setProcessing(0);
-            self.component.setActive(0);
+        let processing_result = unsafe { self.processor.setProcessing(0) };
+        if processing_result != kResultOk {
+            return Err(PluginHostError::InvalidLifecycle(format!(
+                "setProcessing(0) returned {processing_result}"
+            )));
+        }
+        state.processing = false;
+
+        let active_result = unsafe { self.component.setActive(0) };
+        if active_result != kResultOk {
+            return Err(PluginHostError::InvalidLifecycle(format!(
+                "setActive(0) returned {active_result}"
+            )));
         }
         state.active = false;
-        state.processing = false;
         Ok(())
     }
 
@@ -323,18 +411,30 @@ impl Vst3PluginInstance {
             )));
         }
 
-        let state = self.processing_state().lock().map_err(|_| {
-            PluginHostError::RegistryUnavailable
-        })?;
+        // Hold the processing-state lock for the entire COM call. The
+        // VST3 spec requires setupProcessing / setActive / setProcessing
+        // / process to never overlap on a single instance; this guard
+        // enforces that. Getters like `is_active()` will briefly block
+        // while a block is in flight, but process() is typically <10ms
+        // per call so that's acceptable — and is the same contract the
+        // plugin already imposes.
+        let state = self
+            .processing_state()
+            .lock()
+            .map_err(|_| PluginHostError::RegistryUnavailable)?;
         if !state.is_ready_to_process() {
             return Err(PluginHostError::InvalidLifecycle(
                 "process_block requires setup_processing() + activate()".into(),
             ));
         }
-        // Release the lock before entering the COM call — the plugin
-        // must not re-enter us while processing, but a long-running
-        // process() shouldn't hold up unrelated getters like is_active.
-        drop(state);
+        if let Some(cfg) = state.config {
+            if samples > cfg.block_size {
+                return Err(PluginHostError::InvalidLifecycle(format!(
+                    "samples {} exceeds configured block_size {} — reconfigure before sending larger blocks",
+                    samples, cfg.block_size
+                )));
+            }
+        }
 
         let num_channels = channels as usize;
         let num_samples = samples as usize;
@@ -343,9 +443,11 @@ impl Vst3PluginInstance {
 
         if input.len() < expected_input_len {
             return Err(PluginHostError::InvalidLifecycle(format!(
-                "input buffer too small: have {} samples, need {}",
+                "input buffer too small: have {} interleaved f32 elements, need {} ({} channels × {} samples)",
                 input.len(),
-                expected_input_len
+                expected_input_len,
+                num_channels,
+                num_samples
             )));
         }
 
@@ -422,6 +524,8 @@ impl Vst3PluginInstance {
                 out[s * output_stereo + ch] = output_channels[ch][s];
             }
         }
+        // `state` guard dropped here — after process() returns.
+        drop(state);
         Ok(out)
     }
 }

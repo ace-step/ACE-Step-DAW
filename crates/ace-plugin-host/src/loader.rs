@@ -65,11 +65,22 @@ impl Drop for Vst3PluginInstance {
         // Make sure the plugin is deactivated before its COM pointers
         // get released — skipping this can leak audio threads or crash
         // the plugin on teardown, depending on the vendor.
-        let active = self
-            .processing_state
-            .lock()
-            .map(|s| s.active)
-            .unwrap_or(false);
+        //
+        // If the mutex is poisoned we still want to attempt
+        // deactivation: a panic elsewhere shouldn't leave the plugin
+        // half-active. `PoisonError::into_inner` lets us recover the
+        // state without caring whether it's consistent.
+        let active = match self.processing_state.lock() {
+            Ok(state) => state.active,
+            Err(poisoned) => {
+                warn!(
+                    instance_id = %self.instance_id,
+                    plugin_uid = %self.plugin_uid,
+                    "processing_state poisoned in drop; attempting best-effort deactivation"
+                );
+                poisoned.into_inner().active
+            }
+        };
         if active {
             // SAFETY: deactivation order per the VST3 spec. We ignore
             // the return values — we're tearing down regardless.

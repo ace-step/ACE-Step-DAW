@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -31,7 +31,12 @@ struct Inner {
 }
 
 struct InstanceRecord {
-    instance: Vst3PluginInstance,
+    /// Wrapped in `Arc` so registry operations (lookup, list) can drop
+    /// the registry lock before invoking long-running methods like
+    /// `process_block` — otherwise a single plugin's process() call
+    /// would block every other instance's lookups, and we'd serialise
+    /// processing across all plugins on the audio thread.
+    instance: Arc<Vst3PluginInstance>,
     info: InstanceInfo,
 }
 
@@ -74,7 +79,7 @@ impl PluginHost {
         inner.instances.insert(
             instance_id.clone(),
             InstanceRecord {
-                instance,
+                instance: Arc::new(instance),
                 info: info.clone(),
             },
         );
@@ -82,23 +87,19 @@ impl PluginHost {
         Ok(info)
     }
 
-    /// Run a closure with a reference to a live instance. Returns
-    /// `UnknownInstance` if the id is not registered. Keeps the
-    /// registry lock held for the duration of the callback, so
-    /// long-running audio work should be done outside the closure.
-    fn with_instance<R, F>(&self, instance_id: &str, f: F) -> Result<R, PluginHostError>
-    where
-        F: FnOnce(&Vst3PluginInstance) -> Result<R, PluginHostError>,
-    {
+    /// Look up a live instance by id, returning a cloned `Arc` so the
+    /// caller can drop the registry lock before invoking methods on
+    /// the instance. Returns `UnknownInstance` if not registered.
+    fn lookup(&self, instance_id: &str) -> Result<Arc<Vst3PluginInstance>, PluginHostError> {
         let inner = self
             .inner
             .lock()
             .map_err(|_| PluginHostError::RegistryUnavailable)?;
-        let record = inner
+        inner
             .instances
             .get(instance_id)
-            .ok_or_else(|| PluginHostError::UnknownInstance(instance_id.to_string()))?;
-        f(&record.instance)
+            .map(|r| Arc::clone(&r.instance))
+            .ok_or_else(|| PluginHostError::UnknownInstance(instance_id.to_string()))
     }
 
     /// Configure the plugin's audio pipeline. Must be called before
@@ -108,21 +109,23 @@ impl PluginHost {
         instance_id: &str,
         config: AudioConfig,
     ) -> Result<(), PluginHostError> {
-        self.with_instance(instance_id, |inst| inst.setup_processing(config))
+        self.lookup(instance_id)?.setup_processing(config)
     }
 
     /// Activate the plugin so it's ready to accept `process()` calls.
     pub fn activate_instance(&self, instance_id: &str) -> Result<(), PluginHostError> {
-        self.with_instance(instance_id, |inst| inst.activate())
+        self.lookup(instance_id)?.activate()
     }
 
     /// Deactivate the plugin. Safe to call while already inactive.
     pub fn deactivate_instance(&self, instance_id: &str) -> Result<(), PluginHostError> {
-        self.with_instance(instance_id, |inst| inst.deactivate())
+        self.lookup(instance_id)?.deactivate()
     }
 
     /// Run one block of audio through the instance. Returns the
-    /// plugin's interleaved stereo output.
+    /// plugin's interleaved stereo output. The registry lock is
+    /// released before the plugin's `process()` call, so concurrent
+    /// processing on other instances is not blocked.
     pub fn process_instance_block(
         &self,
         instance_id: &str,
@@ -130,9 +133,8 @@ impl PluginHost {
         channels: u32,
         samples: u32,
     ) -> Result<Vec<f32>, PluginHostError> {
-        self.with_instance(instance_id, |inst| {
-            inst.process_block(input, channels, samples)
-        })
+        self.lookup(instance_id)?
+            .process_block(input, channels, samples)
     }
 
     /// Drop a live instance. Releasing the only reference to its

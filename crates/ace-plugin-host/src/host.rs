@@ -151,6 +151,22 @@ impl PluginHost {
         Ok(())
     }
 
+    /// Queue a parameter automation point for the instance. VST3
+    /// values are always `[0.0, 1.0]` normalised — consult
+    /// `ParamInfo` via `list`/`instance` metadata for the raw range.
+    /// Thread-safe; same ordering contract as `queue_instance_midi`.
+    pub fn set_instance_parameter(
+        &self,
+        instance_id: &str,
+        param_id: u32,
+        sample_offset: u32,
+        value: f64,
+    ) -> Result<(), PluginHostError> {
+        self.lookup(instance_id)?
+            .set_parameter(param_id, sample_offset, value);
+        Ok(())
+    }
+
     /// Drop a live instance. Releasing the only reference to its
     /// `Vst3PluginInstance` unloads the dylib. Unknown instance IDs
     /// produce an error so callers notice stale handles.
@@ -247,6 +263,15 @@ mod tests {
         let host = PluginHost::new();
         let err = host
             .queue_instance_midi("ghost", &[MidiEvent::note_on(0, 60, 100, 0)])
+            .unwrap_err();
+        assert!(matches!(err, PluginHostError::UnknownInstance(_)));
+    }
+
+    #[test]
+    fn set_parameter_unknown_instance_errors_out() {
+        let host = PluginHost::new();
+        let err = host
+            .set_instance_parameter("ghost", 1, 0, 0.5)
             .unwrap_err();
         assert!(matches!(err, PluginHostError::UnknownInstance(_)));
     }

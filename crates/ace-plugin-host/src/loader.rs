@@ -34,6 +34,7 @@ use crate::audio::ProcessingState;
 use crate::error::PluginHostError;
 use crate::host_impl::AceHostApplication;
 use crate::midi::MidiEvent;
+use crate::params::ParamPoint;
 use crate::types::{InstanceInfo, OutputBusInfo, ParamInfo};
 
 /// A loaded VST3 plugin instance + its COM handles. The `_library`
@@ -72,6 +73,13 @@ pub struct Vst3PluginInstance {
     /// the next `process_block` call — that's how DAWs typically
     /// handle latched notes during transport start.
     midi_queue: SegQueue<MidiEvent>,
+    /// Lock-free queue of pending parameter automation points.
+    /// Same shape as `midi_queue` so the two pipelines are
+    /// symmetric; `process_block` drains, windows, groups by
+    /// `param_id`, sorts each group by `sample_offset`, and wraps
+    /// the result in a host-side `ParameterChanges` COM object
+    /// passed via `ProcessData::inputParameterChanges`.
+    param_queue: SegQueue<ParamPoint>,
 }
 
 impl Vst3PluginInstance {
@@ -122,6 +130,33 @@ impl Vst3PluginInstance {
     /// `numInputs: 0` with a null `inputs` pointer for these.
     pub fn is_instrument(&self) -> bool {
         self.input_main_channels.is_none()
+    }
+
+    /// Queue a parameter-automation point. VST3 `value` is always
+    /// 0..1 normalised; callers get the raw range via `ParamInfo`.
+    ///
+    /// Ordering contract mirrors `queue_midi`: unordered cross-thread
+    /// pushes, deterministic sort by `(param_id, sample_offset)` at
+    /// process time.
+    pub fn set_parameter(&self, param_id: u32, sample_offset: u32, value: f64) {
+        self.param_queue.push(ParamPoint {
+            param_id,
+            sample_offset,
+            value,
+        });
+    }
+
+    pub(crate) fn drain_param_points(&self) -> Vec<ParamPoint> {
+        let mut out = Vec::new();
+        while let Some(p) = self.param_queue.pop() {
+            out.push(p);
+        }
+        out
+    }
+
+    #[cfg(test)]
+    pub(crate) fn param_queue_len(&self) -> usize {
+        self.param_queue.len()
     }
 }
 
@@ -340,6 +375,7 @@ pub unsafe fn load_plugin(
         input_main_channels,
         processing_state: Mutex::new(ProcessingState::default()),
         midi_queue: SegQueue::new(),
+        param_queue: SegQueue::new(),
     };
 
     Ok((instance, info))
@@ -491,6 +527,38 @@ pub fn format_uid(uid: &[i8; 16]) -> String {
 mod tests {
     use super::*;
     use crate::midi::MidiEvent;
+
+    #[test]
+    fn param_queue_accumulates_and_drains() {
+        let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
+        let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
+            eprintln!("skipping: no known VST3 bundle installed");
+            return;
+        };
+        let (instance, _) = match unsafe { load_plugin(path, "param-queue-test") } {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("load failed (environment-specific, not fatal): {e}");
+                return;
+            }
+        };
+
+        assert_eq!(instance.param_queue_len(), 0);
+
+        instance.set_parameter(1, 0, 0.25);
+        instance.set_parameter(2, 128, 0.5);
+        instance.set_parameter(1, 256, 0.75);
+        assert_eq!(instance.param_queue_len(), 3);
+
+        let drained = instance.drain_param_points();
+        assert_eq!(drained.len(), 3);
+        assert_eq!(instance.param_queue_len(), 0);
+
+        // Content round-trips without loss.
+        let ids: Vec<u32> = drained.iter().map(|p| p.param_id).collect();
+        assert!(ids.contains(&1));
+        assert!(ids.contains(&2));
+    }
 
     #[test]
     fn midi_queue_accumulates_and_drains() {

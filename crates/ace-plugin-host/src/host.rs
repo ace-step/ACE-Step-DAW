@@ -166,6 +166,25 @@ impl PluginHost {
             .set_parameter(param_id, sample_offset, value)
     }
 
+    /// Serialise a plugin's state to an opaque byte blob suitable
+    /// for persistence in a project file.
+    pub fn save_instance_state(
+        &self,
+        instance_id: &str,
+    ) -> Result<Vec<u8>, PluginHostError> {
+        self.lookup(instance_id)?.save_state()
+    }
+
+    /// Restore a plugin's state from a blob previously returned by
+    /// `save_instance_state`.
+    pub fn load_instance_state(
+        &self,
+        instance_id: &str,
+        blob: &[u8],
+    ) -> Result<(), PluginHostError> {
+        self.lookup(instance_id)?.load_state(blob)
+    }
+
     /// Drop a live instance. Releasing the only reference to its
     /// `Vst3PluginInstance` unloads the dylib. Unknown instance IDs
     /// produce an error so callers notice stale handles.
@@ -272,6 +291,20 @@ mod tests {
         let err = host
             .set_instance_parameter("ghost", 1, 0, 0.5)
             .unwrap_err();
+        assert!(matches!(err, PluginHostError::UnknownInstance(_)));
+    }
+
+    #[test]
+    fn save_state_unknown_instance_errors_out() {
+        let host = PluginHost::new();
+        let err = host.save_instance_state("ghost").unwrap_err();
+        assert!(matches!(err, PluginHostError::UnknownInstance(_)));
+    }
+
+    #[test]
+    fn load_state_unknown_instance_errors_out() {
+        let host = PluginHost::new();
+        let err = host.load_instance_state("ghost", &[]).unwrap_err();
         assert!(matches!(err, PluginHostError::UnknownInstance(_)));
     }
 

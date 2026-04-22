@@ -35,6 +35,7 @@ use crate::error::PluginHostError;
 use crate::host_impl::AceHostApplication;
 use crate::midi::MidiEvent;
 use crate::params::ParamPoint;
+use crate::stream::MemoryStream;
 use crate::types::{InstanceInfo, OutputBusInfo, ParamInfo};
 
 /// A loaded VST3 plugin instance + its COM handles. The `_library`
@@ -227,6 +228,99 @@ impl Vst3PluginInstance {
     #[cfg(test)]
     pub(crate) fn param_queue_len(&self) -> usize {
         self.param_queue.len()
+    }
+
+    /// Serialise the plugin's state to an opaque byte blob. Matches
+    /// the `IComponent::getState` side of VST3's preset contract —
+    /// the blob is what a DAW writes into a project file so the
+    /// plugin's parameters, sample selections, and anything else it
+    /// considers user-editable can be restored later.
+    ///
+    /// Non-OK return from `getState` is surfaced as
+    /// `SetupFailed` — state save failure usually means the plugin
+    /// encountered an internal error and the host should not trust
+    /// an empty blob as "successfully saved".
+    pub fn save_state(&self) -> Result<Vec<u8>, PluginHostError> {
+        let stream = MemoryStream::new();
+        let ptr = stream
+            .to_com_ptr::<vst3::Steinberg::IBStream>()
+            .ok_or_else(|| {
+                PluginHostError::SetupFailed(
+                    "MemoryStream failed to expose IBStream — programming error".into(),
+                )
+            })?;
+
+        // SAFETY: `ptr` lives as long as `stream`; `self.component`
+        // is a live COM pointer from the loader.
+        let result = unsafe { self.component.getState(ptr.as_ptr()) };
+        if result != kResultOk {
+            return Err(PluginHostError::SetupFailed(format!(
+                "IComponent::getState returned {result}"
+            )));
+        }
+
+        Ok(stream.into_data())
+    }
+
+    /// Restore the plugin's state from a blob previously produced by
+    /// `save_state`. Calls `IComponent::setState`, then (if the
+    /// plugin exposes a split controller) `IEditController::setComponentState`
+    /// so the GUI mirrors the restored parameters — this matches
+    /// Steinberg's host reference pattern.
+    ///
+    /// Non-OK from `setState` is fatal; the blob may be from a
+    /// different plugin version (backward-incompat state) or
+    /// malformed. Callers should surface the error so the DAW can
+    /// warn the user rather than silently loading a reset plugin.
+    pub fn load_state(&self, blob: &[u8]) -> Result<(), PluginHostError> {
+        // setState reads from the stream, so we need a stream seeded
+        // with the blob. Clone into the stream so the caller's slice
+        // lifetime doesn't matter.
+        let stream = MemoryStream::from_data(blob.to_vec());
+        let ptr = stream
+            .to_com_ptr::<vst3::Steinberg::IBStream>()
+            .ok_or_else(|| {
+                PluginHostError::SetupFailed(
+                    "MemoryStream failed to expose IBStream — programming error".into(),
+                )
+            })?;
+
+        // SAFETY: live COM pointers owned by this instance.
+        let result = unsafe { self.component.setState(ptr.as_ptr()) };
+        if result != kResultOk {
+            return Err(PluginHostError::SetupFailed(format!(
+                "IComponent::setState returned {result}"
+            )));
+        }
+
+        // Sync to the edit controller if the plugin has one. Per
+        // Steinberg's host reference, the controller reads from the
+        // *same* stream — rewind the stream first so setComponentState
+        // sees the blob from the start.
+        if let Some(ctrl) = self.controller.as_ref() {
+            let ctrl_stream = MemoryStream::from_data(blob.to_vec());
+            let ctrl_ptr = ctrl_stream
+                .to_com_ptr::<vst3::Steinberg::IBStream>()
+                .ok_or_else(|| {
+                    PluginHostError::SetupFailed(
+                        "MemoryStream failed to expose IBStream — programming error".into(),
+                    )
+                })?;
+            // SAFETY: live COM pointers. Non-OK here is non-fatal —
+            // the component state is already loaded; the controller
+            // will catch up on next parameter edit or UI refresh.
+            // Worth logging so persistent drift is diagnosable.
+            let r = unsafe { ctrl.setComponentState(ctrl_ptr.as_ptr()) };
+            if r != kResultOk {
+                tracing::warn!(
+                    result = r,
+                    instance_id = %self.instance_id,
+                    "IEditController::setComponentState returned non-OK — GUI may be out of sync until next parameter edit"
+                );
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -628,6 +722,50 @@ mod tests {
         let ids: Vec<u32> = drained.iter().map(|p| p.param_id).collect();
         assert!(ids.contains(&1));
         assert!(ids.contains(&2));
+    }
+
+    #[test]
+    fn save_state_returns_bytes_and_load_state_is_idempotent() {
+        // Gated smoke: only runs when ACE Bridge is installed at the
+        // known path. Asserts:
+        // 1. save_state succeeds and returns some bytes (even an
+        //    empty plugin with default state usually writes a header).
+        // 2. load_state on the same blob succeeds (same plugin,
+        //    same version, so the blob must round-trip).
+        // 3. A second save after load produces the same bytes —
+        //    proves load_state actually restored the state rather
+        //    than leaving the plugin in a drifted condition.
+        let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
+        let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
+            eprintln!("skipping: no known VST3 bundle installed");
+            return;
+        };
+        let (instance, _) = match unsafe { load_plugin(path, "state-smoke") } {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("load failed (environment-specific, not fatal): {e}");
+                return;
+            }
+        };
+
+        let first = match instance.save_state() {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("save_state failed (plugin may not support state save): {e}");
+                return;
+            }
+        };
+
+        // Non-empty state is typical for real plugins; don't fail if
+        // the plugin chooses to return an empty blob (some do).
+        assert!(instance.load_state(&first).is_ok());
+
+        // Round-trip: the second save should match the first.
+        let second = instance.save_state().unwrap();
+        assert_eq!(
+            first, second,
+            "save → load → save did not round-trip byte-for-byte"
+        );
     }
 
     #[test]

@@ -16,7 +16,7 @@ use crate::error::PluginHostError;
 use crate::host_impl::{
     ComponentRestartCollector, HostComponentRestart, HostParamChange, ParamChangeCollector,
 };
-use crate::loader::{load_plugin, Vst3PluginInstance};
+use crate::loader::{load_plugin_with_collectors, Vst3PluginInstance};
 use crate::midi::MidiEvent;
 use crate::types::InstanceInfo;
 
@@ -81,7 +81,12 @@ impl PluginHost {
         bundle_path: &Path,
     ) -> Result<InstanceInfo, PluginHostError> {
         let instance_id = Uuid::new_v4().to_string();
-        let (instance, info) = load_plugin(bundle_path, &instance_id)?;
+        let (instance, info) = load_plugin_with_collectors(
+            bundle_path,
+            &instance_id,
+            Some(&self.collector),
+            Some(&self.restart_collector),
+        )?;
 
         let mut inner = self
             .inner

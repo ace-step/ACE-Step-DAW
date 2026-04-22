@@ -236,47 +236,112 @@ impl Vst3PluginInstance {
     /// plugin's parameters, sample selections, and anything else it
     /// considers user-editable can be restored later.
     ///
-    /// Non-OK return from `getState` is surfaced as
-    /// `SetupFailed` — state save failure usually means the plugin
-    /// encountered an internal error and the host should not trust
-    /// an empty blob as "successfully saved".
+    /// The blob actually contains **two** payloads concatenated with
+    /// a 4-byte little-endian header: `IComponent::getState()` bytes
+    /// first, then (if the plugin exposes a split controller)
+    /// `IEditController::getState()` bytes. Some plugins keep part
+    /// of their preset on the controller side; skipping it would
+    /// silently drop settings that round-tripped the component.
+    ///
+    /// This call is serialised with `process_block` via the
+    /// `processing_state` lock — VST3 plugins don't all guarantee
+    /// thread-safety between `getState` and `process`, and torn
+    /// state is a nasty failure mode.
+    ///
+    /// Non-OK return from `getState` is surfaced as `SetupFailed`.
     pub fn save_state(&self) -> Result<Vec<u8>, PluginHostError> {
-        let stream = MemoryStream::new();
-        let ptr = stream
-            .to_com_ptr::<vst3::Steinberg::IBStream>()
-            .ok_or_else(|| {
-                PluginHostError::SetupFailed(
-                    "MemoryStream failed to expose IBStream — programming error".into(),
-                )
-            })?;
+        let _guard = self
+            .processing_state()
+            .lock()
+            .map_err(|_| PluginHostError::RegistryUnavailable)?;
 
-        // SAFETY: `ptr` lives as long as `stream`; `self.component`
-        // is a live COM pointer from the loader.
-        let result = unsafe { self.component.getState(ptr.as_ptr()) };
-        if result != kResultOk {
-            return Err(PluginHostError::SetupFailed(format!(
-                "IComponent::getState returned {result}"
-            )));
-        }
+        let component_blob = getstate_into_bytes(|s| {
+            // SAFETY: `s` is a live IBStream pointer; self.component
+            // is a live COM pointer from the loader.
+            unsafe { self.component.getState(s) }
+        })?;
 
-        Ok(stream.into_data())
+        let controller_blob = if let Some(ctrl) = self.controller.as_ref() {
+            getstate_into_bytes(|s| {
+                // SAFETY: as above.
+                unsafe { ctrl.getState(s) }
+            })?
+        } else {
+            Vec::new()
+        };
+
+        // Header + payloads. Keeping this in-crate means we can
+        // change the layout later without breaking external callers
+        // as long as `save_state` / `load_state` pair up.
+        let mut out =
+            Vec::with_capacity(4 + component_blob.len() + controller_blob.len());
+        let comp_len = component_blob.len() as u32;
+        out.extend_from_slice(&comp_len.to_le_bytes());
+        out.extend_from_slice(&component_blob);
+        out.extend_from_slice(&controller_blob);
+        Ok(out)
     }
 
     /// Restore the plugin's state from a blob previously produced by
-    /// `save_state`. Calls `IComponent::setState`, then (if the
-    /// plugin exposes a split controller) `IEditController::setComponentState`
-    /// so the GUI mirrors the restored parameters — this matches
-    /// Steinberg's host reference pattern.
+    /// `save_state`. Reads the 2-section layout: component state
+    /// first, then optional controller state.
     ///
-    /// Non-OK from `setState` is fatal; the blob may be from a
-    /// different plugin version (backward-incompat state) or
-    /// malformed. Callers should surface the error so the DAW can
-    /// warn the user rather than silently loading a reset plugin.
+    /// For plugins with a split controller, `IEditController::setComponentState`
+    /// is *also* called with the component blob so the GUI mirrors
+    /// the restored parameters — that matches Steinberg's host
+    /// reference pattern. If the blob includes dedicated controller
+    /// state, `IEditController::setState` is called with that
+    /// section afterwards.
+    ///
+    /// Pending MIDI and parameter-automation queues are drained
+    /// before returning — without this, events queued before the
+    /// load would replay on top of the restored state on the next
+    /// `process_block` and silently overwrite it.
+    ///
+    /// Serialised with `process_block` via the `processing_state`
+    /// lock. Additionally requires the instance be *not active*:
+    /// `IComponent::setState` on an active plugin is outside the
+    /// VST3 spec's guaranteed behaviour and can corrupt the
+    /// plugin's internal audio state.
     pub fn load_state(&self, blob: &[u8]) -> Result<(), PluginHostError> {
-        // setState reads from the stream, so we need a stream seeded
-        // with the blob. Clone into the stream so the caller's slice
-        // lifetime doesn't matter.
-        let stream = MemoryStream::from_data(blob.to_vec());
+        let guard = self
+            .processing_state()
+            .lock()
+            .map_err(|_| PluginHostError::RegistryUnavailable)?;
+        if guard.active {
+            return Err(PluginHostError::InvalidLifecycle(
+                "load_state requires the instance to be deactivated first (IComponent::setState is not safe while active per VST3 spec)".into(),
+            ));
+        }
+        // Drop the guard before touching the lock-free queues — we
+        // still hold it via reacquire below for the COM calls. This
+        // avoids holding the mutex while another thread is draining
+        // on a separate process_block (which would deadlock since
+        // they take the same lock first).
+        //
+        // Actually simpler: keep the guard held; `drain_midi` /
+        // `drain_param_points` only touch lock-free SegQueues and
+        // don't reacquire processing_state. So we can just hold the
+        // guard through the whole operation.
+
+        // Parse the header.
+        if blob.len() < 4 {
+            return Err(PluginHostError::SetupFailed(
+                "state blob too short: missing 4-byte component-length header".into(),
+            ));
+        }
+        let comp_len = u32::from_le_bytes([blob[0], blob[1], blob[2], blob[3]]) as usize;
+        if 4 + comp_len > blob.len() {
+            return Err(PluginHostError::SetupFailed(format!(
+                "state blob truncated: header says component={comp_len} bytes but blob has {} remaining",
+                blob.len() - 4
+            )));
+        }
+        let component_bytes = &blob[4..4 + comp_len];
+        let controller_bytes = &blob[4 + comp_len..];
+
+        // 1. IComponent::setState (primary restore).
+        let stream = MemoryStream::from_data(component_bytes.to_vec());
         let ptr = stream
             .to_com_ptr::<vst3::Steinberg::IBStream>()
             .ok_or_else(|| {
@@ -284,7 +349,6 @@ impl Vst3PluginInstance {
                     "MemoryStream failed to expose IBStream — programming error".into(),
                 )
             })?;
-
         // SAFETY: live COM pointers owned by this instance.
         let result = unsafe { self.component.setState(ptr.as_ptr()) };
         if result != kResultOk {
@@ -293,13 +357,11 @@ impl Vst3PluginInstance {
             )));
         }
 
-        // Sync to the edit controller if the plugin has one. Per
-        // Steinberg's host reference, the controller reads from the
-        // *same* stream — rewind the stream first so setComponentState
-        // sees the blob from the start.
+        // 2. IEditController::setComponentState — mirrors the
+        //    component blob so the controller's GUI matches.
         if let Some(ctrl) = self.controller.as_ref() {
-            let ctrl_stream = MemoryStream::from_data(blob.to_vec());
-            let ctrl_ptr = ctrl_stream
+            let sync_stream = MemoryStream::from_data(component_bytes.to_vec());
+            let sync_ptr = sync_stream
                 .to_com_ptr::<vst3::Steinberg::IBStream>()
                 .ok_or_else(|| {
                     PluginHostError::SetupFailed(
@@ -307,21 +369,72 @@ impl Vst3PluginInstance {
                     )
                 })?;
             // SAFETY: live COM pointers. Non-OK here is non-fatal —
-            // the component state is already loaded; the controller
+            // component state is already loaded; the controller
             // will catch up on next parameter edit or UI refresh.
-            // Worth logging so persistent drift is diagnosable.
-            let r = unsafe { ctrl.setComponentState(ctrl_ptr.as_ptr()) };
+            let r = unsafe { ctrl.setComponentState(sync_ptr.as_ptr()) };
             if r != kResultOk {
                 tracing::warn!(
                     result = r,
                     instance_id = %self.instance_id,
-                    "IEditController::setComponentState returned non-OK — GUI may be out of sync until next parameter edit"
+                    "IEditController::setComponentState returned non-OK — GUI may drift until next edit"
                 );
+            }
+
+            // 3. IEditController::setState — restores controller-owned
+            //    state (e.g. per-instance view preferences).
+            if !controller_bytes.is_empty() {
+                let ctrl_stream = MemoryStream::from_data(controller_bytes.to_vec());
+                let ctrl_ptr = ctrl_stream
+                    .to_com_ptr::<vst3::Steinberg::IBStream>()
+                    .ok_or_else(|| {
+                        PluginHostError::SetupFailed(
+                            "MemoryStream failed to expose IBStream — programming error".into(),
+                        )
+                    })?;
+                // SAFETY: live COM pointers.
+                let r = unsafe { ctrl.setState(ctrl_ptr.as_ptr()) };
+                if r != kResultOk {
+                    tracing::warn!(
+                        result = r,
+                        instance_id = %self.instance_id,
+                        "IEditController::setState returned non-OK — controller-owned preferences not restored"
+                    );
+                }
             }
         }
 
+        // Drain queued MIDI + parameter points — they were scheduled
+        // against a state the plugin no longer has.
+        while self.midi_queue.pop().is_some() {}
+        while self.param_queue.pop().is_some() {}
+
+        drop(guard);
         Ok(())
     }
+}
+
+/// Helper: allocate an empty `MemoryStream`, run `writer` against
+/// its `IBStream` pointer, and return the accumulated bytes. Used by
+/// both `IComponent::getState` and `IEditController::getState`.
+fn getstate_into_bytes<F>(writer: F) -> Result<Vec<u8>, PluginHostError>
+where
+    F: FnOnce(*mut vst3::Steinberg::IBStream) -> vst3::Steinberg::tresult,
+{
+    let stream = MemoryStream::new();
+    let ptr = stream
+        .to_com_ptr::<vst3::Steinberg::IBStream>()
+        .ok_or_else(|| {
+            PluginHostError::SetupFailed(
+                "MemoryStream failed to expose IBStream — programming error".into(),
+            )
+        })?;
+    let result = writer(ptr.as_ptr());
+    if result != kResultOk {
+        return Err(PluginHostError::SetupFailed(format!(
+            "getState-equivalent call returned {result}"
+        )));
+    }
+    Ok(stream.into_data())
 }
 
 impl Drop for Vst3PluginInstance {
@@ -722,6 +835,102 @@ mod tests {
         let ids: Vec<u32> = drained.iter().map(|p| p.param_id).collect();
         assert!(ids.contains(&1));
         assert!(ids.contains(&2));
+    }
+
+    #[test]
+    fn load_state_rejects_truncated_blob() {
+        // Pure-logic test — the header parse happens before any COM
+        // call, so we can exercise it without a real plugin. We do
+        // need an instance though (for the processing_state lock)
+        // so this still requires the bundle.
+        let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
+        let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
+            eprintln!("skipping: no known VST3 bundle installed");
+            return;
+        };
+        let (instance, _) = match unsafe { load_plugin(path, "load-trunc") } {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("load failed (environment-specific, not fatal): {e}");
+                return;
+            }
+        };
+
+        // Empty blob → no header → SetupFailed
+        assert!(matches!(
+            instance.load_state(&[]),
+            Err(PluginHostError::SetupFailed(_))
+        ));
+        // Header says 100 bytes but blob has only 0 remaining
+        let bad = vec![100u8, 0, 0, 0];
+        assert!(matches!(
+            instance.load_state(&bad),
+            Err(PluginHostError::SetupFailed(_))
+        ));
+    }
+
+    #[test]
+    fn load_state_drains_queued_events() {
+        let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
+        let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
+            eprintln!("skipping: no known VST3 bundle installed");
+            return;
+        };
+        let (instance, _) = match unsafe { load_plugin(path, "load-drain") } {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("load failed (environment-specific, not fatal): {e}");
+                return;
+            }
+        };
+
+        // Queue some events before loading.
+        instance.queue_midi(&[MidiEvent::note_on(0, 60, 100, 0)]);
+        instance
+            .set_parameter(1, 0, 0.5)
+            .unwrap();
+        assert!(instance.midi_queue_len() > 0);
+        assert!(instance.param_queue_len() > 0);
+
+        let blob = instance.save_state().unwrap();
+        instance.load_state(&blob).unwrap();
+
+        // Queues drained — events that were against the old state
+        // are gone, as they should be.
+        assert_eq!(instance.midi_queue_len(), 0);
+        assert_eq!(instance.param_queue_len(), 0);
+    }
+
+    #[test]
+    fn load_state_rejects_active_instance() {
+        use crate::audio::AudioConfig;
+        let candidates = ["/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3"];
+        let Some(path) = candidates.iter().map(Path::new).find(|p| p.exists()) else {
+            eprintln!("skipping: no known VST3 bundle installed");
+            return;
+        };
+        let (instance, _) = match unsafe { load_plugin(path, "load-active") } {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("load failed (environment-specific, not fatal): {e}");
+                return;
+            }
+        };
+
+        instance
+            .setup_processing(AudioConfig::new(48000.0, 512).unwrap())
+            .unwrap();
+        instance.activate().unwrap();
+
+        let blob = instance.save_state().unwrap();
+        assert!(matches!(
+            instance.load_state(&blob),
+            Err(PluginHostError::InvalidLifecycle(_))
+        ));
+
+        // After deactivating it should succeed.
+        instance.deactivate().unwrap();
+        assert!(instance.load_state(&blob).is_ok());
     }
 
     #[test]

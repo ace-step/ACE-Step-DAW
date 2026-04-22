@@ -135,10 +135,41 @@ impl Vst3PluginInstance {
     /// Queue a parameter-automation point. VST3 `value` is always
     /// 0..1 normalised; callers get the raw range via `ParamInfo`.
     ///
+    /// Two things happen simultaneously:
+    ///
+    /// 1. The point is pushed onto the audio-thread queue and will
+    ///    be delivered via `inputParameterChanges` on the next
+    ///    `process_block` call.
+    /// 2. If the plugin exposes an `IEditController` and
+    ///    `sample_offset == 0` (i.e. "apply now"), we also call
+    ///    `setParamNormalized` directly so the plugin's own
+    ///    controller state — which drives its GUI and any state
+    ///    snapshot the DAW asks for — updates even when audio
+    ///    processing isn't running (transport stopped, pre-roll,
+    ///    user tweaking a slider while paused).
+    ///
+    /// Non-zero `sample_offset` points are treated as pure audio-
+    /// thread automation: the GUI / controller state stays at
+    /// whatever the plugin last rendered. This matches how real
+    /// DAWs handle block-internal automation.
+    ///
     /// Ordering contract mirrors `queue_midi`: unordered cross-thread
     /// pushes, deterministic sort by `(param_id, sample_offset)` at
     /// process time.
     pub fn set_parameter(&self, param_id: u32, sample_offset: u32, value: f64) {
+        if sample_offset == 0 {
+            if let Some(ctrl) = self.controller.as_ref() {
+                // SAFETY: `ctrl` is a live `ComPtr<IEditController>`
+                // obtained from the loader. The setter only updates
+                // the controller's internal state — safe to call
+                // off the audio thread, and required here so GUI /
+                // state snapshots reflect the edit even when
+                // processing is stopped.
+                unsafe {
+                    ctrl.setParamNormalized(param_id, value);
+                }
+            }
+        }
         self.param_queue.push(ParamPoint {
             param_id,
             sample_offset,
@@ -152,6 +183,20 @@ impl Vst3PluginInstance {
             out.push(p);
         }
         out
+    }
+
+    /// Push a point back onto the queue — used by `process_block` to
+    /// preserve automation scheduled past the current block boundary
+    /// so it fires on a subsequent call.
+    pub(crate) fn requeue_param_point(&self, p: ParamPoint) {
+        self.param_queue.push(p);
+    }
+
+    /// Symmetric to `requeue_param_point` but for MIDI events.
+    /// Callers are responsible for decrementing `sample_offset` by
+    /// the current block's sample count before re-queueing.
+    pub(crate) fn requeue_midi_event(&self, e: MidiEvent) {
+        self.midi_queue.push(e);
     }
 
     #[cfg(test)]

@@ -32,7 +32,7 @@ use vst3::Steinberg::kResultOk;
 use crate::error::PluginHostError;
 use crate::loader::Vst3PluginInstance;
 use crate::midi::{midi_to_vst3_event, EventList};
-use crate::params::{group_points_for_block, ParameterChanges};
+use crate::params::{partition_points_for_block, ParameterChanges};
 use crate::types::OutputBusInfo;
 
 /// Pure-logic guard that `setup_processing` delegates to. Extracted
@@ -619,11 +619,20 @@ impl Vst3PluginInstance {
         //
         // `event_list` must outlive `process_data` because the plugin
         // may read from the COM pointer during `process()`.
-        let mut pending = self.drain_midi();
+        let pending = self.drain_midi();
         let block_samples = samples;
-        pending.retain(|e| e.sample_offset < block_samples);
-        pending.sort_by_key(|e| e.sample_offset);
-        let vst3_events: Vec<_> = pending
+        let (mut this_block, future): (Vec<_>, Vec<_>) =
+            pending.into_iter().partition(|e| e.sample_offset < block_samples);
+        // Re-queue future events with offsets ticked down so they
+        // stay block-relative on the next call — matches the param
+        // automation path and avoids silently losing events when a
+        // caller batches multiple blocks of MIDI ahead of time.
+        for mut e in future {
+            e.sample_offset = e.sample_offset.saturating_sub(block_samples);
+            self.requeue_midi_event(e);
+        }
+        this_block.sort_by_key(|e| e.sample_offset);
+        let vst3_events: Vec<_> = this_block
             .iter()
             .filter_map(midi_to_vst3_event)
             .collect();
@@ -639,24 +648,25 @@ impl Vst3PluginInstance {
             .unwrap_or(ptr::null_mut());
 
         // Drain queued parameter-automation points and build a
-        // host-side `ParameterChanges`. The `group_points_for_block`
-        // helper handles the window filter (same contract as MIDI),
-        // drops points whose `sample_offset` would wrap negative in
-        // VST3's `i32`, and sorts each group by `sampleOffset`.
-        // Points queued before `setup_processing` / `activate` will
-        // sit in the queue until the first `process_block` call —
-        // matching DAW expectations for pre-roll automation.
+        // host-side `ParameterChanges`. `partition_points_for_block`
+        // returns `(this_block_groups, future_overflow)` so we can
+        // re-queue points scheduled past the current block —
+        // callers that batch multiple blocks of automation (bounce
+        // / sequencer workflows) would otherwise silently lose
+        // everything past block_samples. Future-bucket offsets are
+        // already decremented by block_samples so they stay
+        // block-relative on the next call.
         let pending_params = self.drain_param_points();
-        let param_changes = if pending_params.is_empty() {
+        let (groups, future_params) =
+            partition_points_for_block(pending_params, block_samples);
+        let param_changes = if groups.is_empty() {
             None
         } else {
-            let groups = group_points_for_block(pending_params, block_samples);
-            if groups.is_empty() {
-                None
-            } else {
-                Some(ParameterChanges::with_groups(groups))
-            }
+            Some(ParameterChanges::with_groups(groups))
         };
+        for p in future_params {
+            self.requeue_param_point(p);
+        }
         let input_param_changes_ptr = param_changes
             .as_ref()
             .and_then(|pc| pc.to_com_ptr::<IParameterChanges>())

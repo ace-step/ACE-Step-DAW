@@ -151,6 +151,11 @@ impl IParamValueQueueTrait for ParamValueQueue {
 // IParameterChanges — list of per-parameter queues
 // ---------------------------------------------------------------------------
 
+/// One parameter's points for the current block: `(param_id, sorted
+/// `(sampleOffset, value)` tuples)`. Shape matches
+/// `ParameterChanges::with_groups`.
+pub(crate) type ParamGroup = (ParamID, Vec<(i32, ParamValue)>);
+
 /// Host-side `IParameterChanges`. Holds one `ParamValueQueue` per
 /// parameter id touched during the current block. The
 /// `ComPtr<IParamValueQueue>` stored here keeps each child queue's
@@ -171,7 +176,7 @@ impl ParameterChanges {
     /// Pre-populate from already-grouped points. `grouped` is a list
     /// of `(param_id, sorted_points)` pairs. Each group becomes one
     /// `ParamValueQueue`.
-    pub fn with_groups(grouped: Vec<(ParamID, Vec<(i32, ParamValue)>)>) -> ComWrapper<Self> {
+    pub fn with_groups(grouped: Vec<ParamGroup>) -> ComWrapper<Self> {
         let queues: Vec<ComPtr<IParamValueQueue>> = grouped
             .into_iter()
             .filter_map(|(id, points)| {
@@ -238,49 +243,89 @@ impl IParameterChangesTrait for ParameterChanges {
 // Host-side grouping helpers
 // ---------------------------------------------------------------------------
 
-/// Group a flat list of param points into per-id, sorted vectors
-/// suitable for `ParameterChanges::with_groups`. Pure logic —
-/// exercised by unit tests without touching COM.
+/// Partition a flat list of param points into `(for_this_block,
+/// future_blocks)`:
 ///
-/// - Points with `sample_offset >= block_samples` are dropped
-///   (mirrors the MIDI block-window filter from 4B-2a).
-/// - `sample_offset` values past `i32::MAX` are also dropped
-///   (would wrap negative in VST3's `i32` field).
-/// - Preserves insertion order across identical `(param_id,
-///   sample_offset)` tuples — callers that need strict determinism
-///   for equal offsets must stamp a monotonic counter themselves.
-pub(crate) fn group_points_for_block(
+/// - `for_this_block`: points with `sample_offset < block_samples`,
+///   grouped by `param_id` and sorted by `sampleOffset` within each
+///   group. Ready to be handed to `ParameterChanges::with_groups`.
+/// - `future_blocks`: points with `sample_offset >= block_samples`,
+///   offset-decremented by `block_samples` so they fire at the
+///   right absolute position on a subsequent `process_block` call.
+///
+/// This preserves the callers that batch multiple blocks of
+/// automation ahead of time (bounce / sequencer workflows) — a
+/// previous version dropped the overflow points, which silently
+/// lost later automation. Callers that know their block boundary
+/// can still schedule per-block if they want; callers that don't
+/// can batch and let the host distribute.
+///
+/// - Points with `sample_offset > i32::MAX` are dropped even in the
+///   future bucket (they'd wrap negative in VST3's `i32` field
+///   once they reached the "now" bucket — not preservable).
+pub(crate) fn partition_points_for_block(
     mut points: Vec<ParamPoint>,
     block_samples: u32,
-) -> Vec<(ParamID, Vec<(i32, ParamValue)>)> {
-    points.retain(|p| p.sample_offset < block_samples);
+) -> (Vec<ParamGroup>, Vec<ParamPoint>) {
+    // Drop points whose sample_offset would overflow i32 even after
+    // the block-boundary subtraction below. These are not
+    // representable in VST3's `sampleOffset` field regardless of
+    // which block they eventually land in.
+    points.retain(|p| p.sample_offset <= i32::MAX as u32);
+
+    let (this_block, future): (Vec<ParamPoint>, Vec<ParamPoint>) = points
+        .into_iter()
+        .partition(|p| p.sample_offset < block_samples);
+
+    // Future points tick down by the block size so their sampleOffset
+    // stays block-relative on the next call. Saturating_sub is belt-
+    // and-braces — the partition predicate already guarantees
+    // sample_offset >= block_samples for this branch.
+    let future: Vec<ParamPoint> = future
+        .into_iter()
+        .map(|mut p| {
+            p.sample_offset = p.sample_offset.saturating_sub(block_samples);
+            p
+        })
+        .collect();
 
     // Sort primarily by id so we can walk the list in one pass to
     // group. Secondary sort by sample_offset for within-group
     // ordering. Stable sort keeps original insertion order for
     // tie-breaks.
-    points.sort_by(|a, b| {
+    let mut this_block = this_block;
+    this_block.sort_by(|a, b| {
         a.param_id
             .cmp(&b.param_id)
             .then(a.sample_offset.cmp(&b.sample_offset))
     });
 
-    let mut out: Vec<(ParamID, Vec<(i32, ParamValue)>)> = Vec::new();
-    for p in points {
-        let offset = match i32::try_from(p.sample_offset) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        match out.last_mut() {
+    let mut groups: Vec<ParamGroup> = Vec::new();
+    for p in this_block {
+        // Guaranteed to succeed — the `retain` above bounded us.
+        let offset = p.sample_offset as i32;
+        match groups.last_mut() {
             Some((id, ref mut pts)) if *id == p.param_id => {
                 pts.push((offset, p.value));
             }
             _ => {
-                out.push((p.param_id, vec![(offset, p.value)]));
+                groups.push((p.param_id, vec![(offset, p.value)]));
             }
         }
     }
-    out
+    (groups, future)
+}
+
+/// Back-compat wrapper for callers that only need the "this block"
+/// half (e.g. tests asserting on the grouped output). Production
+/// callers use `partition_points_for_block` directly so they can
+/// re-queue the overflow.
+#[cfg(test)]
+pub(crate) fn group_points_for_block(
+    points: Vec<ParamPoint>,
+    block_samples: u32,
+) -> Vec<ParamGroup> {
+    partition_points_for_block(points, block_samples).0
 }
 
 // ---------------------------------------------------------------------------
@@ -324,16 +369,51 @@ mod tests {
     }
 
     #[test]
-    fn group_points_drops_points_past_block_window() {
+    fn partition_preserves_overflow_points_ticked_down() {
         let points = vec![
             ParamPoint { param_id: 1, sample_offset: 0, value: 0.5 },
-            ParamPoint { param_id: 1, sample_offset: 512, value: 0.6 }, // at boundary, drop
-            ParamPoint { param_id: 1, sample_offset: 1024, value: 0.7 }, // past, drop
+            ParamPoint { param_id: 1, sample_offset: 512, value: 0.6 },  // next block, offset 0
+            ParamPoint { param_id: 1, sample_offset: 1024, value: 0.7 }, // next-next, offset 512
+            ParamPoint { param_id: 1, sample_offset: 600, value: 0.8 },  // next block, offset 88
         ];
-        let groups = group_points_for_block(points, 512);
+        let (groups, future) = partition_points_for_block(points, 512);
+
+        // This-block only includes offset 0.
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].1.len(), 1);
         assert_eq!(groups[0].1[0].0, 0);
+        assert!((groups[0].1[0].1 - 0.5).abs() < f64::EPSILON);
+
+        // Future contains the 3 overflow points with offsets
+        // decremented by block_samples (512).
+        assert_eq!(future.len(), 3);
+        let offsets: Vec<u32> = future.iter().map(|p| p.sample_offset).collect();
+        assert!(offsets.contains(&0));   // was 512
+        assert!(offsets.contains(&512)); // was 1024
+        assert!(offsets.contains(&88));  // was 600
+    }
+
+    #[test]
+    fn partition_is_idempotent_across_block_boundaries() {
+        // Point at sample_offset=1500 with 512-sample blocks should
+        // fire on the 3rd block (offset 1500 -> 988 -> 476 -> fires).
+        let mut pts = vec![ParamPoint {
+            param_id: 1,
+            sample_offset: 1500,
+            value: 0.5,
+        }];
+        for expected_block in 0..3 {
+            let (groups, future) = partition_points_for_block(pts, 512);
+            if expected_block == 2 {
+                assert_eq!(groups.len(), 1, "should fire on block 3");
+                assert_eq!(groups[0].1[0].0, 476);
+                assert!(future.is_empty());
+                return;
+            }
+            assert!(groups.is_empty(), "should not fire on block {}", expected_block + 1);
+            pts = future;
+        }
+        panic!("never fired");
     }
 
     #[test]

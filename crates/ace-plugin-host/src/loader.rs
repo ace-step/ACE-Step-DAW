@@ -230,6 +230,20 @@ impl Vst3PluginInstance {
         self.param_queue.len()
     }
 
+    /// Re-query the plugin's current processing latency (in samples).
+    /// Plugins can change this in response to parameter edits —
+    /// oversampling toggles, lookahead window changes — and notify
+    /// the host via `IComponentHandler::restartComponent(kLatencyChanged)`.
+    /// Consumers drain the restart collector and call this to refresh
+    /// their cached latency.
+    pub fn current_latency_samples(&self) -> u32 {
+        // SAFETY: `self.processor` is a live COM pointer; the
+        // `getLatencySamples` call is const on the plugin's side
+        // (doesn't mutate state) so it's safe to call without
+        // holding the lifecycle mutex.
+        unsafe { self.processor.getLatencySamples() }
+    }
+
     /// Serialise the plugin's state to an opaque byte blob. Matches
     /// the `IComponent::getState` side of VST3's preset contract —
     /// the blob is what a DAW writes into a project file so the

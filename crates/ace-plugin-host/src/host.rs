@@ -13,7 +13,9 @@ use uuid::Uuid;
 
 use crate::audio::AudioConfig;
 use crate::error::PluginHostError;
-use crate::host_impl::{HostParamChange, ParamChangeCollector};
+use crate::host_impl::{
+    ComponentRestartCollector, HostComponentRestart, HostParamChange, ParamChangeCollector,
+};
 use crate::loader::{load_plugin, Vst3PluginInstance};
 use crate::midi::MidiEvent;
 use crate::types::InstanceInfo;
@@ -23,6 +25,7 @@ use crate::types::InstanceInfo;
 pub struct PluginHost {
     inner: Mutex<Inner>,
     collector: ParamChangeCollector,
+    restart_collector: ComponentRestartCollector,
 }
 
 struct Inner {
@@ -48,6 +51,7 @@ impl PluginHost {
                 instances: HashMap::new(),
             }),
             collector: ParamChangeCollector::new(),
+            restart_collector: ComponentRestartCollector::new(),
         }
     }
 
@@ -56,6 +60,14 @@ impl PluginHost {
     /// timer and emit events to the UI.
     pub fn param_change_collector(&self) -> ParamChangeCollector {
         self.collector.clone()
+    }
+
+    /// Shared collector for `IComponentHandler::restartComponent`
+    /// notifications — lets the Tauri layer react to plugin-side
+    /// topology changes (latency, routing) by re-querying the
+    /// instance and pushing a refresh to the UI.
+    pub fn component_restart_collector(&self) -> ComponentRestartCollector {
+        self.restart_collector.clone()
     }
 
     /// Load a `.vst3` bundle and register the resulting instance.
@@ -219,6 +231,20 @@ impl PluginHost {
     pub fn take_pending_param_changes(&self) -> Vec<HostParamChange> {
         self.collector.drain()
     }
+
+    /// Drain queued restart notifications. Consumers inspect the
+    /// flags and re-query affected instances — for `kLatencyChanged`,
+    /// via `instance_latency`.
+    pub fn take_pending_restart_notifications(&self) -> Vec<HostComponentRestart> {
+        self.restart_collector.drain()
+    }
+
+    /// Current processing latency for an instance, re-queried live
+    /// from the plugin. Use this after draining restart notifications
+    /// to refresh the DAW's cached latency alignment.
+    pub fn instance_latency(&self, instance_id: &str) -> Result<u32, PluginHostError> {
+        Ok(self.lookup(instance_id)?.current_latency_samples())
+    }
 }
 
 impl Default for PluginHost {
@@ -306,6 +332,26 @@ mod tests {
         let host = PluginHost::new();
         let err = host.load_instance_state("ghost", &[]).unwrap_err();
         assert!(matches!(err, PluginHostError::UnknownInstance(_)));
+    }
+
+    #[test]
+    fn instance_latency_unknown_errors_out() {
+        let host = PluginHost::new();
+        let err = host.instance_latency("ghost").unwrap_err();
+        assert!(matches!(err, PluginHostError::UnknownInstance(_)));
+    }
+
+    #[test]
+    fn restart_collector_is_shared_and_drainable() {
+        let host = PluginHost::new();
+        let c = host.component_restart_collector();
+        c.push(HostComponentRestart {
+            instance_id: "i".into(),
+            flags: crate::host_impl::RESTART_LATENCY_CHANGED,
+        });
+        let drained = host.take_pending_restart_notifications();
+        assert_eq!(drained.len(), 1);
+        assert!(host.take_pending_restart_notifications().is_empty());
     }
 
     #[test]

@@ -22,11 +22,7 @@ vi.mock('../../utils/wav', () => ({
 }));
 
 vi.mock('../../utils/waveformPeaks', () => ({
-  computeWaveformPeaks: vi.fn(() => [0.1, 0.5, 0.8]),
-}));
-
-vi.mock('../../utils/clipAudio', () => ({
-  CLIP_WAVEFORM_PEAK_COUNT: 200,
+  computeWaveformWithMipmap: vi.fn(async () => [0.1, 0.5, 0.8]),
 }));
 
 vi.mock('../audioFileManager', () => ({

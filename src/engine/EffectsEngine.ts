@@ -67,6 +67,7 @@ type EffectNode = {
   spectralRuntime?: {
     processor: SpectralProcessor;
     workletNode: AudioWorkletNode | ScriptProcessorNode;
+    port: MessagePort | null;
     inputGain: IDSPGain;
     outputGain: IDSPGain;
     dryGain: IDSPGain;
@@ -1000,9 +1001,8 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
   dryGain.gain.value = 1 - mixValue;
   wetGain.gain.value = mixValue;
 
-  // NOTE: ScriptProcessorNode is deprecated but used here as a bridge until
-  // AudioWorklet-based spectral processing is implemented. The SpectralProcessor
-  // class is already AudioWorklet-safe (zero allocations in processBlock).
+  // Use ScriptProcessorNode initially, then upgrade to AudioWorklet async.
+  // The SpectralProcessor class is AudioWorklet-safe (zero allocations in processBlock).
   const bufferSize = fftSize;
   const scriptNode = ctx.createScriptProcessor(bufferSize, 1, 1);
   scriptNode.onaudioprocess = (e) => {
@@ -1013,12 +1013,72 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
 
   // Routing: input → dry/wet split
   // Dry: input → dryGain → output
-  // Wet: input → scriptNode → wetGain → output
+  // Wet: input → processorNode → wetGain → output
   inputGain.outputNode.connect(dryGain.inputNode);
   inputGain.outputNode.connect(scriptNode);
   scriptNode.connect(wetGain.inputNode);
   dryGain.connect(outputGain);
   wetGain.connect(outputGain);
+
+  // Derive worklet mode from effect type
+  const modeMap: Record<string, string> = {
+    spectralFreeze: 'freeze',
+    spectralBlur: 'blur',
+    spectralFilter: 'filter',
+    spectralMorph: 'morph',
+  };
+  const workletMode = modeMap[effect.type] ?? 'filter';
+
+  // Attempt async upgrade to AudioWorklet
+  const spectralRuntime: {
+    processor: typeof processor;
+    workletNode: AudioWorkletNode | ScriptProcessorNode;
+    port: MessagePort | null;
+    inputGain: typeof inputGain;
+    outputGain: typeof outputGain;
+    dryGain: typeof dryGain;
+    wetGain: typeof wetGain;
+  } = {
+    processor,
+    workletNode: scriptNode,
+    port: null,
+    inputGain,
+    outputGain,
+    dryGain,
+    wetGain,
+  };
+
+  void (async () => {
+    try {
+      const { createDspNode } = await import('./dsp/workletLoader');
+      const result = await createDspNode(
+        ctx,
+        '/spectral-worklet-processor.js',
+        'spectral-worklet-processor',
+        1,
+        { fftSize, mode: workletMode },
+      );
+      if (result) {
+        // Swap: disconnect ScriptProcessor, connect AudioWorklet
+        inputGain.outputNode.disconnect(scriptNode);
+        scriptNode.disconnect();
+        inputGain.outputNode.connect(result.node);
+        result.node.connect(wetGain.inputNode);
+        spectralRuntime.workletNode = result.node;
+        spectralRuntime.port = result.port;
+
+        // Sync current processor state to worklet so upgraded node matches pre-swap sound
+        result.port.postMessage({ type: 'param', name: 'freezeDecay', value: processor.freezeDecay });
+        result.port.postMessage({ type: 'param', name: 'freezeBrightness', value: processor.freezeBrightness });
+        result.port.postMessage({ type: 'param', name: 'blurAmount', value: processor.blurAmount });
+        result.port.postMessage({ type: 'param', name: 'blurFrequencySpread', value: processor.blurFrequencySpread });
+        result.port.postMessage({ type: 'param', name: 'blurBrightness', value: processor.blurBrightness });
+        result.port.postMessage({ type: 'param', name: 'morphAmount', value: processor.morphAmount });
+      }
+    } catch {
+      // Keep ScriptProcessorNode fallback — already connected
+    }
+  })();
 
   return {
     id: effect.id,
@@ -1026,14 +1086,7 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
     node: inputGain,
     inputNode: inputGain.inputNode,
     outputNode: outputGain.outputNode,
-    spectralRuntime: {
-      processor,
-      workletNode: scriptNode,
-      inputGain,
-      outputGain,
-      dryGain,
-      wetGain,
-    },
+    spectralRuntime,
     dispose: () => {
       scriptNode.onaudioprocess = null;
       scriptNode.disconnect();
@@ -1395,6 +1448,9 @@ class EffectsEngine {
         rt.processor.freezeBrightness = p.brightness;
         if (p.frozen) rt.processor.freeze();
         else rt.processor.unfreeze();
+        rt.port?.postMessage({ type: 'param', name: 'freezeDecay', value: p.decay });
+        rt.port?.postMessage({ type: 'param', name: 'freezeBrightness', value: p.brightness });
+        rt.port?.postMessage({ type: p.frozen ? 'freeze' : 'unfreeze' });
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
         break;
@@ -1406,6 +1462,9 @@ class EffectsEngine {
         rt.processor.blurAmount = p.blurAmount;
         rt.processor.blurFrequencySpread = p.frequencySpread;
         rt.processor.blurBrightness = p.brightness;
+        rt.port?.postMessage({ type: 'param', name: 'blurAmount', value: p.blurAmount });
+        rt.port?.postMessage({ type: 'param', name: 'blurFrequencySpread', value: p.frequencySpread });
+        rt.port?.postMessage({ type: 'param', name: 'blurBrightness', value: p.brightness });
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
         break;
@@ -1417,6 +1476,7 @@ class EffectsEngine {
         const ctx = getDSPFactory().getContext();
         const curve = buildFilterCurve(p.points, rt.processor.fftSize >> 1, ctx.sampleRate, p.resolution);
         rt.processor.setFilterCurve(curve);
+        rt.port?.postMessage({ type: 'filterCurve', value: curve });
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
         break;
@@ -1428,6 +1488,8 @@ class EffectsEngine {
         rt.processor.morphAmount = p.morphAmount;
         if (p.frozen) rt.processor.freeze();
         else rt.processor.unfreeze();
+        rt.port?.postMessage({ type: 'param', name: 'morphAmount', value: p.morphAmount });
+        rt.port?.postMessage({ type: p.frozen ? 'freeze' : 'unfreeze' });
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
         break;
@@ -1663,17 +1725,17 @@ class EffectsEngine {
         const rt = effectNode.spectralRuntime;
         if (!rt) break;
         if (target.param === 'mix') { rt.dryGain.gain.value = 1 - value; rt.wetGain.gain.value = value; }
-        if (target.param === 'decay') rt.processor.freezeDecay = value;
-        if (target.param === 'brightness') rt.processor.freezeBrightness = value;
+        if (target.param === 'decay') { rt.processor.freezeDecay = value; rt.port?.postMessage({ type: 'param', name: 'freezeDecay', value }); }
+        if (target.param === 'brightness') { rt.processor.freezeBrightness = value; rt.port?.postMessage({ type: 'param', name: 'freezeBrightness', value }); }
         break;
       }
       case 'spectralBlur': {
         const rt = effectNode.spectralRuntime;
         if (!rt) break;
         if (target.param === 'mix') { rt.dryGain.gain.value = 1 - value; rt.wetGain.gain.value = value; }
-        if (target.param === 'blurAmount') rt.processor.blurAmount = value;
-        if (target.param === 'frequencySpread') rt.processor.blurFrequencySpread = value;
-        if (target.param === 'brightness') rt.processor.blurBrightness = value;
+        if (target.param === 'blurAmount') { rt.processor.blurAmount = value; rt.port?.postMessage({ type: 'param', name: 'blurAmount', value }); }
+        if (target.param === 'frequencySpread') { rt.processor.blurFrequencySpread = value; rt.port?.postMessage({ type: 'param', name: 'blurFrequencySpread', value }); }
+        if (target.param === 'brightness') { rt.processor.blurBrightness = value; rt.port?.postMessage({ type: 'param', name: 'blurBrightness', value }); }
         break;
       }
       case 'spectralFilter': {

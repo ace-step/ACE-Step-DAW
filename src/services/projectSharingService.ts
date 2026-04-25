@@ -1,4 +1,3 @@
-import { getAudioEngine } from '../hooks/useAudioEngine';
 import { exportMix, type ExportClip } from '../engine/exportMix';
 import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
 import { createSamplerConfig } from '../engine/SamplerEngine';
@@ -36,6 +35,7 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 async function renderTrackClips(project: Project, track: Track): Promise<ExportClip[]> {
+  const { getAudioEngine } = await import('../hooks/useAudioEngine');
   const engine = getAudioEngine();
   const clips: ExportClip[] = [];
 

@@ -10,6 +10,7 @@ import {
   getClipSourceSpan,
 } from '../../utils/clipAudio';
 import { ARRANGEMENT_EMPTY_TRACK_ID_PREFIX, parseArrangementEmptyTrackSlotIndex } from '../arrangement/trackSlotLayout';
+import { getAudioEngine } from '../../hooks/useAudioEngine';
 
 export type DragMode = 'move' | 'resize-left' | 'resize-right' | 'slip';
 
@@ -81,7 +82,13 @@ export function useClipDrag({
     const rect = e.currentTarget.getBoundingClientRect();
     const relX = e.clientX - rect.left;
     const relY = e.clientY - rect.top;
-    // Resize only triggers in the header rail area
+    // Shift+edge drag = time-stretch from full clip height, with wider edge zone (32px)
+    if (e.shiftKey) {
+      const stretchEdgePx = 32;
+      if (relX <= stretchEdgePx) return 'resize-left';
+      if (relX >= rect.width - stretchEdgePx) return 'resize-right';
+    }
+    // Normal edge drag = resize from header rail only (16px)
     if (relY <= HEADER_RAIL_HEIGHT_PX) {
       if (relX <= EDGE_HANDLE_PX) return 'resize-left';
       if (relX >= rect.width - EDGE_HANDLE_PX) return 'resize-right';
@@ -152,6 +159,14 @@ export function useClipDrag({
           if (!selectedClipId) return;
           selectClip(selectedClipId, false);
           useUIStore.getState().selectTrack(track.id, false);
+        }).catch((error) => {
+          console.error('Failed to slice clip to selected range', {
+            clipId: clip.id,
+            trackId: track.id,
+            previewStartTime,
+            previewEndTime,
+            error,
+          });
         });
       };
 
@@ -183,6 +198,7 @@ export function useClipDrag({
     dragRef.current = false;
     scissorRef.current = false;
     let isShiftCopy = e.shiftKey;
+    const isShiftStretch = e.shiftKey && (mode === 'resize-left' || mode === 'resize-right');
 
     const currentSelectedClipIds = useUIStore.getState().selectedClipIds;
     const isMultiSelected = currentSelectedClipIds.size > 1 && currentSelectedClipIds.has(clip.id);
@@ -339,13 +355,15 @@ export function useClipDrag({
         newStart = Math.min(newStart, maxStart);
 
         const newDuration = origDuration + (origStart - newStart);
-        if (ev.shiftKey) {
+        if (isShiftStretch) {
+          // Shift+drag = time-stretch: use clip's current mode or default to complexPro
+          const effectiveMode = origStretchMode && origStretchMode !== 'repitch' ? origStretchMode : 'complexPro';
           scheduleStoreUpdate(() => updateClip(clip.id, {
             startTime: newStart,
             duration: newDuration,
             contentOffset: undefined,
             timeStretchRate: Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration),
-            stretchMode: 'repitch',
+            stretchMode: effectiveMode,
           }));
           return;
         }
@@ -384,12 +402,15 @@ export function useClipDrag({
         let newDuration = ev.altKey ? origDuration + deltaSec : snapToGrid(origDuration + deltaSec, bpm, 1);
         newDuration = Math.max(MIN_CLIP_DURATION, newDuration);
         newDuration = Math.min(newDuration, totalDuration - origStart);
-        if (ev.shiftKey) {
+        if (isShiftStretch) {
+          // Shift+drag = time-stretch: use clip's current mode or default to complexPro
+          const effectiveMode = origStretchMode && origStretchMode !== 'repitch' ? origStretchMode : 'complexPro';
+          const rate = Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration);
           scheduleStoreUpdate(() => updateClip(clip.id, {
             duration: newDuration,
             contentOffset: undefined,
-            timeStretchRate: Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration),
-            stretchMode: 'repitch',
+            timeStretchRate: rate,
+            stretchMode: effectiveMode,
           }));
           return;
         }
@@ -495,7 +516,29 @@ export function useClipDrag({
       endDrag();
       document.body.style.cursor = '';
 
-      if ((mode === 'resize-left' || mode === 'resize-right') && dragRef.current && !ev.shiftKey) {
+      // After Shift+drag stretch: trigger Rubber Band pre-processing in background
+      if (isShiftStretch && dragRef.current) {
+        const currentClip = useProjectStore.getState().getClipById(clip.id);
+        if (currentClip) {
+          try {
+            const engine = getAudioEngine();
+            const audioKey = currentClip.isolatedAudioKey ?? currentClip.cumulativeMixKey;
+            if (audioKey) {
+              // Show processing indicator on clip
+              useProjectStore.getState().updateClipStatus(clip.id, 'processing');
+              void engine.preProcessClipStretchByKey(
+                currentClip.id, audioKey,
+                currentClip.duration, currentClip.timeStretchRate,
+                currentClip.stretchMode, currentClip.pitchShift,
+              ).finally(() => {
+                useProjectStore.getState().updateClipStatus(clip.id, 'ready');
+              });
+            }
+          } catch { /* engine not ready */ }
+        }
+      }
+
+      if ((mode === 'resize-left' || mode === 'resize-right') && dragRef.current && !isShiftStretch) {
         const currentClip = useProjectStore.getState().getClipById(clip.id);
         if (currentClip) {
           if (mode === 'resize-left') {

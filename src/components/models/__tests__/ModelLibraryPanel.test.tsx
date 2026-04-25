@@ -4,7 +4,11 @@ import { ModelLibraryPanel } from '../ModelLibraryPanel';
 import { useModelStore } from '../../../store/modelStore';
 import { useUIStore } from '../../../store/uiStore';
 
-vi.mock('../../../services/aceStepApi', () => ({ listModels: vi.fn().mockResolvedValue({ models: [], default_model: null, lm_models: [], loaded_lm_model: null, llm_initialized: false }), initModel: vi.fn(), getStats: vi.fn() }));
+vi.mock('../../../services/aceStepApi', () => ({
+  listModels: vi.fn().mockResolvedValue({ models: [], default_model: null, lm_models: [], loaded_lm_model: null, llm_initialized: false }),
+  initModel: vi.fn(),
+  getStats: vi.fn().mockResolvedValue({ jobs: { total: 0, succeeded: 0, failed: 0, running: 0, queued: 0 }, queue_size: 0, queue_maxsize: 10, avg_job_seconds: 0 }),
+}));
 vi.mock('../../../services/projectStorage', () => ({ saveProject: vi.fn() }));
 
 function setup() {

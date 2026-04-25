@@ -16,9 +16,13 @@
     "test:coverage": "vitest run --coverage",
     "qa:runlist": "node scripts/qa/generate-runlist.mjs",
     "qa:validate": "node scripts/qa/validate-story-assets.mjs",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
     "docs:dev": "vitepress dev website",
     "docs:build": "vitepress build website",
-    "docs:preview": "vitepress preview website"
+    "docs:preview": "vitepress preview website",
+    "dashboard": "tsx dashboard/server.ts",
+    "dashboard:build": "vite build --config dashboard/vite.config.ts"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
@@ -36,6 +40,7 @@
     "@strudel/tonal": "^1.2.6",
     "@strudel/transpiler": "^1.2.6",
     "@strudel/webaudio": "^1.3.0",
+    "@tauri-apps/api": "^2.10.1",
     "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
@@ -47,7 +52,8 @@
     "onnxruntime-web": "^1.24.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tone": "^15.1.22",
+    "rubberband-wasm": "^3.3.0",
+    "signalsmith-stretch": "^1.3.2",
     "uuid": "^11.0.0",
     "web-demuxer": "^4.0.0",
     "xterm": "^5.3.0",
@@ -56,6 +62,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.0.0",
+    "@tauri-apps/cli": "^2.10.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.0.0",
@@ -68,6 +75,7 @@
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.0.0",
     "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
     "vitepress": "^1.6.4",

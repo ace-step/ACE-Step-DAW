@@ -15,27 +15,27 @@ export interface ClipPresentation {
 export function getClipPresentation(clipColor: string, isSelected: boolean): ClipPresentation {
   if (isSelected) {
     return {
-      waveformColor: '#16181f',
+      waveformColor: 'rgba(0, 0, 0, 0.72)',
       titleColor: '#181b22',
       metaColor: 'rgba(24, 27, 34, 0.72)',
-      headerBackground: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.96)} 0%, ${hexToRgba(clipColor, 0.88)} 100%)`,
-      bodyBackground: 'linear-gradient(180deg, rgba(253, 251, 246, 0.98) 0%, rgba(244, 238, 228, 0.96) 100%)',
-      bodyBorderColor: 'rgba(255, 255, 255, 0.92)',
-      bodyInnerShadow: 'inset 0 1px 3px rgba(0,0,0,0.15)',
-      containerShadow: `0 0 0 2px rgba(255,255,255,0.96), 0 0 12px ${hexToRgba(clipColor, 0.3)}, 0 14px 28px rgba(0,0,0,0.22)`,
-      clipBorder: `1px solid rgba(255,255,255,0.96)`,
+      headerBackground: hexToRgba(clipColor, 0.95),
+      bodyBackground: 'rgba(250, 248, 244, 0.97)',
+      bodyBorderColor: 'transparent',
+      bodyInnerShadow: 'none',
+      containerShadow: `0 0 0 2px rgba(255,255,255,0.9), 0 0 8px ${hexToRgba(clipColor, 0.2)}`,
+      clipBorder: 'none',
     };
   }
 
   return {
-    waveformColor: '#1a1d26',
+    waveformColor: 'rgba(0, 0, 0, 0.6)',
     titleColor: '#18161a',
     metaColor: 'rgba(24, 22, 26, 0.7)',
-    headerBackground: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.96)} 0%, ${hexToRgba(clipColor, 0.9)} 100%)`,
-    bodyBackground: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.56)} 0%, ${hexToRgba(clipColor, 0.42)} 100%)`,
-    bodyBorderColor: hexToRgba(clipColor, 0.34),
-    bodyInnerShadow: 'inset 0 1px 2px rgba(0,0,0,0.3)',
-    containerShadow: '0 8px 18px rgba(0,0,0,0.14)',
-    clipBorder: `1px solid ${hexToRgba(clipColor, 0.5)}`,
+    headerBackground: hexToRgba(clipColor, 0.92),
+    bodyBackground: hexToRgba(clipColor, 0.45),
+    bodyBorderColor: 'transparent',
+    bodyInnerShadow: 'none',
+    containerShadow: 'none',
+    clipBorder: 'none',
   };
 }

@@ -43,7 +43,7 @@ export const flStudioTheme: ThemeDefinition = {
     'daw-hover': '#2e3840',
     'daw-hover-subtle': '#222a30',
     // Text — slightly cool, not warm
-    'daw-text-muted': '#7a8a94',
+    'daw-text-muted': '#8a9aa4',
     // FL's golden orange accent for selection/highlights
     'daw-accent': '#fdb200',
     'daw-accent-hover': '#ffc940',

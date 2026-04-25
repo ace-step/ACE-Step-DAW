@@ -46,6 +46,7 @@ export interface CommandPaletteContext {
   showTempoLane: boolean;
   loopEnabled: boolean;
   metronomeEnabled: boolean;
+  punchEnabled: boolean;
   expandedTrackId: string | null;
   openPianoRollTrackId: string | null;
   openSequencerTrackId: string | null;
@@ -56,6 +57,7 @@ export interface CommandPaletteContext {
     stop: () => void | Promise<void>;
     toggleLoop: () => void;
     toggleMetronome: () => void;
+    togglePunch: () => void;
     setShowNewProjectDialog: (v: boolean) => void;
     setShowProjectListDialog: (v: boolean) => void;
     openGenerationSettings: () => void;
@@ -417,6 +419,17 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       ['toggle metronome', 'click track', 'count in click'],
       context.actions.toggleMetronome,
       ['K'],
+      'Transport control',
+    ),
+    createTrackCommand(
+      'transport:toggle-punch',
+      context.punchEnabled ? 'Disable Punch In/Out' : 'Enable Punch In/Out',
+      'Transport',
+      'action',
+      ['transport', 'punch', 'recording'],
+      ['toggle punch', 'punch recording', 'punch in out'],
+      context.actions.togglePunch,
+      ['Shift', 'P'],
       'Transport control',
     ),
   );

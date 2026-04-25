@@ -304,9 +304,9 @@ describe('NativeFMSynth voice cleanup', () => {
 });
 
 describe('parseDuration', () => {
-  it('returns numeric durations as-is', () => {
-    expect(parseDuration(0.5)).toBe(0.5);
-    expect(parseDuration(1.0)).toBe(1.0);
+  it('returns numeric durations as-is regardless of BPM', () => {
+    expect(parseDuration(0.5, 120)).toBe(0.5);
+    expect(parseDuration(1.0, 90)).toBe(1.0);
   });
 
   it('parses Tone.js notation with explicit BPM', () => {
@@ -325,13 +325,8 @@ describe('parseDuration', () => {
     expect(parseDuration('4n', 180)).toBeCloseTo(1 / 3);
   });
 
-  it('defaults to 120 BPM when no BPM argument provided', () => {
-    // parseDuration is pure — defaults to 120 BPM via parameter default
-    expect(parseDuration('4n')).toBeCloseTo(0.5);
-  });
-
   it('returns fallback for unparseable strings', () => {
-    expect(parseDuration('invalid')).toBe(0.25);
+    expect(parseDuration('invalid', 120)).toBe(0.25);
   });
 });
 
@@ -355,5 +350,28 @@ describe('NativeFrequencyEnvelope signal output', () => {
 
     expect(() => env.triggerAttack()).not.toThrow();
     expect(() => env.triggerRelease()).not.toThrow();
+  });
+});
+
+describe('Native synth duration parsing uses the injected BPM (regression #1588)', () => {
+  it('produces different durations at different BPMs for note notation', () => {
+    // BPM=60: quarter note = 1.0s
+    const osc60 = new MockOscillatorNode();
+    const ctx60 = { ...createMockCtx(), createOscillator: () => osc60 } as unknown as AudioContext;
+    const synth60 = new NativePolySynth(ctx60);
+    synth60.bpm = 60;
+    synth60.triggerAttackRelease('C4', '4n');
+    const stopTime60 = osc60.stop.mock.calls[0]?.[0] as number;
+
+    // BPM=120: quarter note = 0.5s
+    const osc120 = new MockOscillatorNode();
+    const ctx120 = { ...createMockCtx(), createOscillator: () => osc120 } as unknown as AudioContext;
+    const synth120 = new NativePolySynth(ctx120);
+    synth120.bpm = 120;
+    synth120.triggerAttackRelease('C4', '4n');
+    const stopTime120 = osc120.stop.mock.calls[0]?.[0] as number;
+
+    // A quarter note should last longer at slower BPM
+    expect(stopTime60).toBeGreaterThan(stopTime120);
   });
 });

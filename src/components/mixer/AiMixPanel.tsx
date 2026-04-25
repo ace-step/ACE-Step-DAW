@@ -46,6 +46,8 @@ function TrackSuggestionCard({
         <button
           type="button"
           onClick={onToggle}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? 'Collapse' : 'Expand'} ${trackName} suggestions`}
           className="text-[10px] font-medium text-zinc-200 hover:text-white transition-colors"
         >
           {expanded ? '▾' : '▸'} {trackName}

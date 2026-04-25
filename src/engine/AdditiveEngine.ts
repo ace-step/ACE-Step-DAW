@@ -1,5 +1,6 @@
-import * as Tone from 'tone';
 import type { AdditiveSettings, AdditivePartial, AdditivePreset, InstrumentEnvelope } from '../types/project';
+import { getAudioEngine } from '../hooks/useAudioEngine';
+import { midiToFrequency } from '../utils/pitch';
 
 // ─── Preset Harmonic Profiles ──────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ interface ActiveVoice {
 }
 
 interface AdditiveInstance {
-  output: Tone.Gain;
+  output: GainNode;
   settings: AdditiveSettings;
   activeVoices: Map<number, ActiveVoice>;
 }
@@ -95,15 +96,16 @@ class AdditiveEngine {
   private instances = new Map<string, AdditiveInstance>();
 
   async ensureStarted() {
-    if (Tone.getContext().state !== 'running') {
-      await Tone.start();
+    const engine = getAudioEngine();
+    if (engine.ctx.state !== 'running') {
+      await engine.resume();
     }
   }
 
   ensureTrack(
     trackId: string,
     settings: AdditiveSettings,
-    connectTo?: Tone.InputNode,
+    connectTo?: AudioNode,
   ): AdditiveInstance {
     const outputLevel = dBToLinear(settings.outputGain);
 
@@ -114,13 +116,18 @@ class AdditiveEngine {
       return existing;
     }
 
-    const output = new Tone.Gain(outputLevel);
-
-    if (connectTo) {
-      output.connect(connectTo);
-    } else {
-      output.toDestination();
-    }
+    const ctx = getAudioEngine().ctx;
+    const output = ctx.createGain();
+    output.gain.value = outputLevel;
+    // Connect to the supplied track node when available; otherwise
+    // route directly to ctx.destination. This bypasses Tone's
+    // DestinationClass wrapper (which had its own volume/mute) —
+    // no audible impact in this app because master gain is handled
+    // by AudioEngine's master bus on the connectTo path, and the
+    // fallback is reachable only from _lazyInit (notes triggered
+    // before ensureTrack was called with a connectTo). Codex P1 on
+    // PR #1733.
+    output.connect(connectTo ?? ctx.destination);
 
     const instance: AdditiveInstance = {
       output,
@@ -139,9 +146,9 @@ class AdditiveEngine {
     this._stopVoice(instance, pitch);
 
     const { partials, ampEnvelope } = instance.settings;
-    const ctx = Tone.getContext().rawContext;
+    const ctx = getAudioEngine().ctx;
     const now = ctx.currentTime;
-    const fundamentalFreq = Tone.Frequency(pitch, 'midi').toFrequency();
+    const fundamentalFreq = midiToFrequency(pitch);
     const vel = Math.max(0, Math.min(127, velocity)) / 127;
 
     const masterGain = ctx.createGain();
@@ -151,7 +158,10 @@ class AdditiveEngine {
       vel * ampEnvelope.sustain,
       now + ampEnvelope.attack + ampEnvelope.decay,
     );
-    masterGain.connect((instance.output as unknown as { input: AudioNode }).input ?? ctx.destination);
+    // Route into the instance's output bus (native GainNode). The
+    // `.input` fallback from the prior Tone.Gain shape is no longer
+    // needed — native GainNodes connect directly.
+    masterGain.connect(instance.output);
 
     // Pre-compute active partial count once (avoid O(n²))
     const activeCount = partials.reduce((n, p) => n + (p.amplitude > 0 ? 1 : 0), 0);
@@ -193,7 +203,7 @@ class AdditiveEngine {
     const voice = instance.activeVoices.get(pitch);
     if (!voice) return;
 
-    const ctx = Tone.getContext().rawContext;
+    const ctx = getAudioEngine().ctx;
     const now = ctx.currentTime;
     const release = instance.settings.ampEnvelope.release;
 
@@ -265,7 +275,9 @@ class AdditiveEngine {
     for (const pitch of [...instance.activeVoices.keys()]) {
       this._stopVoice(instance, pitch);
     }
-    instance.output.dispose();
+    // Native GainNode has no `dispose` — `disconnect` releases the
+    // graph edge; GC reclaims the node itself.
+    try { instance.output.disconnect(); } catch { /* already disconnected */ }
     this.instances.delete(trackId);
   }
 

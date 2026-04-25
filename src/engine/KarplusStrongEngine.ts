@@ -1,17 +1,98 @@
-import * as Tone from 'tone';
+/**
+ * Karplus-Strong physical model synthesis engine.
+ *
+ * Phase 5M migration: drops Tone.PluckSynth in favour of a local
+ * `NativePluckVoice` that implements the Karplus-Strong algorithm
+ * in JS and plays the result through an `AudioBufferSourceNode`.
+ *
+ * The KS loop: initialize a circular delay line (length = sampleRate
+ * / freq) with shaped noise, then iterate `delay[n] = lowpass(noise) *
+ * feedback`. Output is written to an `AudioBuffer` up to `DECAY_SECONDS`
+ * which is sufficient for the resonance range used by the presets.
+ *
+ * Parameter semantics preserved from the Tone.PluckSynth wrappers:
+ *   - `attackNoise` scales the initial delay-line noise amplitude.
+ *   - `dampening` is the lowpass cutoff in the feedback path (Hz).
+ *   - `resonance` is the feedback multiplier (0..1; higher → longer decay).
+ */
 import type { PhysicalModelSettings, PhysicalExciterType, PhysicalModelPreset } from '../types/project';
+import { getAudioEngine } from '../hooks/useAudioEngine';
+import { midiToFrequency } from '../utils/pitch';
 
-/** Number of polyphonic voices for PluckSynth (self-decaying, so overlap is common). */
+/** Number of polyphonic voices (self-decaying, so overlap is common). */
 const VOICE_COUNT = 8;
+/** Maximum audible tail — keeps the pre-computed buffer bounded. */
+const DECAY_SECONDS = 5;
 
-interface KarplusInstance {
-  synths: Tone.PluckSynth[];
-  nextVoice: number;
-  filter: Tone.Filter;
-  bodyFilter: Tone.Filter;
-  bodyWetGain: Tone.Gain;
-  output: Tone.Gain;
-  settings: PhysicalModelSettings;
+// ─── NativePluckVoice ────────────────────────────────────────────────────
+
+class NativePluckVoice {
+  attackNoise = 1;
+  dampening = 4000; // Hz — lowpass cutoff in feedback path
+  resonance = 0.9; // 0..1 feedback gain
+  private _currentSource: AudioBufferSourceNode | null = null;
+
+  constructor(
+    private readonly _ctx: AudioContext,
+    private readonly _output: AudioNode,
+  ) {}
+
+  triggerAttack(freq: number, time: number): void {
+    const sampleRate = this._ctx.sampleRate;
+    const totalSamples = Math.max(1, Math.ceil(sampleRate * DECAY_SECONDS));
+    const N = Math.max(2, Math.round(sampleRate / Math.max(20, freq)));
+
+    // Initialize delay line with shaped noise.
+    const delay = new Float32Array(N);
+    const noiseScale = Math.min(1, Math.max(0, this.attackNoise));
+    for (let i = 0; i < N; i++) {
+      delay[i] = (Math.random() * 2 - 1) * noiseScale;
+    }
+
+    // One-pole lowpass coefficient: y[n] = (1-a) * x[n] + a * y[n-1].
+    const cutoff = Math.max(20, this.dampening);
+    const a = Math.exp(-2 * Math.PI * cutoff / sampleRate);
+    // Resonance caps at < 1 to guarantee decay.
+    const feedback = Math.min(0.999, Math.max(0, this.resonance));
+
+    // Render the KS loop into an AudioBuffer.
+    const buf = this._ctx.createBuffer(1, totalSamples, sampleRate);
+    const data = buf.getChannelData(0);
+    let lp = 0;
+    let idx = 0;
+    for (let i = 0; i < totalSamples; i++) {
+      const sample = delay[idx];
+      data[i] = sample;
+      lp = (1 - a) * sample + a * lp;
+      delay[idx] = lp * feedback;
+      idx = (idx + 1) % N;
+    }
+
+    // Replace any currently-playing source (trigger re-excites the voice).
+    if (this._currentSource) {
+      try { this._currentSource.stop(); } catch { /* already stopped */ }
+      try { this._currentSource.disconnect(); } catch { /* already disconnected */ }
+      this._currentSource = null;
+    }
+
+    const source = this._ctx.createBufferSource();
+    source.buffer = buf;
+    source.connect(this._output);
+    source.onended = () => {
+      try { source.disconnect(); } catch { /* already disconnected */ }
+      if (this._currentSource === source) this._currentSource = null;
+    };
+    source.start(time);
+    this._currentSource = source;
+  }
+
+  dispose(): void {
+    if (this._currentSource) {
+      try { this._currentSource.stop(); } catch { /* already stopped */ }
+      try { this._currentSource.disconnect(); } catch { /* already disconnected */ }
+      this._currentSource = null;
+    }
+  }
 }
 
 // ─── Presets ────────────────────────────────────────────────────────────────
@@ -67,13 +148,14 @@ export const PHYSICAL_PRESETS: Record<PhysicalModelPreset, PhysicalModelSettings
   },
 };
 
-// ─── Helper: map settings to PluckSynth parameters ────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────
 
 function exciterToAttackNoise(exciter: PhysicalExciterType): number {
   switch (exciter) {
     case 'pluck': return 1;
     case 'bow': return 4;
     case 'hammer': return 0.5;
+    default: return 1;
   }
 }
 
@@ -96,19 +178,30 @@ function dBToLinear(dB: number): number {
 
 // ─── Engine ────────────────────────────────────────────────────────────────
 
+interface KarplusInstance {
+  synths: NativePluckVoice[];
+  nextVoice: number;
+  filter: BiquadFilterNode;
+  bodyFilter: BiquadFilterNode;
+  bodyWetGain: GainNode;
+  output: GainNode;
+  settings: PhysicalModelSettings;
+}
+
 class KarplusStrongEngine {
   private instances = new Map<string, KarplusInstance>();
 
   async ensureStarted() {
-    if (Tone.getContext().state !== 'running') {
-      await Tone.start();
+    const engine = getAudioEngine();
+    if (engine?.ctx?.state && engine.ctx.state !== 'running') {
+      await engine.resume();
     }
   }
 
   async ensureTrack(
     trackId: string,
     settings: PhysicalModelSettings,
-    connectTo?: Tone.InputNode,
+    connectTo?: AudioNode,
   ): Promise<KarplusInstance> {
     await this.ensureStarted();
 
@@ -127,30 +220,36 @@ class KarplusStrongEngine {
     this._lazyInit(trackId);
     const instance = this.instances.get(trackId);
     if (!instance) return;
-    const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+    const freq = midiToFrequency(pitch);
     const vel = Math.max(0, Math.min(127, velocity)) / 127;
 
-    // Round-robin voice allocation for polyphony
     const voiceIdx = instance.nextVoice % instance.synths.length;
     instance.nextVoice = (instance.nextVoice + 1) % instance.synths.length;
     const synth = instance.synths[voiceIdx];
 
-    // Apply velocity by scaling output temporarily with scheduled ramp
-    const now = Tone.now();
+    const ctx = getAudioEngine().ctx;
+    const now = ctx.currentTime;
     const baseGain = dBToLinear(instance.settings.outputGain);
-    instance.output.gain.cancelScheduledValues(now);
-    instance.output.gain.setValueAtTime(baseGain * vel, now);
+
+    // Velocity ramp: briefly scale output, then restore base gain.
+    const outGain = instance.output.gain;
+    if (typeof outGain.cancelAndHoldAtTime === 'function') {
+      outGain.cancelAndHoldAtTime(now);
+    } else {
+      outGain.cancelScheduledValues(now);
+    }
+    outGain.setValueAtTime(baseGain * vel, now);
+    outGain.linearRampToValueAtTime(baseGain, now + 0.05);
+
     synth.triggerAttack(freq, now);
-    // Restore base gain after excitation window (~50ms)
-    instance.output.gain.linearRampToValueAtTime(baseGain, now + 0.05);
   }
 
   noteOff(_trackId: string, _pitch: number) {
-    // PluckSynth notes self-decay — no explicit release needed.
+    // KS notes self-decay — no explicit release needed.
   }
 
   triggerAttackRelease(trackId: string, pitch: number, _duration: number, velocity = 1) {
-    // PluckSynth self-decays, so duration doesn't apply. Apply velocity.
+    // Self-decaying; duration is ignored. Velocity preserved.
     this.noteOn(trackId, pitch, Math.round(velocity * 127));
   }
 
@@ -197,7 +296,7 @@ class KarplusStrongEngine {
   }
 
   releaseAll() {
-    // PluckSynth notes are self-decaying
+    // KS notes self-decay.
   }
 
   removeTrack(trackId: string) {
@@ -218,7 +317,6 @@ class KarplusStrongEngine {
   /** Lazily create instance with defaults if noteOn arrives before ensureTrack. */
   private _lazyInit(trackId: string) {
     if (!this.instances.has(trackId)) {
-      // Synchronous fallback — ensureTrack is async but we need immediate init
       const instance = this._createInstance({ ...PHYSICAL_PRESETS['custom'] });
       this.instances.set(trackId, instance);
     }
@@ -226,39 +324,35 @@ class KarplusStrongEngine {
 
   private _createInstance(
     settings: PhysicalModelSettings,
-    connectTo?: Tone.InputNode,
+    connectTo?: AudioNode,
   ): KarplusInstance {
+    const ctx = getAudioEngine().ctx;
     const params = settingsToPluckParams(settings);
 
-    // Create polyphonic voice pool
-    const synths: Tone.PluckSynth[] = [];
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 500 + settings.brightness * 19500;
+    filter.Q.value = 0.7;
+
+    const bodyFilter = ctx.createBiquadFilter();
+    bodyFilter.type = 'bandpass';
+    bodyFilter.frequency.value = 200 + settings.bodySize * 2000;
+    bodyFilter.Q.value = 1 + settings.bodySize * 5;
+
+    const bodyWetGain = ctx.createGain();
+    bodyWetGain.gain.value = settings.bodySize;
+
+    const output = ctx.createGain();
+    output.gain.value = dBToLinear(settings.outputGain);
+
+    // Chain: each voice → filter → output (dry) + filter → bodyFilter → bodyWetGain → output (wet)
+    const synths: NativePluckVoice[] = [];
     for (let i = 0; i < VOICE_COUNT; i++) {
-      synths.push(new Tone.PluckSynth({
-        attackNoise: params.attackNoise,
-        dampening: params.dampening,
-        resonance: params.resonance,
-      }));
-    }
-
-    const filter = new Tone.Filter({
-      type: 'lowpass',
-      frequency: 500 + settings.brightness * 19500,
-      Q: 0.7,
-    });
-
-    // Body resonance: always created, wet gain controls blend amount
-    const bodyFilter = new Tone.Filter({
-      type: 'bandpass',
-      frequency: 200 + settings.bodySize * 2000,
-      Q: 1 + settings.bodySize * 5,
-    });
-    const bodyWetGain = new Tone.Gain(settings.bodySize);
-
-    const output = new Tone.Gain(dBToLinear(settings.outputGain));
-
-    // Signal chain: synth -> filter -> output (dry) + filter -> bodyFilter -> bodyWetGain -> output (wet)
-    for (const synth of synths) {
-      synth.connect(filter);
+      const voice = new NativePluckVoice(ctx, filter);
+      voice.attackNoise = params.attackNoise;
+      voice.dampening = params.dampening;
+      voice.resonance = params.resonance;
+      synths.push(voice);
     }
     filter.connect(output);
     filter.connect(bodyFilter);
@@ -268,7 +362,7 @@ class KarplusStrongEngine {
     if (connectTo) {
       output.connect(connectTo);
     } else {
-      output.toDestination();
+      output.connect(ctx.destination);
     }
 
     return {
@@ -299,10 +393,10 @@ class KarplusStrongEngine {
 
   private _disposeInstance(instance: KarplusInstance) {
     for (const s of instance.synths) s.dispose();
-    instance.filter.dispose();
-    instance.bodyFilter.dispose();
-    instance.bodyWetGain.dispose();
-    instance.output.dispose();
+    try { instance.filter.disconnect(); } catch { /* already disconnected */ }
+    try { instance.bodyFilter.disconnect(); } catch { /* already disconnected */ }
+    try { instance.bodyWetGain.disconnect(); } catch { /* already disconnected */ }
+    try { instance.output.disconnect(); } catch { /* already disconnected */ }
   }
 }
 

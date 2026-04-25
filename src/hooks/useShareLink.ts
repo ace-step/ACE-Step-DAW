@@ -42,6 +42,8 @@ export function useShareLink(): {
           return;
         }
         setSharedProject(record);
+      }).catch(() => {
+        toastInfo('Failed to load shared project');
       }).finally(() => {
         setLoadingSharedProject(false);
       });

@@ -14,8 +14,7 @@ import { useTransportStore } from '../store/transportStore';
 import { recordingEngine } from '../engine/RecordingEngine';
 import { getMidiCaptureService } from '../services/midiCaptureService';
 import { saveAudioBlob } from '../services/audioFileManager';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
-import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { toastError, toastSuccess, toastInfo } from './useToast';
 import { createDebugLogger } from '../utils/debugLogger';
@@ -137,8 +136,6 @@ export function useSessionRecording() {
       }
 
       // Create clip first to get an ID, then store audio with that ID
-      const waveformPeaks = computeWaveformPeaks(result.audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
-
       const clip = useProjectStore.getState().addClip(trackId, {
         startTime: 0,
         duration: result.duration,
@@ -151,6 +148,7 @@ export function useSessionRecording() {
       // Convert to WAV, store, and update clip
       const wavBlob = audioBufferToWavBlob(result.audioBuffer);
       const audioKey = await saveAudioBlob(project.id, clip.id, 'cumulative', wavBlob);
+      const waveformPeaks = await computeWaveformWithMipmap(audioKey, result.audioBuffer);
       useProjectStore.getState().updateClipStatus(clip.id, 'ready', {
         cumulativeMixKey: audioKey,
         waveformPeaks,

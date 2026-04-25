@@ -35,7 +35,7 @@ vi.mock('../../services/audioFileManager', () => ({
 }));
 
 vi.mock('../../utils/waveformPeaks', () => ({
-  computeWaveformPeaks: vi.fn().mockReturnValue([0.1, 0.2, 0.3]),
+  computeWaveformWithMipmap: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
 }));
 
 vi.mock('../../utils/wav', () => ({

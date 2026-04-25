@@ -100,12 +100,15 @@ function parabolicInterpolation(cmndf: Float32Array, tau: number): number {
   return tau;
 }
 
-/**
- * Convert frequency in Hz to MIDI pitch number.
- */
-export function frequencyToMidi(frequency: number): number {
-  return 69 + 12 * Math.log2(frequency / 440);
-}
+// Re-export the canonical implementation from pitch.ts so there is
+// exactly one place that defines Hz → MIDI conversion. The
+// pitch-detection module historically had its own copy with
+// slightly different edge-case behavior (no NaN guard for
+// non-finite/non-positive input). Consolidating under one export
+// avoids the future "which helper did I import?" mistake codex
+// flagged on PR #1723.
+import { frequencyToMidi } from './pitch';
+export { frequencyToMidi };
 
 /**
  * Detect pitch frames from a mono audio buffer using the YIN algorithm.

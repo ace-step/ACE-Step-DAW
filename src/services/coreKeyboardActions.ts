@@ -100,43 +100,48 @@ export async function executeCoreKeyboardAction(
 ): Promise<boolean> {
   if (!isCoreKeyboardActionId(actionId)) return false;
 
-  const transport = useTransportStore.getState();
-  const ui = useUIStore.getState();
+  try {
+    const transport = useTransportStore.getState();
+    const ui = useUIStore.getState();
 
-  switch (actionId) {
-    case 'transport.playPause':
-      if (transport.isPlaying) await deps.pause();
-      else await deps.play();
-      return true;
+    switch (actionId) {
+      case 'transport.playPause':
+        if (transport.isPlaying) await deps.pause();
+        else await deps.play();
+        return true;
 
-    case 'transport.loop':
-      transport.toggleLoop();
-      return true;
+      case 'transport.loop':
+        transport.toggleLoop();
+        return true;
 
-    case 'transport.record':
-      return executeRecordAction(deps);
+      case 'transport.record':
+        return await executeRecordAction(deps);
 
-    case 'tracks.mute':
-      return toggleFocusedTrackFlag('muted');
+      case 'tracks.mute':
+        return toggleFocusedTrackFlag('muted');
 
-    case 'tracks.solo':
-      return toggleFocusedTrackFlag('soloed');
+      case 'tracks.solo':
+        return toggleFocusedTrackFlag('soloed');
 
-    case 'tracks.bypassEffects':
-      return toggleFocusedTrackEffectsBypass();
+      case 'tracks.bypassEffects':
+        return toggleFocusedTrackEffectsBypass();
 
-    case 'view.zoomToSelection':
-      if (ui.keyboardContext.scope !== 'timeline') return false;
-      ui.zoomTimelineToSelection();
-      return true;
+      case 'view.zoomToSelection':
+        if (ui.keyboardContext.scope !== 'timeline') return false;
+        ui.zoomTimelineToSelection();
+        return true;
 
-    case 'view.zoomToFit':
-      if (ui.keyboardContext.scope !== 'timeline') return false;
-      ui.zoomTimelineToProject();
-      return true;
+      case 'view.zoomToFit':
+        if (ui.keyboardContext.scope !== 'timeline') return false;
+        ui.zoomTimelineToProject();
+        return true;
 
-    default:
-      return false;
+      default:
+        return false;
+    }
+  } catch {
+    // Keyboard action errors should not propagate as unhandled rejections
+    return false;
   }
 }
 

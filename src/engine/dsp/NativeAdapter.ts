@@ -277,35 +277,38 @@ class NativeDelay extends NativeNodeWrapper implements IDSPDelay {
 }
 
 // ---------------------------------------------------------------------------
-// ScriptProcessor-based effects (using Phase 2 core DSP)
+// AudioWorklet-based effects with ScriptProcessorNode fallback
 // ---------------------------------------------------------------------------
+
+import { createDspNode, type DspNodeResult } from './workletLoader';
 
 const BUFFER_SIZE = 2048;
 
-// TODO: Migrate from deprecated ScriptProcessorNode to AudioWorkletNode
-// once AudioWorklet pipeline is fully wired (Phase 5 DspWorkerHost).
 class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
   private readonly _verb: FreeVerb;
   private readonly _mix: DryWetMix;
   private readonly _preDelayNode: DelayNode;
+  private _dspNode: DspNodeResult | null = null;
   private _decay = 1.5;
   private _preDelay = 0.01;
 
   constructor(ctx: AudioContext, options?: IDSPReverbOptions) {
     const mix = new DryWetMix(ctx);
-    const processor = ctx.createScriptProcessor(BUFFER_SIZE, 2, 2);
     const verb = new FreeVerb(ctx.sampleRate);
     const preDelayNode = ctx.createDelay(0.5);
 
     const preDelayTime = options?.preDelay ?? 0.01;
     preDelayNode.delayTime.value = preDelayTime;
 
-    verb.roomSize = Math.min(1, (options?.decay ?? 1.5) / 10);
+    const roomSize = Math.min(1, (options?.decay ?? 1.5) / 10);
+    verb.roomSize = roomSize;
     verb.damping = 0.5;
     verb.wet = 1;
     verb.dry = 0;
 
-    processor.onaudioprocess = (e: AudioProcessingEvent) => {
+    // Start with ScriptProcessorNode synchronously; upgrade to AudioWorklet async
+    const scriptFallback = ctx.createScriptProcessor(BUFFER_SIZE, 2, 2);
+    scriptFallback.onaudioprocess = (e: AudioProcessingEvent) => {
       const inL = e.inputBuffer.getChannelData(0);
       const inR = e.inputBuffer.numberOfChannels > 1
         ? e.inputBuffer.getChannelData(1) : inL;
@@ -316,8 +319,8 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
 
     // Signal path: input → preDelay → processor → wet mix
     mix.input.connect(preDelayNode);
-    preDelayNode.connect(processor);
-    processor.connect(mix.wetInput);
+    preDelayNode.connect(scriptFallback);
+    scriptFallback.connect(mix.wetInput);
 
     mix.wet = options?.wet ?? 1;
 
@@ -327,12 +330,49 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
     this._preDelayNode = preDelayNode;
     this._decay = options?.decay ?? 1.5;
     this._preDelay = preDelayTime;
+
+    // Attempt async upgrade to AudioWorklet
+    void this._upgradeToWorklet(ctx, scriptFallback, mix, preDelayNode);
+  }
+
+  private async _upgradeToWorklet(
+    ctx: AudioContext,
+    scriptNode: ScriptProcessorNode,
+    mix: DryWetMix,
+    preDelayNode: DelayNode,
+  ): Promise<void> {
+    try {
+      // Derive roomSize from current _decay (may have changed since constructor)
+      const currentRoomSize = Math.min(1, this._decay / 10);
+      const result = await createDspNode(
+        ctx,
+        '/reverb-worklet-processor.js',
+        'reverb-worklet-processor',
+        2,
+        { roomSize: currentRoomSize, damping: 0.5, wet: 1, dry: 0 },
+      );
+
+      if (result) {
+        // Swap: disconnect ScriptProcessor, connect AudioWorklet
+        preDelayNode.disconnect(scriptNode);
+        scriptNode.disconnect();
+        preDelayNode.connect(result.node);
+        result.node.connect(mix.wetInput);
+        this._dspNode = result;
+        // Recompute from latest _decay (may have changed during async load)
+        const latestRoomSize = Math.min(1, this._decay / 10);
+        result.port?.postMessage({ type: 'roomSize', value: latestRoomSize });
+      }
+    } catch {
+      // Keep ScriptProcessorNode fallback — already connected
+    }
   }
 
   get decay(): number { return this._decay; }
   set decay(v: number) {
     this._decay = v;
     this._verb.roomSize = Math.min(1, v / 10);
+    this._dspNode?.port?.postMessage({ type: 'roomSize', value: Math.min(1, v / 10) });
   }
 
   get preDelay(): number { return this._preDelay; }

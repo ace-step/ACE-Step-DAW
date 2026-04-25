@@ -1,4 +1,3 @@
-import * as Tone from 'tone';
 import type { GranularSettings, GrainEnvelopeShape, Track } from '../types/project';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
@@ -128,12 +127,21 @@ class GranularEngine {
   private readonly bufferCache = new Map<string, AudioBuffer>();
 
   private getContext(): AudioContext {
-    return Tone.getContext().rawContext as AudioContext;
+    // Route through AudioEngine rather than Tone.getContext() —
+    // both return the same underlying AudioContext (AudioEngine's
+    // constructor calls Tone.setContext(ctx) on its own Web Audio
+    // context). Codex verified the shared-context invariant in
+    // PR #1727. Phase 5D migration.
+    return getAudioEngine().ctx;
   }
 
   async ensureStarted(): Promise<void> {
-    if (Tone.getContext().state !== 'running') {
-      await Tone.start();
+    // Cache the engine handle into a local — `getAudioEngine()` is
+    // a singleton accessor today but taking it once is cheaper and
+    // robust against future changes (Copilot review on PR #1729).
+    const engine = getAudioEngine();
+    if (engine.ctx.state !== 'running') {
+      await engine.resume();
     }
   }
 

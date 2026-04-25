@@ -1,0 +1,19 @@
+[package]
+name = "ace-timestretch"
+description = "High-quality time-stretch and pitch-shift algorithms for ACE-Step DAW"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+rustfft = "6"
+
+[features]
+default = ["std"]
+std = []
+
+[dev-dependencies]
+approx = "0.5"

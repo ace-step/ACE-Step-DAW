@@ -5,16 +5,13 @@
 //!     cargo run --example roundtrip -p ace-plugin-host
 //!     cargo run --example roundtrip -p ace-plugin-host -- /Library/Audio/Plug-Ins/VST3/ACE\ Bridge.vst3
 //!
-//! Defaults to scanning the standard macOS VST3 directories and
-//! loading the first plugin it finds. Pass a `.vst3` bundle path to
-//! force a specific one.
+//! Defaults to known-compatible plugins in the standard macOS VST3
+//! directories. Pass a `.vst3` bundle path to force a specific one.
 
 use std::path::PathBuf;
 use std::time::Instant;
 
-use ace_plugin_host::{
-    AudioConfig, MidiEvent, PluginHost, PluginScanner, RESTART_LATENCY_CHANGED,
-};
+use ace_plugin_host::{AudioConfig, MidiEvent, PluginHost, PluginScanner, RESTART_LATENCY_CHANGED};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Route tracing events to stderr so the reader can see what
@@ -41,15 +38,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let info = unsafe { host.instantiate(&bundle_path)? };
     println!("      instance_id         = {}", info.instance_id);
     println!("      plugin_uid          = {}", info.plugin_uid);
-    println!("      params              = {} exposed", info.parameters.len());
+    println!(
+        "      params              = {} exposed",
+        info.parameters.len()
+    );
     println!("      output_busses       = {}", info.output_busses.len());
     for (i, bus) in info.output_busses.iter().enumerate() {
-        println!(
-            "        [{}] {:<20} {}ch",
-            i, bus.name, bus.channels
-        );
+        println!("        [{}] {:<20} {}ch", i, bus.name, bus.channels);
     }
-    println!("      reported latency    = {} samples", info.latency_samples);
+    println!(
+        "      reported latency    = {} samples",
+        info.latency_samples
+    );
     println!("      tail                = {} samples", info.tail_samples);
     println!("      load time           = {:?}\n", t.elapsed());
 
@@ -60,7 +60,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // -----------------------------------------------------------------
     println!("[2/8] setupProcessing + activate ─────────────────────");
     let cfg = AudioConfig::new(48_000.0, 512)?;
-    println!("      cfg                 = {} Hz, {} samples/block", cfg.sample_rate, cfg.block_size);
+    println!(
+        "      cfg                 = {} Hz, {} samples/block",
+        cfg.sample_rate, cfg.block_size
+    );
     host.configure_instance(&id, cfg)?;
     host.activate_instance(&id)?;
     println!("      lifecycle           = setup_done, active, processing\n");
@@ -214,11 +217,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if blob == blob2 {
         println!("      ✓ save → load → save round-trips byte-for-byte");
     } else {
-        println!(
-            "      ⚠ drifted: first={} bytes, second={} bytes",
+        return Err(format!(
+            "state drifted after save → load → save: first={} bytes, second={} bytes",
             blob.len(),
             blob2.len()
-        );
+        )
+        .into());
     }
     println!();
 
@@ -259,8 +263,10 @@ fn pick_bundle_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
         }
     }
 
-    // Fallback: scan the standard macOS VST3 directories and pick
-    // the first result.
+    // Fallback: scan the standard macOS VST3 directories only to
+    // provide a helpful explicit-path hint. Loading an arbitrary first
+    // plugin would make the smoke example depend on filesystem order
+    // and plugin-specific state/IO support.
     let scanner = PluginScanner::new();
     let search_dirs: Vec<PathBuf> = [
         "/Library/Audio/Plug-Ins/VST3",
@@ -272,12 +278,15 @@ fn pick_bundle_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
     .iter()
     .map(PathBuf::from)
     .collect();
-    let plugins = scanner.scan(&search_dirs);
-    match plugins.into_iter().next() {
-        Some(p) => Ok(PathBuf::from(p.path)),
-        None => Err(
-            "no VST3 plugins found in the standard directories — pass a path as arg"
-                .into(),
-        ),
+    let mut plugins: Vec<_> = scanner.scan(&search_dirs).into_iter().collect();
+    plugins.sort_by(|a, b| a.path.cmp(&b.path));
+    if plugins.is_empty() {
+        Err("no VST3 plugins found in the standard directories — pass a path as arg".into())
+    } else {
+        Err(format!(
+            "found {} VST3 plugin(s), but none are in the known-compatible default list; pass a .vst3 path as arg",
+            plugins.len()
+        )
+        .into())
     }
 }

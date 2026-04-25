@@ -1513,7 +1513,11 @@ export function prependStyleTags(prompt: string, styleTags?: string[]): string {
   const normalized = (styleTags ?? []).map((t) => t.trim()).filter(Boolean);
   if (normalized.length === 0) return trimmedPrompt;
   if (!trimmedPrompt) return normalized.join(', ');
-  return `${normalized.join(', ')}. ${trimmedPrompt}`;
+  const prefix = `${normalized.join(', ')}. `;
+  const basePrompt = trimmedPrompt.startsWith(prefix)
+    ? trimmedPrompt.slice(prefix.length).trimStart()
+    : trimmedPrompt;
+  return `${prefix}${basePrompt}`;
 }
 
 function buildGenerationPanelPrompt(prompt: string, styleTags: string[]) {
@@ -2732,6 +2736,7 @@ export interface Text2MusicRequest {
   // Advanced overrides
   inferenceSteps?: number;
   guidanceScale?: number;
+  temperature?: number;
   shift?: number;
   thinking?: boolean;
   seed?: number;
@@ -2834,6 +2839,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       useProjectMeta: request.useProjectMeta,
       inferenceSteps: request.inferenceSteps,
       guidanceScale: request.guidanceScale,
+      temperature: request.temperature,
       shift: request.shift,
       negativePrompt: request.negativePrompt,
       styleTags: request.styleTags,

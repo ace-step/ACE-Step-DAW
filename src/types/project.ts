@@ -990,6 +990,7 @@ export interface ClipGenerationParams {
   useProjectMeta?: boolean;
   inferenceSteps?: number;
   guidanceScale?: number;
+  temperature?: number;
   shift?: number;
   negativePrompt?: string;
   /** Style tags persisted for edit/regenerate — prepended to prompt at generation time */

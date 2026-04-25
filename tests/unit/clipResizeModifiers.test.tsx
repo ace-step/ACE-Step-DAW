@@ -139,11 +139,7 @@ describe('ClipBlock resize modifiers', () => {
     expect(getClip().contentOffset).toBeCloseTo(0.5, 2);
   });
 
-  // FIXME(#1689): Shift-resize semantics changed when Rubber Band time-stretch
-  // integration landed (PR #1668). These tests still assert the old 'repitch'
-  // stretchMode behavior. Skipped to unblock unrelated PRs; fix in a dedicated
-  // follow-up that updates assertions to match the new Rubber Band flow.
-  it.skip('uses Shift-resize to repitch-stretch the right edge', () => {
+  it('uses Shift-resize to time-stretch the right edge', () => {
     const { container } = renderClip();
     const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
     clipBlock.getBoundingClientRect = () => ({
@@ -158,19 +154,17 @@ describe('ClipBlock resize modifiers', () => {
       toJSON: () => ({}),
     });
 
-    fireEvent.mouseDown(clipBlock, { button: 0, clientX: 398 });
+    fireEvent.mouseDown(clipBlock, { button: 0, clientX: 398, shiftKey: true });
     fireEvent.mouseMove(window, { clientX: 598, shiftKey: true });
     fireEvent.mouseUp(window, { shiftKey: true });
 
     expect(getClip().duration).toBeCloseTo(6, 2);
     expect(getClip().contentOffset).toBeUndefined();
-    expect(getClip().stretchMode).toBe('repitch');
+    expect(getClip().stretchMode).toBe('complexPro');
     expect(getClip().timeStretchRate).toBeCloseTo(4 / 6, 2);
   });
 
-  // FIXME(#1689): see comment above — old 'repitch' assertions no longer match
-  // the new Rubber Band flow. Skipped to unblock unrelated PRs.
-  it.skip('uses Shift-resize to repitch-stretch the left edge', () => {
+  it('uses Shift-resize to time-stretch the left edge', () => {
     const { container } = renderClip();
     const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
     clipBlock.getBoundingClientRect = () => ({
@@ -185,14 +179,14 @@ describe('ClipBlock resize modifiers', () => {
       toJSON: () => ({}),
     });
 
-    fireEvent.mouseDown(clipBlock, { button: 0, clientX: 2 });
+    fireEvent.mouseDown(clipBlock, { button: 0, clientX: 2, shiftKey: true });
     fireEvent.mouseMove(window, { clientX: -98, shiftKey: true });
     fireEvent.mouseUp(window, { shiftKey: true });
 
     expect(getClip().startTime).toBe(0);
     expect(getClip().duration).toBeCloseTo(5, 2);
     expect(getClip().contentOffset).toBeUndefined();
-    expect(getClip().stretchMode).toBe('repitch');
+    expect(getClip().stretchMode).toBe('complexPro');
     expect(getClip().timeStretchRate).toBeCloseTo(4 / 5, 2);
   });
 });

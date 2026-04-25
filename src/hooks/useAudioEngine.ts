@@ -1,5 +1,4 @@
 import { useRef, useEffect, useCallback } from 'react';
-import * as Tone from 'tone';
 import { AudioEngine } from '../engine/AudioEngine';
 import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
@@ -38,10 +37,14 @@ export function useAudioEngine() {
   }, []);
 
   const resumeOnGesture = useCallback(async () => {
-    await Promise.all([
-      engineRef.current.resume(),
-      Tone.start(),
-    ]);
+    // AudioEngine.resume() resumes the underlying AudioContext that
+    // Tone.js also uses — AudioEngine's constructor calls
+    // `Tone.setContext(ctx)` so `Tone.start()` (which is literally
+    // `globalContext.resume()` in tone@15.1.22) would resume the
+    // same context. The parallel `Promise.all([engine.resume(),
+    // Tone.start()])` was redundant work. Verified by codex review
+    // on PR #1727.
+    await engineRef.current.resume();
     const latency = engineRef.current.refreshPlaybackLatencyCompensation();
     const store = (await import('../store/projectStore')).useProjectStore.getState();
     store.detectPlaybackLatency(latency);

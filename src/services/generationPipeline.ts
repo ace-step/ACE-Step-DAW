@@ -281,7 +281,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
 
     const taskParams: Text2MusicTaskParams = {
       task_type: 'text2music',
-      prompt: params.prompt,
+      prompt: prependStyleTags(params.prompt, params.styleTags),
       lyrics: params.lyrics,
       audio_duration: params.durationSeconds ?? 60,
       bpm: params.useProjectMeta ? (project.bpm ?? null) : null,
@@ -1506,6 +1506,20 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
   });
 }
 
+/** Prepend style tags to a raw prompt for text2music API requests.
+ *  Used by both generateText2Music and regenerateText2MusicClip. */
+export function prependStyleTags(prompt: string, styleTags?: string[]): string {
+  const trimmedPrompt = prompt.trim();
+  const normalized = (styleTags ?? []).map((t) => t.trim()).filter(Boolean);
+  if (normalized.length === 0) return trimmedPrompt;
+  if (!trimmedPrompt) return normalized.join(', ');
+  const prefix = `${normalized.join(', ')}. `;
+  const basePrompt = trimmedPrompt.startsWith(prefix)
+    ? trimmedPrompt.slice(prefix.length).trimStart()
+    : trimmedPrompt;
+  return `${prefix}${basePrompt}`;
+}
+
 function buildGenerationPanelPrompt(prompt: string, styleTags: string[]) {
   const trimmedPrompt = prompt.trim();
   const normalizedStyleTags = styleTags
@@ -2722,6 +2736,7 @@ export interface Text2MusicRequest {
   // Advanced overrides
   inferenceSteps?: number;
   guidanceScale?: number;
+  temperature?: number;
   shift?: number;
   thinking?: boolean;
   seed?: number;
@@ -2737,6 +2752,8 @@ export interface Text2MusicRequest {
   useProjectMeta?: boolean;
   /** Elements to exclude from generation */
   negativePrompt?: string;
+  /** Style tags to prepend to prompt at generation time (persisted separately from prompt) */
+  styleTags?: string[];
 }
 
 export interface Text2MusicResult {
@@ -2822,8 +2839,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       useProjectMeta: request.useProjectMeta,
       inferenceSteps: request.inferenceSteps,
       guidanceScale: request.guidanceScale,
+      temperature: request.temperature,
       shift: request.shift,
       negativePrompt: request.negativePrompt,
+      styleTags: request.styleTags,
     },
   });
 
@@ -2849,7 +2868,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     const params: Text2MusicTaskParams = {
       task_type: 'text2music',
-      prompt: request.prompt,
+      prompt: prependStyleTags(request.prompt, request.styleTags),
       lyrics: request.lyrics,
       audio_duration: request.durationSeconds,
       bpm: request.bpm,

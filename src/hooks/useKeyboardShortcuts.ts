@@ -562,6 +562,7 @@ export function useKeyboardShortcuts() {
         if (project.project) seek(project.project.totalDuration);
         return;
       }
+      if (matches('transport.punchToggle')) { event.preventDefault(); transport.togglePunch(); return; }
       if (matches('transport.punchIn')) { event.preventDefault(); transport.setPunchIn(transport.currentTime); return; }
       if (matches('transport.punchOut')) { event.preventDefault(); transport.setPunchOut(transport.currentTime); return; }
       if (matches('transport.captureMidi')) {

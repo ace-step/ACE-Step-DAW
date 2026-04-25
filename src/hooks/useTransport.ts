@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from 'react';
-import * as Tone from 'tone';
 import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
@@ -23,6 +22,7 @@ import {
 import { stopStrudelEditorPlayback } from '../engine/strudelEditorPlayback';
 import { useRecording } from './useRecording';
 import { beatToTime } from '../utils/tempoMap';
+import { midiToFrequency } from '../utils/pitch';
 import { getPlaybackLatencyCompensationSeconds } from '../utils/playbackLatency';
 import type { Clip, Project, Track } from '../types/project';
 import {
@@ -33,6 +33,21 @@ import { toastInfo } from './useToast';
 import type { TimelineScrubClip } from '../engine/AudioEngine';
 import { useVST3Store } from '../store/vst3Store';
 import { pluginEngine } from '../engine/PluginEngine';
+
+/**
+ * Coerce a TrackNode.inputGain (currently a Tone.Gain wrapped under
+ * the hood) to a native AudioNode for downstream engine APIs. The
+ * double cast exists because the engines in SynthEngine /
+ * SubtractiveEngine / SamplerEngine / WavetableEngine / GranularEngine
+ * still take `Tone.InputNode` or `AudioNode` parameters depending on
+ * the engine — they only use the value as a `.connect` destination,
+ * which both types support. Centralized in one helper per Copilot
+ * review on PR #1723 so subsequent engine migrations have a single
+ * place to remove.
+ */
+function trackInputAsAudioNode(inputGain: unknown): AudioNode {
+  return inputGain as AudioNode;
+}
 
 const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   kick: 0,
@@ -157,7 +172,6 @@ export function useTransport() {
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
     await engine.resume();
-    await Tone.start();
     await synthEngine.ensureStarted();
     await subtractiveEngine.ensureStarted();
     await samplerEngine.ensureStarted();
@@ -415,7 +429,7 @@ export function useTransport() {
             const trackNode = engine.getOrCreateTrackNode(track.id);
             samplerEngine.ensureTrackSampler(
               track.id, samplerConfig, sampleBuffer,
-              trackNode.inputGain as unknown as Tone.InputNode,
+              trackInputAsAudioNode(trackNode.inputGain),
             );
           }
         } else if (!vst3Instrument && track.instrument?.kind === 'subtractive') {
@@ -423,7 +437,7 @@ export function useTransport() {
           subtractiveEngine.ensureTrackSynth(
             track.id,
             track.instrument.settings,
-            trackNode.inputGain as unknown as Tone.InputNode,
+            trackInputAsAudioNode(trackNode.inputGain),
           );
           // Apply modulation matrix if configured
           if (track.instrument.settings.modulation?.slots.length) {
@@ -436,13 +450,13 @@ export function useTransport() {
           const trackNode = engine.getOrCreateTrackNode(track.id);
           synthEngine.ensureFmSynth(
             track.id, track.instrument.settings,
-            trackNode.inputGain as unknown as Tone.InputNode,
+            trackInputAsAudioNode(trackNode.inputGain),
           );
         } else if (!vst3Instrument && track.instrument?.kind === 'wavetable') {
           const trackNode = engine.getOrCreateTrackNode(track.id);
           wavetableEngine.ensureTrackSynth(
             track.id, track.instrument.settings,
-            trackNode.inputGain as unknown as Tone.InputNode,
+            trackInputAsAudioNode(trackNode.inputGain),
           );
         } else if (!vst3Instrument && track.instrument?.kind === 'granular' && track.granularConfig) {
           const sampleBlob = await loadAudioBlobByKey(track.granularConfig.audioKey);
@@ -451,7 +465,7 @@ export function useTransport() {
             const trackNode = engine.getOrCreateTrackNode(track.id);
             granularEngine.ensureTrackGranular(
               track.id, track.granularConfig, sampleBuffer,
-              trackNode.inputGain as unknown as AudioNode,
+              trackInputAsAudioNode(trackNode.inputGain),
             );
           }
         } else if (preset !== 'sampler') {
@@ -546,7 +560,7 @@ export function useTransport() {
                   subtractiveEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
                 });
               } else if (track.instrument?.kind === 'fm') {
-                const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+                const freq = midiToFrequency(note.pitch);
                 engine.scheduleMidiEvent(scheduledStart, () => {
                   const fmSynth = synthEngine.getFmSynth(trackId);
                   if (fmSynth) {
@@ -554,7 +568,7 @@ export function useTransport() {
                   }
                 });
               } else if (track.instrument?.kind === 'wavetable') {
-                const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+                const freq = midiToFrequency(note.pitch);
                 engine.scheduleMidiEvent(scheduledStart, () => {
                   const wtSynth = wavetableEngine.getSynth(trackId);
                   if (wtSynth) {
@@ -566,7 +580,7 @@ export function useTransport() {
                   granularEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
                 });
               } else {
-                const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+                const freq = midiToFrequency(note.pitch);
                 const previousOverlap = note.isSlide
                   ? [...notes]
                       .slice(0, noteIndex)
@@ -781,7 +795,6 @@ export function useTransport() {
     if (!scrubProject) return;
 
     await engine.resume();
-    await Tone.start();
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
     const resumePlayback = transport.isPlaying || engine.playing;

@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "ace-dsp-core",
     "ace-dsp-wasm",
+    "ace-plugin-host",
     "ace-timestretch",
     "ace-timestretch-wasm",
     "ace-waveform",

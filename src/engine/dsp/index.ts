@@ -40,8 +40,9 @@ export type {
   IDSPFactory,
 } from './interfaces';
 
-// Factory management
-export { ToneDSPFactory, getDSPFactory, setDSPFactory } from './ToneAdapter';
+// Factory management (the `ToneAdapter` filename is historical —
+// Phase 5P, the Tone-backed factory is gone).
+export { getDSPFactory, setDSPFactory } from './ToneAdapter';
 
 // Native Web Audio factory — Tone.js-free (Phases 3+4)
 export { NativeDSPFactory } from './NativeAdapter';

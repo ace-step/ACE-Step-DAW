@@ -114,25 +114,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5. Run a few process_block calls (Phase 4B-1)
     // -----------------------------------------------------------------
     println!("[5/8] process_block ×100 ─────────────────────────────");
-    let in_ch = info
+    let preferred_in_ch = info
         .output_busses
         .first()
         .map(|b| b.channels)
+        .filter(|channels| matches!(channels, 1 | 2))
         .unwrap_or(2);
-    let input = vec![0.0f32; (in_ch as usize) * 512];
+    let channel_candidates = if preferred_in_ch == 1 { [1, 2] } else { [2, 1] };
+    let block_size = cfg.block_size as usize;
     let t = Instant::now();
     let mut last_out_len = 0;
-    for _ in 0..100 {
-        let out = host.process_instance_block(&id, &input, in_ch, 512)?;
-        last_out_len = out.len();
+    let mut processed_blocks = 0;
+    let mut selected_in_ch = 0;
+    let mut last_error = String::new();
+    for in_ch in channel_candidates {
+        let input = vec![0.0f32; (in_ch as usize) * block_size];
+        match host.process_instance_block(&id, &input, in_ch, cfg.block_size) {
+            Ok(out) => {
+                last_out_len = out.len();
+                processed_blocks = 1;
+                selected_in_ch = in_ch;
+                for _ in processed_blocks..100 {
+                    let out = host.process_instance_block(&id, &input, in_ch, cfg.block_size)?;
+                    last_out_len = out.len();
+                    processed_blocks += 1;
+                }
+                break;
+            }
+            Err(err) => {
+                last_error = err.to_string();
+            }
+        }
+    }
+    if processed_blocks == 0 {
+        return Err(
+            format!("process_block failed for mono and stereo inputs: {last_error}").into(),
+        );
     }
     let elapsed = t.elapsed();
+    println!("      selected input bus  = {}ch", selected_in_ch);
     println!("      last out size       = {} f32 samples", last_out_len);
     println!("      total wall time     = {:?}", elapsed);
     println!(
-        "      avg per block       = {:?}  ({:.1}x real-time at 48k/512)",
-        elapsed / 100,
-        (48_000.0 / 512.0 * 100.0) / elapsed.as_secs_f64()
+        "      avg per block       = {:?}  ({:.1}x real-time at {} Hz/{})",
+        elapsed / processed_blocks,
+        (cfg.sample_rate / f64::from(cfg.block_size) * f64::from(processed_blocks))
+            / elapsed.as_secs_f64(),
+        cfg.sample_rate,
+        cfg.block_size
     );
     println!();
 

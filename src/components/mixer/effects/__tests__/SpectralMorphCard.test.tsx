@@ -24,6 +24,9 @@ vi.mock('../../../../engine/EffectsEngine', () => ({
   effectsEngine: {
     updateEffectParams: (...args: unknown[]) => mockUpdateEffectParams(...args),
     getSpectralData: vi.fn(() => new Float32Array(128)),
+    getSpectralProcessor: vi.fn(() => ({
+      getMagnitude: vi.fn(() => new Float32Array(128).fill(0.1)),
+    })),
   },
 }));
 

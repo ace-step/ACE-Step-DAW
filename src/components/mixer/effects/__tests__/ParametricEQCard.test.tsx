@@ -22,6 +22,12 @@ vi.mock('../../../../engine/EffectsEngine', () => ({
   },
 }));
 
+vi.mock('../../../../hooks/useAudioEngine', () => ({
+  getAudioEngine: vi.fn(() => ({
+    getTrackSpectrum: vi.fn(() => null),
+  })),
+}));
+
 vi.mock('../../../../utils/effectAutomation', () => ({
   normalizeEffectParamValue: vi.fn(() => 0.5),
   getEffectAutomationLabel: vi.fn(() => 'Param'),

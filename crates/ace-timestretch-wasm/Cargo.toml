@@ -1,0 +1,17 @@
+[package]
+name = "ace-timestretch-wasm"
+description = "WASM bindings for ace-timestretch — time-stretch and pitch-shift"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ace-timestretch = { path = "../ace-timestretch" }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

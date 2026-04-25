@@ -38,7 +38,7 @@ describe('cross-model pipeline', () => {
     // Set up project with a track
     const store = useProjectStore.getState();
     if (!store.project) {
-      store.createProject('Test Project');
+      store.createProject({ name: 'Test Project' });
     }
     const track = store.addTrack('stems');
 
@@ -84,7 +84,7 @@ describe('cross-model pipeline', () => {
   it('does not call initModel in same-model mode', async () => {
     const store = useProjectStore.getState();
     if (!store.project) {
-      store.createProject('Test Project');
+      store.createProject({ name: 'Test Project' });
     }
     const track = store.addTrack('stems');
 
@@ -114,7 +114,7 @@ describe('cross-model pipeline', () => {
   it('records modelName on each variation after cross-model generation', async () => {
     const store = useProjectStore.getState();
     if (!store.project) {
-      store.createProject('Test Project');
+      store.createProject({ name: 'Test Project' });
     }
     const track = store.addTrack('stems');
 
@@ -148,5 +148,45 @@ describe('cross-model pipeline', () => {
     expect(session).not.toBeNull();
     expect(session!.variations[0].modelName).toBe('ace-step-v1');
     expect(session!.variations[1].modelName).toBe('ace-step-v2');
+  });
+
+  it('reports errors on individual variations in cross-model mode (regression #1583)', async () => {
+    const store = useProjectStore.getState();
+    if (!store.project) {
+      store.createProject({ name: 'Test Project' });
+    }
+    const track = store.addTrack('stems');
+
+    const overrides: ModelOverride[] = [
+      { modelName: 'ace-step-v1' },
+      { modelName: 'ace-step-v2' },
+    ];
+
+    const params: VariationSessionParams = {
+      prompt: 'test',
+      trackId: track.id,
+      variationCount: 2,
+      bpm: 120,
+      keyScale: 'C major',
+      duration: 30,
+      guidanceScale: 7.0,
+      comparisonMode: 'cross-model',
+      modelOverrides: overrides,
+    };
+
+    useGenerationStore.getState().startVariationSession(params);
+
+    // First succeeds, second throws
+    const mockGenerateClip = vi.fn()
+      .mockResolvedValueOnce({ cumulativeBlob: null, succeeded: true })
+      .mockRejectedValueOnce(new Error('Generation failed'));
+
+    await generateVariationSession(params, { generateClip: mockGenerateClip });
+
+    const session = useGenerationStore.getState().variationSession;
+    expect(session).not.toBeNull();
+    expect(session!.variations[1].status).toBe('error');
+    expect(session!.variations[1].error).toBe('Generation failed: Generation failed');
+    expect(session!.variations[1].completedAt).toBeGreaterThan(0);
   });
 });

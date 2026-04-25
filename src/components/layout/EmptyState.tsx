@@ -11,7 +11,7 @@ import {
   getStarterTemplate,
   instantiateDemoProject,
 } from '../../data/onboardingCatalog';
-import { toastSuccess } from '../../hooks/useToast';
+import { toastSuccess, toastError } from '../../hooks/useToast';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 
 export function EmptyState() {
@@ -35,10 +35,14 @@ export function EmptyState() {
   }, []);
 
   const handleOpenRecent = async (id: string) => {
-    const project = await loadProject(id);
-    if (project) {
-      setProject(project);
-      toastSuccess('Project loaded');
+    try {
+      const project = await loadProject(id);
+      if (project) {
+        setProject(project);
+        toastSuccess('Project loaded');
+      }
+    } catch {
+      toastError('Failed to load project');
     }
   };
 

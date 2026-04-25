@@ -45,7 +45,7 @@ export const logicProTheme: ThemeDefinition = {
     'daw-hover': '#404042',
     'daw-hover-subtle': '#38383a',
     // systemGray — secondary text
-    'daw-text-muted': '#8e8e93',
+    'daw-text-muted': '#a8a8ad',
     // Apple systemBlue — Logic's primary accent
     'daw-accent': '#0a84ff',
     // Lighter blue for hover

@@ -2,47 +2,64 @@
  * PreviewEngine — unit tests
  *
  * Tests the sound preview / audition system for browsing instrument presets.
+ *
+ * Phase 5G migration: PreviewEngine no longer depends on Tone.js. We mock
+ * `getAudioEngine()` to hand out a minimal AudioContext with the factory
+ * methods NativeSynths touches; the engine itself runs real code paths.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock Tone.js before importing PreviewEngine
-vi.mock('tone', () => {
-  class MockGain {
-    gain = { value: 0, setValueAtTime: vi.fn() };
-    connect = vi.fn().mockReturnThis();
-    toDestination = vi.fn().mockReturnThis();
-    dispose = vi.fn();
-  }
-  class MockPolySynth {
-    connect = vi.fn().mockReturnThis();
-    triggerAttackRelease = vi.fn();
-    releaseAll = vi.fn();
-    set = vi.fn();
-    dispose = vi.fn();
-    toDestination = vi.fn().mockReturnThis();
-  }
-  class MockFMSynth {
-    connect = vi.fn().mockReturnThis();
-    triggerAttackRelease = vi.fn();
-    releaseAll = vi.fn();
-    set = vi.fn();
-    dispose = vi.fn();
-  }
-  class MockSynth {}
+// Use vi.hoisted so the mock factory doesn't close over a module-level
+// const that's undefined at hoist time (same pattern as the
+// AdditiveEngine / GranularEngine tests).
+const { mockCtx } = vi.hoisted(() => {
+  const makeAudioParam = () => ({
+    value: 0,
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+    exponentialRampToValueAtTime: vi.fn(),
+    cancelScheduledValues: vi.fn(),
+  });
+  const makeGain = () => ({
+    gain: makeAudioParam(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  });
+  const makeOsc = () => ({
+    type: 'sine' as OscillatorType,
+    frequency: makeAudioParam(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+    onended: null as (() => void) | null,
+  });
+  const makeFilter = () => ({
+    type: 'lowpass' as BiquadFilterType,
+    frequency: makeAudioParam(),
+    Q: makeAudioParam(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  });
   return {
-    getContext: vi.fn().mockReturnValue({ state: 'running' }),
-    getTransport: vi.fn().mockReturnValue({ clear: vi.fn() }),
-    start: vi.fn().mockResolvedValue(undefined),
-    Gain: MockGain,
-    Synth: MockSynth,
-    PolySynth: MockPolySynth,
-    FMSynth: MockFMSynth,
-    Frequency: vi.fn().mockImplementation((val: number) => ({
-      toFrequency: () => 440 * Math.pow(2, (val - 69) / 12),
-    })),
-    now: vi.fn().mockReturnValue(0),
+    mockCtx: {
+      state: 'running' as AudioContextState,
+      currentTime: 0,
+      sampleRate: 48000,
+      destination: {} as AudioNode,
+      createGain: vi.fn(makeGain),
+      createOscillator: vi.fn(makeOsc),
+      createBiquadFilter: vi.fn(makeFilter),
+    },
   };
 });
+
+vi.mock('../../hooks/useAudioEngine', () => ({
+  getAudioEngine: vi.fn(() => ({
+    ctx: mockCtx,
+    resume: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
 import {
   PreviewEngine,
@@ -56,6 +73,7 @@ describe('PreviewEngine', () => {
   let engine: PreviewEngine;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     engine = new PreviewEngine();
   });
 
@@ -145,9 +163,35 @@ describe('PreviewEngine', () => {
       expect(stopSpy).toHaveBeenCalled();
     });
 
-    it('uses project BPM for timing', async () => {
-      await engine.playPresetPreview('subtractive', 'Bass', 90);
-      // At 90 BPM, a quarter note = 60/90 = 0.667s
+    it('schedules note timers scaled by BPM', async () => {
+      // Spy on setTimeout so we can verify BPM actually feeds the
+      // schedule instead of just asserting `isPlaying`. The Bass
+      // pattern's 2nd note is at startBeat=1, so its scheduled
+      // delay is exactly `60/bpm * 1000` ms — a clean witness
+      // that BPM propagated to the pattern scheduler.
+      const spy = vi.spyOn(globalThis, 'setTimeout');
+
+      await engine.playPresetPreview('subtractive', 'Bass', 120);
+      const delay120 = spy.mock.calls[1]?.[1] as number;
+      spy.mockClear();
+
+      await engine.playPresetPreview('subtractive', 'Bass', 60);
+      const delay60 = spy.mock.calls[1]?.[1] as number;
+      spy.mockRestore();
+
+      expect(delay120).toBe(500); // 60 / 120 * 1000
+      expect(delay60).toBe(1000); // 60 /  60 * 1000
+    });
+
+    it('creates an FMSynth path for fm preset', async () => {
+      // The FM path exercises NativeFMSynth — just assert no throw and
+      // that the engine reached the playing state.
+      await engine.playPresetPreview('fm', 'Lead', 120);
+      expect(engine.isPlaying).toBe(true);
+    });
+
+    it('creates a poly synth path for physical preset (pluck fallback)', async () => {
+      await engine.playPresetPreview('physical', 'Pluck', 120);
       expect(engine.isPlaying).toBe(true);
     });
   });

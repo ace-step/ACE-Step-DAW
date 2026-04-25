@@ -112,23 +112,34 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
           className={`flex h-6 items-center gap-3 px-3 ${hasActiveJobs ? 'border-t border-white/4' : ''}`}
           data-testid="status-bar-meta-row"
         >
-          <span className="hidden lg:inline-flex items-center gap-3 truncate text-daw-text-muted" data-testid="status-model-name">
+          <span
+            className="inline-flex items-center gap-1 text-daw-text-muted"
+            data-testid="status-connection"
+            title={connected ? 'Backend server connected' : 'Backend server disconnected'}
+          >
+            <span
+              className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${connected ? 'bg-emerald-500' : 'bg-zinc-500'}`}
+              data-testid="connection-dot"
+            />
+            <span>{connected ? 'Online' : 'Offline'}</span>
+          </span>
+          <span className="hidden lg:inline-flex items-center gap-3 min-w-0 truncate text-daw-text-muted" data-testid="status-model-name">
             {t2mName ? (
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 min-w-0">
                 <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isT2mLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                <span>Mixture: {t2mName}</span>
+                <span className="truncate">Mixture: {t2mName}</span>
               </span>
             ) : null}
             {legoName ? (
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 min-w-0">
                 <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isLegoLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                <span>Stems: {legoName}</span>
+                <span className="truncate">Stems: {legoName}</span>
               </span>
             ) : null}
             {lmName ? (
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 min-w-0">
                 <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isLmLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                <span>LM: {lmName}</span>
+                <span className="truncate">LM: {lmName}</span>
               </span>
             ) : null}
             {!t2mName && !legoName && !lmName && <span>No model</span>}

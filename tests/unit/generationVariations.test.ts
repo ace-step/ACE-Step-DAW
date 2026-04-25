@@ -320,4 +320,24 @@ describe('Generation Variation Session', () => {
       expect(session.variations[2].status).toBe('cancelled');
     });
   });
+
+  describe('setActiveVariation (regression #1586)', () => {
+    it('skips deleted clips without throwing', () => {
+      useProjectStore.setState(useProjectStore.getInitialState(), true);
+      useProjectStore.getState().createProject({ name: 'Variation Test' });
+
+      useGenerationStore.getState().startVariationSession({
+        prompt: 'test', trackId: 'track-1', variationCount: 2,
+        bpm: 120, keyScale: 'C major', duration: 30, guidanceScale: 7.0,
+      });
+
+      // Assign clipIds that don't exist in project
+      useGenerationStore.getState().updateVariation(0, { clipId: 'nonexistent-clip-0', status: 'done' });
+      useGenerationStore.getState().updateVariation(1, { clipId: 'nonexistent-clip-1', status: 'done' });
+
+      // Should not throw even when clips don't exist
+      expect(() => useGenerationStore.getState().setActiveVariation(1)).not.toThrow();
+      expect(useGenerationStore.getState().variationSession?.activeVariationIndex).toBe(1);
+    });
+  });
 });

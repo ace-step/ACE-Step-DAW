@@ -36,6 +36,10 @@ export default defineConfig(async ({ command }) => {
       exclude: ['onnxruntime-web'],
     },
     build: {
+      // DAW apps intentionally ship large lazy-loaded audio/editor chunks; the
+      // manualChunks map below keeps hot-path app code split while allowing
+      // known-heavy editor/audio vendors such as Strudel to exceed 500KB.
+      chunkSizeWarningLimit: 1200,
       rollupOptions: {
         output: {
           manualChunks(rawId: string) {

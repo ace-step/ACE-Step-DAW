@@ -352,3 +352,26 @@ describe('NativeFrequencyEnvelope signal output', () => {
     expect(() => env.triggerRelease()).not.toThrow();
   });
 });
+
+describe('Native synth duration parsing uses the injected BPM (regression #1588)', () => {
+  it('produces different durations at different BPMs for note notation', () => {
+    // BPM=60: quarter note = 1.0s
+    const osc60 = new MockOscillatorNode();
+    const ctx60 = { ...createMockCtx(), createOscillator: () => osc60 } as unknown as AudioContext;
+    const synth60 = new NativePolySynth(ctx60);
+    synth60.bpm = 60;
+    synth60.triggerAttackRelease('C4', '4n');
+    const stopTime60 = osc60.stop.mock.calls[0]?.[0] as number;
+
+    // BPM=120: quarter note = 0.5s
+    const osc120 = new MockOscillatorNode();
+    const ctx120 = { ...createMockCtx(), createOscillator: () => osc120 } as unknown as AudioContext;
+    const synth120 = new NativePolySynth(ctx120);
+    synth120.bpm = 120;
+    synth120.triggerAttackRelease('C4', '4n');
+    const stopTime120 = osc120.stop.mock.calls[0]?.[0] as number;
+
+    // A quarter note should last longer at slower BPM
+    expect(stopTime60).toBeGreaterThan(stopTime120);
+  });
+});

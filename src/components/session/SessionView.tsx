@@ -108,6 +108,8 @@ const CLIP_FOLLOW_ACTION_OPTIONS: { value: FollowActionType; label: string }[] =
 ];
 
 
+const EMPTY_STRING_ARRAY: string[] = [];
+
 export function SessionView() {
   const project = useProjectStore((s) => s.project);
   const setSessionLaunchQuantization = useProjectStore((s) => s.setSessionLaunchQuantization);
@@ -157,7 +159,7 @@ export function SessionView() {
   const [midiEnabled, setMidiEnabled] = useState(false);
   const midiState = useSessionMidiController(midiEnabled);
   const { startSlotRecording, stopSlotRecording, countInEnabled, setCountInEnabled, countInRemaining } = useSessionRecording();
-  const recordingSlotIds = useProjectStore((s) => s.project?.session?.recordingSlotIds ?? []);
+  const recordingSlotIds = useProjectStore((s) => s.project?.session?.recordingSlotIds ?? EMPTY_STRING_ARRAY);
   const fixedLengthBars = useProjectStore((s) => s.project?.session?.fixedLengthBars ?? null);
   const setSessionFixedLengthBars = useProjectStore((s) => s.setSessionFixedLengthBars);
   const toggleArmTrack = useTransportStore((s) => s.toggleArmTrack);

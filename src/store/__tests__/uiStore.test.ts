@@ -318,6 +318,25 @@ describe('uiStore', () => {
     });
   });
 
+  // ── Clip inspector ──────────────────────────────────────────
+
+  describe('clip inspector', () => {
+    it('toggleClipInspector flips visibility', () => {
+      expect(useUIStore.getState().showClipInspector).toBe(false);
+      useUIStore.getState().toggleClipInspector();
+      expect(useUIStore.getState().showClipInspector).toBe(true);
+      useUIStore.getState().toggleClipInspector();
+      expect(useUIStore.getState().showClipInspector).toBe(false);
+    });
+
+    it('setShowClipInspector sets value directly', () => {
+      useUIStore.getState().setShowClipInspector(true);
+      expect(useUIStore.getState().showClipInspector).toBe(true);
+      useUIStore.getState().setShowClipInspector(false);
+      expect(useUIStore.getState().showClipInspector).toBe(false);
+    });
+  });
+
   // ── Loop browser ────────────────────────────────────────────
 
   describe('loop browser', () => {

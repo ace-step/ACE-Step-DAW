@@ -138,6 +138,13 @@ export function buildCommandList(): Command[] {
       category: 'View',
       action: () => useUIStore.getState().toggleSpectrumAnalyzer(),
     },
+    {
+      id: 'toggle-clip-inspector',
+      label: 'Toggle Clip Inspector',
+      category: 'View',
+      shortcut: '⇧I',
+      action: () => useUIStore.getState().toggleClipInspector(),
+    },
 
     // Zoom
     {

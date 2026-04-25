@@ -5,6 +5,7 @@ export interface TimelineZoomRange {
 
 export const TIMELINE_ZOOM_LEVELS = [
   // 10–500: fine steps of 10 for everyday zoom range
+  2, 3, 4, 5, 6, 7, 8, 9,
   10,  20,  30,  40,  50,  60,  70,  80,  90,  100,
   110, 120, 130, 140, 150, 160, 170, 180, 190, 200,
   210, 220, 230, 240, 250, 260, 270, 280, 290, 300,
@@ -55,7 +56,13 @@ export function getTimelineVisualDuration(
   viewportWidth: number,
 ) {
   if (pixelsPerSecond <= 0) return totalDuration;
-  return Math.max(totalDuration, viewportWidth / pixelsPerSecond);
+  const viewDuration = viewportWidth / pixelsPerSecond;
+  // When the project already fits within the viewport (at min zoom),
+  // don't pad — content should exactly fill the viewport
+  if (totalDuration > 0 && totalDuration * pixelsPerSecond <= viewportWidth) {
+    return totalDuration;
+  }
+  return Math.max(totalDuration, viewDuration);
 }
 
 export function getTimelineMaxScrollLeft(
@@ -75,13 +82,26 @@ export function clampTimelineScrollLeft(
   return clamp(scrollLeft, 0, getTimelineMaxScrollLeft(totalDuration, pixelsPerSecond, viewportWidth));
 }
 
-export function clampTimelinePixelsPerSecond(pixelsPerSecond: number) {
-  return clamp(pixelsPerSecond, MIN_TIMELINE_PIXELS_PER_SECOND, MAX_TIMELINE_PIXELS_PER_SECOND);
+export function clampTimelinePixelsPerSecond(pixelsPerSecond: number, dynamicMin?: number) {
+  const floor = dynamicMin !== undefined ? Math.max(MIN_TIMELINE_PIXELS_PER_SECOND, dynamicMin) : MIN_TIMELINE_PIXELS_PER_SECOND;
+  return clamp(pixelsPerSecond, floor, MAX_TIMELINE_PIXELS_PER_SECOND);
+}
+
+/**
+ * Compute the minimum pixels-per-second that fits the entire project
+ * duration within the given viewport width. Returns MIN_TIMELINE_PIXELS_PER_SECOND
+ * when no duration/viewport info is provided.
+ */
+export function getMinZoomForProject(projectDurationSeconds: number, viewportWidth: number): number {
+  if (projectDurationSeconds <= 0 || viewportWidth <= 0) return MIN_TIMELINE_PIXELS_PER_SECOND;
+  // Exact fit: project fills the entire viewport width
+  return Math.max(MIN_TIMELINE_PIXELS_PER_SECOND, viewportWidth / projectDurationSeconds);
 }
 
 export function getNextTimelineZoomLevel(
   currentPixelsPerSecond: number,
   direction: 'in' | 'out',
+  options?: { projectDuration?: number; viewportWidth?: number },
 ) {
   const currentIdx = TIMELINE_ZOOM_LEVELS.findIndex((level) => level >= currentPixelsPerSecond);
   const safeIdx = currentIdx === -1 ? TIMELINE_ZOOM_LEVELS.length - 1 : currentIdx;
@@ -92,9 +112,13 @@ export function getNextTimelineZoomLevel(
       : currentPixelsPerSecond;
   }
 
-  return safeIdx > 0
-    ? TIMELINE_ZOOM_LEVELS[safeIdx - 1]
-    : currentPixelsPerSecond;
+  // Compute dynamic floor: don't zoom out further than fitting the project
+  const minZoom = options?.projectDuration && options?.viewportWidth
+    ? getMinZoomForProject(options.projectDuration, options.viewportWidth)
+    : MIN_TIMELINE_PIXELS_PER_SECOND;
+
+  const nextLevel = safeIdx > 0 ? TIMELINE_ZOOM_LEVELS[safeIdx - 1] : currentPixelsPerSecond;
+  return Math.max(nextLevel, minZoom);
 }
 
 export function getTimelineZoomAnchor(options: {

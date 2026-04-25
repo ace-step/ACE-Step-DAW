@@ -426,7 +426,7 @@ describe('offlineRender', () => {
 
       await renderSequencerTrackOffline(pattern, 120, 4);
 
-      expect(createDrumVoicesForKit).toHaveBeenCalledWith('808', expect.anything());
+      expect(createDrumVoicesForKit).toHaveBeenCalledWith('808', expect.anything(), expect.anything());
     });
   });
 });

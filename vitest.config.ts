@@ -12,9 +12,9 @@ export default defineConfig({
     },
   },
   test: {
-    pool: 'forks',
     environment: 'jsdom',
     globals: true,
+    pool: 'forks',
     setupFiles: ['./tests/setup.ts'],
     server: {
       deps: {
@@ -27,7 +27,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/**/*.test.{ts,tsx}', 'src/main.tsx', 'src/vite-env.d.ts'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/main.tsx', 'src/vite-env.d.ts', 'src/wasm/**/*.d.ts'],
       thresholds: {
         statements: 40,
         branches: 35,

@@ -63,6 +63,8 @@ export interface ModelStore {
   getModelsByCategory: (category: ModelCategory) => ModelEntry[];
   getActiveModelCategory: () => ModelCategory | null;
   getDefaultModelForCategory: (category: ModelCategory) => string | null;
+  /** Return the name of a currently-loaded model matching the given category, or null. */
+  getLoadedModelForCategory: (category: ModelCategory) => string | null;
 
   // Intent-driven actions
   ensureModelForIntent: (intent: GenerationIntent) => Promise<void>;
@@ -195,6 +197,15 @@ export const useModelStore = create<ModelStore>()(
         if (defaultModel) return defaultModel.name;
         // 3. First available in category
         if (modelsInCategory.length > 0) return modelsInCategory[0].name;
+        return null;
+      },
+
+      getLoadedModelForCategory: (category: ModelCategory) => {
+        const loaded = get().availableModels.filter(
+          (m) => m.is_loaded && inferModelCategory(m) === category,
+        );
+        if (loaded.length > 0) return loaded[0].name;
+        // Fallback to getDefaultModelForCategory (unloaded but available)
         return null;
       },
 

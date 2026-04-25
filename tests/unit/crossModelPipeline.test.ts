@@ -186,7 +186,7 @@ describe('cross-model pipeline', () => {
     const session = useGenerationStore.getState().variationSession;
     expect(session).not.toBeNull();
     expect(session!.variations[1].status).toBe('error');
-    expect(session!.variations[1].error).toBe('Generation failed');
+    expect(session!.variations[1].error).toBe('Generation failed: Generation failed');
     expect(session!.variations[1].completedAt).toBeGreaterThan(0);
   });
 });

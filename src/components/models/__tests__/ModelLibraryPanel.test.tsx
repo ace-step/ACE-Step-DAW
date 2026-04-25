@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { ModelLibraryPanel } from '../ModelLibraryPanel';
 import { useModelStore } from '../../../store/modelStore';
 import { useUIStore } from '../../../store/uiStore';
@@ -27,7 +27,7 @@ function setup() {
     connected: true,
     lastRefreshedAt: Date.now(),
     stats: null,
-    // Override startPolling to prevent background async work that causes act() warnings
+    // Provide no-op implementations so useEffect cleanup works without act() warnings
     startPolling: () => () => {},
     fetchStats: vi.fn().mockResolvedValue(undefined),
   });
@@ -36,10 +36,10 @@ function setup() {
 describe('ModelLibraryPanel', () => {
   beforeEach(() => { setup(); });
 
-  it('renders nothing when false', async () => {
+  it('renders nothing when false', () => {
     useUIStore.setState({ showModelLibrary: false });
-    await act(async () => { render(<ModelLibraryPanel />); });
-    expect(document.body.querySelector('[data-testid="model-library-panel"]')).toBeNull();
+    const { container } = render(<ModelLibraryPanel />);
+    expect(container.innerHTML).toBe('');
   });
 
   it('renders when true', async () => {
@@ -56,34 +56,48 @@ describe('ModelLibraryPanel', () => {
 
   it('filters by search', async () => {
     await act(async () => { render(<ModelLibraryPanel />); });
-    await act(async () => { fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'special' } }); });
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'special' } });
+    });
     expect(screen.getByText('special-model')).toBeInTheDocument();
     expect(screen.queryByText('ace-step-v1')).not.toBeInTheDocument();
   });
 
   it('shows pinned tab', async () => {
     await act(async () => { render(<ModelLibraryPanel />); });
-    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /pinned/i })); });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: /pinned/i }));
+    });
     expect(screen.getByText('ace-step-v2')).toBeInTheDocument();
     expect(screen.queryByText('ace-step-v1')).not.toBeInTheDocument();
   });
 
   it('shows active tab', async () => {
     await act(async () => { render(<ModelLibraryPanel />); });
-    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /active/i })); });
-    expect(screen.getByText('ace-step-v1')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: /active/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('ace-step-v1')).toBeInTheDocument();
+    });
     expect(screen.getByText('lego')).toBeInTheDocument();
   });
 
   it('shows LM in active tab', async () => {
     await act(async () => { render(<ModelLibraryPanel />); });
-    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /active/i })); });
-    expect(screen.getByText('llm-v1')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: /active/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('llm-v1')).toBeInTheDocument();
+    });
   });
 
   it('closes panel', async () => {
     await act(async () => { render(<ModelLibraryPanel />); });
-    await act(async () => { fireEvent.click(screen.getByTestId('model-library-close')); });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('model-library-close'));
+    });
     expect(useUIStore.getState().showModelLibrary).toBe(false);
   });
 });

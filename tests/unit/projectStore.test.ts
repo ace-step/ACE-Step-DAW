@@ -624,6 +624,38 @@ describe('projectStore', () => {
       const clips = useProjectStore.getState().project?.tracks[0].clips;
       expect(clips).toHaveLength(2);
     });
+
+    it('keeps drag-batch history when audio consolidation fails during a drag', async () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('drums', 'sample');
+      const clipA = store.addClip(track.id, {
+        startTime: 0, duration: 0.5, prompt: 'kick-a', globalCaption: '', lyrics: '', source: 'uploaded',
+      });
+      const clipB = store.addClip(track.id, {
+        startTime: 1, duration: 0.5, prompt: 'kick-b', globalCaption: '', lyrics: '', source: 'uploaded',
+      });
+      store.updateClip(clipA.id, {
+        generationStatus: 'ready', isolatedAudioKey: 'audio-a',
+      });
+      store.updateClip(clipB.id, {
+        generationStatus: 'ready', isolatedAudioKey: 'audio-b',
+      });
+
+      mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['wav'], { type: 'audio/wav' }));
+      mockDecodeAudioData.mockRejectedValue(new Error('decode failed'));
+
+      const historyBeforeDrag = store.getUndoHistory();
+      store.beginDrag({ scope: 'arrangement', label: 'Drag clips' });
+      const historyDuringDrag = store.getUndoHistory();
+
+      const result = await store.consolidateClips(track.id, [clipA.id, clipB.id]);
+      store.endDrag();
+
+      expect(result).toBeUndefined();
+      expect(useProjectStore.getState().getUndoHistory()).toHaveLength(historyDuringDrag.length);
+      expect(historyDuringDrag).toHaveLength(historyBeforeDrag.length + 1);
+      expect(useProjectStore.getState().getUndoHistory().at(-1)?.snapshot).toEqual(historyDuringDrag.at(-1)?.snapshot);
+    });
   });
 
   describe('duplicateTrack', () => {

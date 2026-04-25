@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { generateFromMultiTrack } from '../../services/generationPipeline';
+import { toastError } from '../../hooks/useToast';
 import type { ContextWindow } from '../../services/contextAudioExtractor';
 import { extractContextAudioLazy } from '../../services/lazyContextAudioExtractor';
 
@@ -184,7 +185,11 @@ export function MultiTrackGenerateModal({ selectWindow, contextWindow, onClose }
       chunkMaskMode,
     };
     onClose();
-    await generateFromMultiTrack(opts);
+    try {
+      await generateFromMultiTrack(opts);
+    } catch {
+      toastError('Generation failed — please try again');
+    }
   };
 
   if (!project) return null;

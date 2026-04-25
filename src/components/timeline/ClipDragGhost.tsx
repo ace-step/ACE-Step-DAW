@@ -107,6 +107,7 @@ export function ClipDragGhost({
         >
           <CanvasClipWaveform
             peaks={peaks}
+            audioKey={null}
             audioDuration={audioDuration}
             audioOffset={audioOffset}
             clipDuration={clipDuration}

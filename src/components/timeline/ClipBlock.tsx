@@ -65,10 +65,12 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const [scissorLine, setScissorLine] = useState<number | null>(null);
   const [rangePreview, setRangePreview] = useState<{ left: number; width: number } | null>(null);
   const clipBlockRef = useRef<HTMLDivElement>(null);
+  const ghostLandingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     hoveredResizeEdge,
     hoverSeekX,
+    isPointerInside,
     handleMouseEnter: handleMouseEnterLocal,
     handleMouseMove: handleMouseMoveLocal,
     handleMouseLeave: handleMouseLeaveLocal,
@@ -76,12 +78,20 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     handleResizeHandleLeave,
   } = useClipHover(clipBlockRef);
 
+  useEffect(() => {
+    return () => {
+      if (ghostLandingTimerRef.current !== null) clearTimeout(ghostLandingTimerRef.current);
+    };
+  }, []);
+
   const onGhostLanding = useCallback(() => {
     setGhostLanding(true);
     setShowDragTooltip(false);
-    setTimeout(() => {
+    if (ghostLandingTimerRef.current !== null) clearTimeout(ghostLandingTimerRef.current);
+    ghostLandingTimerRef.current = setTimeout(() => {
       setDragGhost(null);
       setGhostLanding(false);
+      ghostLandingTimerRef.current = null;
     }, 200);
   }, []);
 
@@ -138,13 +148,46 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
   const isSelected = isClipSelected;
-  const { fadeInDuration, fadeOutDuration } = getClipFadeBounds(clip);
+  // Local override for live fade values during drag. We deliberately bypass
+  // the Zustand store while the user is dragging to keep redraws cheap: only
+  // this ClipBlock re-renders per frame, instead of the whole project tree
+  // notifying every subscriber. The store is updated once on mouseup.
+  const [liveFadeIn, setLiveFadeIn] = useState<number | null>(null);
+  const [liveFadeOut, setLiveFadeOut] = useState<number | null>(null);
+
+  const storedFade = getClipFadeBounds(clip);
+  const fadeInDuration = liveFadeIn ?? storedFade.fadeInDuration;
+  const fadeOutDuration = liveFadeOut ?? storedFade.fadeOutDuration;
   const fadeInWidth = Math.min(width, fadeInDuration * pixelsPerSecond);
   const fadeOutWidth = Math.min(width, fadeOutDuration * pixelsPerSecond);
-  const showFadeInHandle = fadeInDuration > 0;
-  const showFadeOutHandle = fadeOutDuration > 0;
+  // Handles are strictly hover-only so the timeline stays uncluttered when the
+  // pointer is elsewhere. The fade itself is shown by the waveform amplitude
+  // envelope, which is always visible when a fade exists.
+  const showFadeInHandle = isPointerInside;
+  const showFadeOutHandle = isPointerInside;
   const clipColor = clip.color ?? track.color;
   const clipPresentation = useMemo(() => getClipPresentation(clipColor, isSelected), [clipColor, isSelected]);
+
+  const fadeInCurve = clip.fadeInCurve ?? 'linear';
+  const fadeOutCurve = clip.fadeOutCurve ?? 'linear';
+  // Local override for live curve point during drag (same store-bypass pattern
+  // as fade duration drag). Cleared on commit in the callback below.
+  const [liveFadeInCurvePoint, setLiveFadeInCurvePoint] = useState<{ x: number; y: number } | null>(null);
+  const [liveFadeOutCurvePoint, setLiveFadeOutCurvePoint] = useState<{ x: number; y: number } | null>(null);
+  const fadeInCurvePoint = liveFadeInCurvePoint ?? clip.fadeInCurvePoint;
+  const fadeOutCurvePoint = liveFadeOutCurvePoint ?? clip.fadeOutCurvePoint;
+  const waveformFadeEnvelope = useMemo(() => {
+    if (fadeInWidth <= 0 && fadeOutWidth <= 0) return undefined;
+    return {
+      totalWidthPx: width,
+      fadeInPx: fadeInWidth,
+      fadeOutPx: fadeOutWidth,
+      fadeInCurve,
+      fadeOutCurve,
+      fadeInCurvePoint,
+      fadeOutCurvePoint,
+    };
+  }, [width, fadeInWidth, fadeOutWidth, fadeInCurve, fadeOutCurve, fadeInCurvePoint, fadeOutCurvePoint]);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -279,9 +322,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           style={{
             top: HEADER_RAIL_HEIGHT_PX,
             background: clipPresentation.bodyBackground,
-            borderTop: `1px solid ${hexToRgba(clipColor, 0.08)}`,
-            borderBottom: `1px solid ${clipPresentation.bodyBorderColor}`,
-            boxShadow: clipPresentation.bodyInnerShadow,
           }}
         />
 
@@ -318,6 +358,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
         >
           <CanvasClipWaveform
             peaks={peaks}
+            audioKey={clip.isolatedAudioKey ?? clip.cumulativeMixKey ?? null}
             audioDuration={audioDuration}
             audioOffset={audioOffset}
             clipDuration={clip.duration}
@@ -328,23 +369,68 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             color={clipPresentation.waveformColor}
             opacityClassName={isSelected ? 'opacity-95' : 'opacity-90'}
             trackVolume={track.volume}
+            fadeEnvelope={waveformFadeEnvelope}
           />
         </div>
 
-        {/* Fade handles and overlays */}
+        {/* Fade handles — small grab targets only; the fade itself is shown
+            by the waveform amplitude envelope via CanvasClipWaveform. */}
         {!isMidiClip && hasAudioBody && (
           <ClipFadeHandles
             clipId={clip.id}
             clipDuration={clip.duration}
+            clipStartTime={clip.startTime}
             width={width}
             fadeInDuration={fadeInDuration}
             fadeOutDuration={fadeOutDuration}
-            fadeInWidth={fadeInWidth}
-            fadeOutWidth={fadeOutWidth}
+            fadeInCurve={fadeInCurve}
+            fadeOutCurve={fadeOutCurve}
+            fadeInCurvePoint={fadeInCurvePoint}
+            fadeOutCurvePoint={fadeOutCurvePoint}
             showFadeInHandle={showFadeInHandle}
             showFadeOutHandle={showFadeOutHandle}
             pixelsPerSecond={pixelsPerSecond}
             clipBlockRef={clipBlockRef}
+            clipColor={clipColor}
+            onFadeDragLive={(edge, value) => {
+              if (edge === 'in') setLiveFadeIn(value);
+              else setLiveFadeOut(value);
+            }}
+            onFadeDragCommit={(edge, value) => {
+              if (edge === 'in') {
+                setLiveFadeIn(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeInDuration: value });
+              } else {
+                setLiveFadeOut(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeOutDuration: value });
+              }
+            }}
+            onFadeDragCancel={(edge) => {
+              if (edge === 'in') setLiveFadeIn(null);
+              else setLiveFadeOut(null);
+            }}
+            onCurvePointDragLive={(edge, point) => {
+              if (edge === 'in') setLiveFadeInCurvePoint(point);
+              else setLiveFadeOutCurvePoint(point);
+            }}
+            onCurvePointDragCommit={(edge, point) => {
+              if (edge === 'in') {
+                setLiveFadeInCurvePoint(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeInCurvePoint: point });
+              } else {
+                setLiveFadeOutCurvePoint(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeOutCurvePoint: point });
+              }
+            }}
+            onCurvePointDragCancel={(edge) => {
+              if (edge === 'in') setLiveFadeInCurvePoint(null);
+              else setLiveFadeOutCurvePoint(null);
+            }}
+            onCurvePointReset={(edge) => {
+              useProjectStore.getState().setClipFade(clip.id, edge === 'in'
+                ? { fadeInCurvePoint: undefined }
+                : { fadeOutCurvePoint: undefined });
+            }}
           />
         )}
 

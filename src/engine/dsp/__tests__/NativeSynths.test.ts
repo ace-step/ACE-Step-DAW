@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   NativePolySynth,
   NativeFMSynth,
@@ -8,8 +8,8 @@ import {
   NativeSynth,
   NativeFrequencyEnvelope,
   NativeBufferSource,
+  parseDuration,
 } from '../NativeSynths';
-import { useProjectStore } from '../../../store/projectStore';
 
 // ---------------------------------------------------------------------------
 // Mock Web Audio API
@@ -303,6 +303,33 @@ describe('NativeFMSynth voice cleanup', () => {
   });
 });
 
+describe('parseDuration', () => {
+  it('returns numeric durations as-is regardless of BPM', () => {
+    expect(parseDuration(0.5, 120)).toBe(0.5);
+    expect(parseDuration(1.0, 90)).toBe(1.0);
+  });
+
+  it('parses Tone.js notation with explicit BPM', () => {
+    // At 120 BPM: quarter note = 0.5s, eighth note = 0.25s
+    expect(parseDuration('4n', 120)).toBeCloseTo(0.5);
+    expect(parseDuration('8n', 120)).toBeCloseTo(0.25);
+    expect(parseDuration('2n', 120)).toBeCloseTo(1.0);
+  });
+
+  it('uses correct BPM for tempo-dependent durations', () => {
+    // At 60 BPM: quarter note = 1.0s
+    expect(parseDuration('4n', 60)).toBeCloseTo(1.0);
+    expect(parseDuration('8n', 60)).toBeCloseTo(0.5);
+
+    // At 180 BPM: quarter note = 0.333s
+    expect(parseDuration('4n', 180)).toBeCloseTo(1 / 3);
+  });
+
+  it('returns fallback for unparseable strings', () => {
+    expect(parseDuration('invalid', 120)).toBe(0.25);
+  });
+});
+
 describe('NativeFrequencyEnvelope signal output', () => {
   it('creates with DC source for non-zero output signal', () => {
     const ctx = createMockCtx();
@@ -326,27 +353,21 @@ describe('NativeFrequencyEnvelope signal output', () => {
   });
 });
 
-describe('parseDuration uses project BPM (regression #1588)', () => {
-  beforeEach(() => {
-    useProjectStore.setState(useProjectStore.getInitialState(), true);
-  });
-
+describe('Native synth duration parsing uses the injected BPM (regression #1588)', () => {
   it('produces different durations at different BPMs for note notation', () => {
-    useProjectStore.getState().createProject({ name: 'BPM Test' });
-
     // BPM=60: quarter note = 1.0s
-    useProjectStore.getState().updateProject({ bpm: 60 });
     const osc60 = new MockOscillatorNode();
     const ctx60 = { ...createMockCtx(), createOscillator: () => osc60 } as unknown as AudioContext;
     const synth60 = new NativePolySynth(ctx60);
+    synth60.bpm = 60;
     synth60.triggerAttackRelease('C4', '4n');
     const stopTime60 = osc60.stop.mock.calls[0]?.[0] as number;
 
     // BPM=120: quarter note = 0.5s
-    useProjectStore.getState().updateProject({ bpm: 120 });
     const osc120 = new MockOscillatorNode();
     const ctx120 = { ...createMockCtx(), createOscillator: () => osc120 } as unknown as AudioContext;
     const synth120 = new NativePolySynth(ctx120);
+    synth120.bpm = 120;
     synth120.triggerAttackRelease('C4', '4n');
     const stopTime120 = osc120.stop.mock.calls[0]?.[0] as number;
 

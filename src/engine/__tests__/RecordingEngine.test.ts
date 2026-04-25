@@ -3,23 +3,36 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-// Mock Tone.js before importing RecordingEngine
-vi.mock('tone', () => {
-  class MockMembraneSynth {
-    volume = { value: 0 };
-    toDestination = vi.fn().mockReturnThis();
-    triggerAttackRelease = vi.fn();
-    dispose = vi.fn();
-  }
-  return {
-    start: vi.fn(),
-    MembraneSynth: MockMembraneSynth,
-    getTransport: vi.fn(() => ({
-      scheduleRepeat: vi.fn(() => 1),
-      clear: vi.fn(),
-    })),
-  };
-});
+// Mock getAudioEngine — RecordingEngine no longer imports Tone
+// directly (Phase 5E migration), but still calls getAudioEngine()
+// for the count-in / metronome clicks.
+vi.mock('../../hooks/useAudioEngine', () => ({
+  getAudioEngine: vi.fn(() => ({
+    resume: vi.fn().mockResolvedValue(undefined),
+    ctx: {
+      currentTime: 0,
+      createOscillator: vi.fn(() => ({
+        type: 'sine',
+        frequency: {
+          setValueAtTime: vi.fn(),
+          exponentialRampToValueAtTime: vi.fn(),
+        },
+        connect: vi.fn().mockReturnThis(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      })),
+      createGain: vi.fn(() => ({
+        gain: {
+          setValueAtTime: vi.fn(),
+          linearRampToValueAtTime: vi.fn(),
+          exponentialRampToValueAtTime: vi.fn(),
+        },
+        connect: vi.fn().mockReturnThis(),
+      })),
+      destination: {},
+    },
+  })),
+}));
 
 import { recordingEngine } from '../RecordingEngine';
 

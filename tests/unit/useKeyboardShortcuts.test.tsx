@@ -343,15 +343,18 @@ describe('useKeyboardShortcuts', () => {
     // Static analysis is used here because the duplicate handlers were dead code
     // (the first handler returns before the duplicate executes), so behavioral
     // tests cannot distinguish single vs duplicate handlers.
-    const path = await import('path');
-    const fs = await import('fs');
-    const filePath = path.resolve(__dirname, '../../src/hooks/useKeyboardShortcuts.ts');
-    const source = fs.readFileSync(filePath, 'utf8');
+    const [{ dirname, resolve }, { readFileSync }, { fileURLToPath }] = await Promise.all([
+      import('path'),
+      import('fs'),
+      import('url'),
+    ]);
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const filePath = resolve(testDir, '../../src/hooks/useKeyboardShortcuts.ts');
+    const source = readFileSync(filePath, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
     const transportActions = ['transport.stop', 'transport.loop', 'transport.metronome'];
     for (const action of transportActions) {
       const escaped = action.replace('.', '\\.');
-      // Match both quote styles, exclude comments
       const lines = source.split('\n').filter((line) => {
         const trimmed = line.trim();
         if (trimmed.startsWith('//') || trimmed.startsWith('*')) return false;

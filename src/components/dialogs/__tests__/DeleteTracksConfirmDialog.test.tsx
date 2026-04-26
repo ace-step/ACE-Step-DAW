@@ -16,6 +16,7 @@ describe('DeleteTracksConfirmDialog', () => {
   let trackIds: string[];
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
     trackIds = setupWithTracks();
@@ -86,11 +87,7 @@ describe('DeleteTracksConfirmDialog', () => {
     useUIStore.setState({ pendingDeleteTrackIds: [trackIds[0]] });
     const cancelSpy = vi.spyOn(useUIStore.getState(), 'cancelDeleteTracks');
     render(<DeleteTracksConfirmDialog />);
-    // Close button is the × character
-    const closeBtn = screen.getAllByRole('button').find(
-      (btn) => btn.textContent === '×',
-    )!;
-    fireEvent.click(closeBtn);
+    fireEvent.click(screen.getByLabelText('Close delete confirmation'));
     expect(cancelSpy).toHaveBeenCalledOnce();
   });
 });

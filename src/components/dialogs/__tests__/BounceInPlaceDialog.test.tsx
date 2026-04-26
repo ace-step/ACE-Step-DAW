@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BounceInPlaceDialog } from '../BounceInPlaceDialog';
 import { useProjectStore } from '../../../store/projectStore';
 import { useUIStore } from '../../../store/uiStore';
@@ -34,6 +34,7 @@ function setupBounceDialog() {
 
 describe('BounceInPlaceDialog', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
     setupBounceDialog();
@@ -103,17 +104,23 @@ describe('BounceInPlaceDialog', () => {
 
   it('calls bounceInPlace API on Bounce Track click', async () => {
     const { projectActionApi } = await import('../../../services/actionApi');
-    vi.mocked(projectActionApi.bounceInPlace).mockClear();
+    const trackId = useUIStore.getState().bounceInPlaceTrackId;
     render(<BounceInPlaceDialog />);
     fireEvent.click(screen.getByText('Bounce Track'));
-    expect(projectActionApi.bounceInPlace).toHaveBeenCalledWith({
-      trackId: useUIStore.getState().bounceInPlaceTrackId,
-      options: expect.objectContaining({
-        includeEffects: expect.any(Boolean),
-        includeAutomation: expect.any(Boolean),
-        normalize: expect.any(Boolean),
-        replaceOriginal: expect.any(Boolean),
-      }),
+
+    await waitFor(() => {
+      expect(projectActionApi.bounceInPlace).toHaveBeenCalledWith({
+        trackId,
+        options: expect.objectContaining({
+          includeEffects: expect.any(Boolean),
+          includeAutomation: expect.any(Boolean),
+          normalize: expect.any(Boolean),
+          replaceOriginal: expect.any(Boolean),
+        }),
+      });
+    });
+    await waitFor(() => {
+      expect(useUIStore.getState().bounceInPlaceTrackId).toBeNull();
     });
   });
 });

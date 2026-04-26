@@ -3,11 +3,13 @@ import {
   getVisiblePeakSlice,
   getMinMaxForColumn,
   precomputeColumnMinMax,
-  drawChannelWaveform,
-  drawPeakEnvelopeLine,
+  precomputeMergedMonoMinMax,
   drawCenterDivider,
   drawWaveform,
   drawMidiThumbnail,
+  computeBlendFactor,
+  fadeGainAtPixel,
+  type FadeEnvelope,
 } from '../waveformRenderer';
 
 /**
@@ -156,72 +158,9 @@ describe('getMinMaxForColumn', () => {
   });
 });
 
-// ---------- drawChannelWaveform ----------
-
-describe('drawChannelWaveform', () => {
-  let ctx: CanvasRenderingContext2D;
-  const peaks = generatePeaks(10, 0.5);
-
-  beforeEach(() => {
-    ctx = createMockCtx();
-  });
-
-  it('does nothing for zero columns', () => {
-    const { maxArr, minArr } = precomputeColumnMinMax(peaks, { startPeakIdx: 0, numBars: 10 }, 0, 0);
-    drawChannelWaveform(ctx, 0, 10, 0, 50, 23, '#000', 0.6, maxArr, minArr);
-    expect(ctx.beginPath).not.toHaveBeenCalled();
-  });
-
-  it('draws a closed path with fill', () => {
-    const { maxArr, minArr } = precomputeColumnMinMax(peaks, { startPeakIdx: 0, numBars: 10 }, 5, 0);
-    drawChannelWaveform(ctx, 5, 10, 0, 50, 23, '#1a1d26', 0.6, maxArr, minArr);
-    expect(ctx.beginPath).toHaveBeenCalledTimes(1);
-    expect(ctx.moveTo).toHaveBeenCalledTimes(1);
-    // 5 upper + 5 lower - 1 (moveTo) = 9 lineTo calls
-    expect(ctx.lineTo).toHaveBeenCalledTimes(9);
-    expect(ctx.closePath).toHaveBeenCalledTimes(1);
-    expect(ctx.fill).toHaveBeenCalledTimes(1);
-    expect(ctx.fillStyle).toBe('#1a1d26');
-  });
-
-  it('preserves and restores globalAlpha', () => {
-    ctx.globalAlpha = 0.9;
-    const { maxArr, minArr } = precomputeColumnMinMax(peaks, { startPeakIdx: 0, numBars: 10 }, 5, 0);
-    drawChannelWaveform(ctx, 5, 10, 0, 50, 23, '#000', 0.6, maxArr, minArr);
-    // globalAlpha should be restored to previous value
-    expect(ctx.globalAlpha).toBe(0.9);
-  });
-});
-
-// ---------- drawPeakEnvelopeLine ----------
-
-describe('drawPeakEnvelopeLine', () => {
-  let ctx: CanvasRenderingContext2D;
-  const peaks = generatePeaks(10, 0.5);
-
-  beforeEach(() => {
-    ctx = createMockCtx();
-  });
-
-  it('does nothing for zero columns', () => {
-    const { maxArr } = precomputeColumnMinMax(peaks, { startPeakIdx: 0, numBars: 10 }, 0, 0);
-    drawPeakEnvelopeLine(ctx, 0, 10, 0, 50, 23, '#000', 0.8, maxArr);
-    expect(ctx.beginPath).not.toHaveBeenCalled();
-  });
-
-  it('draws an open polyline with stroke', () => {
-    const { maxArr } = precomputeColumnMinMax(peaks, { startPeakIdx: 0, numBars: 10 }, 5, 0);
-    drawPeakEnvelopeLine(ctx, 5, 10, 0, 50, 23, '#1a1d26', 0.8, maxArr);
-    expect(ctx.beginPath).toHaveBeenCalledTimes(1);
-    expect(ctx.moveTo).toHaveBeenCalledTimes(1);
-    expect(ctx.lineTo).toHaveBeenCalledTimes(4);
-    expect(ctx.stroke).toHaveBeenCalledTimes(1);
-    expect(ctx.strokeStyle).toBe('#1a1d26');
-    expect(ctx.lineWidth).toBe(0.8);
-    // No closePath — it's an open polyline
-    expect(ctx.closePath).not.toHaveBeenCalled();
-  });
-});
+// drawChannelWaveform and drawPeakEnvelopeLine were replaced by the
+// internal drawChannelFill function (not exported). Integration tests
+// for the full waveform are covered by drawWaveform tests below.
 
 // ---------- drawCenterDivider ----------
 
@@ -272,7 +211,7 @@ describe('drawWaveform', () => {
     expect(ctx.save).not.toHaveBeenCalled();
   });
 
-  it('draws complete waveform with save/restore', () => {
+  it('draws mono merged waveform with fillRect bars', () => {
     drawWaveform(ctx, {
       peaks: generatePeaks(100),
       audioDuration: 5,
@@ -284,12 +223,9 @@ describe('drawWaveform', () => {
     });
     expect(ctx.save).toHaveBeenCalledTimes(1);
     expect(ctx.restore).toHaveBeenCalledTimes(1);
-    // Should draw: 1 center divider + 2 channel fills + 2 peak envelopes = 5 beginPath
-    expect(ctx.beginPath).toHaveBeenCalledTimes(5);
-    // 2 channel fills
-    expect(ctx.fill).toHaveBeenCalledTimes(2);
-    // 1 center divider + 2 peak envelopes = 3 strokes
-    expect(ctx.stroke).toHaveBeenCalledTimes(3);
+    // Column count = peak count (100 peaks for 100 logical peaks)
+    expect(ctx.fillRect.mock.calls.length).toBe(100);
+    expect(ctx.fill).not.toHaveBeenCalled();
   });
 
   it('scales amplitude by trackVolume', () => {
@@ -319,10 +255,55 @@ describe('drawWaveform', () => {
       trackVolume: 0.5,
     });
 
-    // Both should draw, but the y-coordinates should differ
-    // Both should complete successfully
-    expect(ctx1.fill).toHaveBeenCalledTimes(2);
-    expect(ctx2.fill).toHaveBeenCalledTimes(2);
+    // Both render fillRect bars (10 peaks = 10 columns)
+    expect(ctx1.fillRect.mock.calls.length).toBe(10);
+    expect(ctx2.fillRect.mock.calls.length).toBe(10);
+  });
+});
+
+// ---------- precomputeMergedMonoMinMax ----------
+
+describe('precomputeMergedMonoMinMax', () => {
+  it('merges L/R by taking max of maxes and min of mins', () => {
+    // 2 logical peaks, stride-4: [Lmax, Lmin, Rmax, Rmin, ...]
+    const peaks = [
+      0.8, -0.3, 0.5, -0.9,  // peak 0: L=(0.8,-0.3), R=(0.5,-0.9)
+      0.4, -0.6, 0.7, -0.2,  // peak 1: L=(0.4,-0.6), R=(0.7,-0.2)
+    ];
+    const peakSlice = { startPeakIdx: 0, numBars: 2 };
+    const result = precomputeMergedMonoMinMax(peaks, peakSlice, 2);
+
+    // Column 0 → peak 0: max(0.8, 0.5)=0.8, min(-0.3, -0.9)=-0.9
+    expect(result.maxArr[0]).toBe(0.8);
+    expect(result.minArr[0]).toBe(-0.9);
+
+    // Column 1 → peak 1: max(0.4, 0.7)=0.7, min(-0.6, -0.2)=-0.6
+    expect(result.maxArr[1]).toBe(0.7);
+    expect(result.minArr[1]).toBe(-0.6);
+  });
+});
+
+// ---------- computeBlendFactor ----------
+
+describe('computeBlendFactor', () => {
+  it('returns 0 when samplesPerPixel >= BLEND_START (16)', () => {
+    expect(computeBlendFactor(16)).toBe(0);
+    expect(computeBlendFactor(100)).toBe(0);
+  });
+
+  it('returns 1 when samplesPerPixel <= BLEND_END (4)', () => {
+    expect(computeBlendFactor(4)).toBe(1);
+    expect(computeBlendFactor(1)).toBe(1);
+  });
+
+  it('returns 0.5 at midpoint (10)', () => {
+    expect(computeBlendFactor(10)).toBe(0.5);
+  });
+
+  it('returns value between 0 and 1 in transition zone', () => {
+    const blend = computeBlendFactor(8);
+    expect(blend).toBeGreaterThan(0);
+    expect(blend).toBeLessThan(1);
   });
 });
 
@@ -368,5 +349,74 @@ describe('drawMidiThumbnail', () => {
     // Width 40 → maxNotes = max(20, 40/2) = 20
     drawMidiThumbnail(ctx, notes, 40, 100, 60, 120, '#000');
     expect(ctx.roundRect).toHaveBeenCalledTimes(20);
+  });
+});
+
+describe('fadeGainAtPixel', () => {
+  const env: FadeEnvelope = {
+    totalWidthPx: 100,
+    fadeInPx: 20,
+    fadeOutPx: 30,
+    fadeInCurve: 'linear',
+    fadeOutCurve: 'linear',
+  };
+
+  it('returns 1 outside the fade regions', () => {
+    expect(fadeGainAtPixel(env, 30)).toBe(1);
+    expect(fadeGainAtPixel(env, 60)).toBe(1);
+  });
+
+  it('returns 0 at fade-in start and 1 at fade-in end (linear)', () => {
+    expect(fadeGainAtPixel(env, 0)).toBeCloseTo(0, 5);
+    expect(fadeGainAtPixel(env, 20)).toBeCloseTo(1, 5);
+    expect(fadeGainAtPixel(env, 10)).toBeCloseTo(0.5, 5);
+  });
+
+  it('returns 1 at fade-out start and 0 at fade-out end (linear)', () => {
+    expect(fadeGainAtPixel(env, 70)).toBeCloseTo(1, 5);
+    expect(fadeGainAtPixel(env, 100)).toBeCloseTo(0, 5);
+    expect(fadeGainAtPixel(env, 85)).toBeCloseTo(0.5, 5);
+  });
+
+  it('uses equal-power curve when configured', () => {
+    const eq: FadeEnvelope = { ...env, fadeInCurve: 'equal-power' };
+    // sin(0.5 * PI/2) = sin(PI/4) ≈ 0.707
+    expect(fadeGainAtPixel(eq, 10)).toBeCloseTo(Math.SQRT1_2, 5);
+  });
+
+  it('uses exponential curve when configured', () => {
+    const exp: FadeEnvelope = { ...env, fadeInCurve: 'exponential' };
+    // t=0.5, t² = 0.25
+    expect(fadeGainAtPixel(exp, 10)).toBeCloseTo(0.25, 5);
+  });
+
+  it('returns 1 when envelope is undefined', () => {
+    expect(fadeGainAtPixel(undefined, 50)).toBe(1);
+  });
+
+  it('honors the offsetPx for chunked canvases', () => {
+    const offset: FadeEnvelope = { ...env, offsetPx: 10 };
+    // Chunk pixel 0 → effective full-clip pixel 10 → middle of fade-in (linear) = 0.5
+    expect(fadeGainAtPixel(offset, 0)).toBeCloseTo(0.5, 5);
+  });
+
+  it('uses the fade-in bezier curve point when present (overrides preset)', () => {
+    const bowed: FadeEnvelope = {
+      ...env,
+      fadeInCurve: 'linear',
+      fadeInCurvePoint: { x: 0.5, y: 0.9 },
+    };
+    // Middle of fade-in (pixel 10 of 0..20) → bezier gives ~0.9, not 0.5
+    expect(fadeGainAtPixel(bowed, 10)).toBeCloseTo(0.9, 2);
+  });
+
+  it('uses the fade-out bezier curve point when present', () => {
+    const bowed: FadeEnvelope = {
+      ...env,
+      fadeOutCurve: 'linear',
+      fadeOutCurvePoint: { x: 0.5, y: 0.2 },
+    };
+    // Middle of fade-out (pixel 85 of 70..100) → bezier gives ~0.2
+    expect(fadeGainAtPixel(bowed, 85)).toBeCloseTo(0.2, 2);
   });
 });

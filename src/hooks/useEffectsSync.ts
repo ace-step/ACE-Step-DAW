@@ -12,7 +12,10 @@ import { useVST3Store } from '../store/vst3Store';
 import { effectsEngine, initWasmDsp } from '../engine/EffectsEngine';
 import { pluginEngine } from '../engine/PluginEngine';
 import { getAudioEngine } from './useAudioEngine';
+import { createDebugLogger } from '../utils/debugLogger';
 import type { CompressorParams } from '../types/project';
+
+const logger = createDebugLogger('ace-step:effects-sync');
 import type { VST3ActiveInstance } from '../types/vst3';
 
 /**
@@ -68,7 +71,7 @@ export function useEffectsSync() {
     if (dspBackend === 'tonejs' || wasmInitRef.current) return;
     wasmInitRef.current = true;
     initWasmDsp().then((ok) => {
-      if (ok) console.info('[useEffectsSync] WASM DSP ready');
+      if (ok) logger.info('WASM DSP ready');
     });
   }, [dspBackend]);
 

@@ -22,6 +22,7 @@ interface ClipContextMenuProps {
   onOpenMidi?: () => void;
   onExportMidi?: () => void;
   onConvertToStrudel?: () => void;
+  onExtractGroove?: () => void;
 
   /* Editing */
   onEdit: () => void;
@@ -59,6 +60,7 @@ export function ClipContextMenu({
   onOpenMidi,
   onExportMidi,
   onConvertToStrudel,
+  onExtractGroove,
   onEdit,
   onDuplicate,
   onSplitAtPlayhead,
@@ -106,6 +108,9 @@ export function ClipContextMenu({
           )}
           {onExportMidi && (
             <ContextMenuItem label="Export MIDI Clip..." onClick={onExportMidi} color="#a5f3fc" />
+          )}
+          {onExtractGroove && (
+            <ContextMenuItem label="Extract Groove..." onClick={onExtractGroove} color="#6ee7b7" />
           )}
         </>
       )}

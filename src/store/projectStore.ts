@@ -110,20 +110,24 @@ import {
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
 import { stripHeavyDataForPersist } from './projectPersistUtils';
-import { exportTrackStems, getStemExportTracks, trackHasExportableContent } from '../engine/exportMix';
 import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { generatePattern, type PatternOptions } from '../utils/midiPatternGenerator';
 import { loadAudioBlobByKey, saveAudioBlob } from '../services/audioFileManager';
-import * as audioEngineHooks from '../hooks/useAudioEngine';
-import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
-import { createSamplerConfig } from '../engine/SamplerEngine';
 import { DEFAULT_WAVETABLE_SETTINGS } from '../engine/wavetablePresets';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { computeVideoSplit, computeLeftTrim, computeRightTrim } from '../utils/videoUtils';
-import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
 import type { StemCount, StemSeparationEngine } from '../types/api';
-import { separateClipAudioToStems } from '../services/stemSeparation';
+
+// ── Heavy modules: lazy-loaded to reduce initial bundle ──────────────────────
+// These are only needed for specific async operations (stem export, audio-to-MIDI, etc.)
+// The audio engine module is cached after first load for synchronous access.
+let _audioEngineModule: typeof import('../hooks/useAudioEngine') | null = null;
+async function getAudioEngineModule() {
+  if (!_audioEngineModule) _audioEngineModule = await import('../hooks/useAudioEngine');
+  return _audioEngineModule;
+}
+// Pre-load will happen on first use; detectPlaybackLatencyFromEngine falls back to defaults
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile, parseMidiFile } from '../utils/midi';
 import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from '../utils/midiEncoder';
@@ -141,14 +145,13 @@ import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateCli
 import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
 import {
-  CLIP_WAVEFORM_PEAK_COUNT,
   getClipAudibleEndTime,
   getClipAudibleStartTime,
   getClipContentOffset,
   getClipPlaybackRate,
   isClipRepitchStretched,
 } from '../utils/clipAudio';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { snapToGrid, beatsToSeconds } from '../utils/time';
 import {
   createDefaultPlaybackLatencySettings,
@@ -164,7 +167,6 @@ import {
 } from '../utils/trackInstrument';
 import { useTransportStore } from './transportStore';
 import { useCollaborationStore } from './collaborationStore';
-import { bounceTrackToAudioAsset } from '../services/bounceInPlace';
 import {
   ensurePlaybackLatencySettings,
 } from '../utils/playbackLatency';
@@ -610,6 +612,7 @@ function _applyHistorySnapshot(current: Project | null, snapshot: Project, entry
 
 export interface ProjectState extends MidiSliceActions {
   project: Project | null;
+  isViewerMode: () => boolean;
 
   setProject: (project: Project) => void;
   createProject: (params?: {
@@ -719,8 +722,8 @@ export interface ProjectState extends MidiSliceActions {
   createQuickSamplerFromAsset: (assetId: string, options?: { trackId?: string; rootNote?: number }) => Track | undefined;
   /** Recreate a new track from a persisted asset snapshot. */
   restoreAssetToNewTrack: (assetId: string, startTime: number, options?: { order?: number }) => Track | undefined;
-  saveTrackPreset: (trackId: string, presetName: string) => TrackPreset;
-  applyTrackPreset: (presetId: string) => Track | undefined;
+  saveTrackPreset: (trackId: string, presetName: string) => TrackPreset | undefined;
+  applyTrackPreset: (presetId: string, options?: { order?: number }) => Track | undefined;
   deleteTrackPreset: (presetId: string) => void;
   renameTrack: (trackId: string, newName: string) => void;
   setInputMonitoring: (trackId: string, mode: InputMonitoringMode) => void;
@@ -736,6 +739,8 @@ export interface ProjectState extends MidiSliceActions {
   updateClipColors: (clipIds: string[], color: string | undefined) => void;
   /** Toggle muted state on one or more clips. If any are active, mute all; if all muted, unmute all. */
   toggleClipMuted: (clipIds: string[]) => void;
+  addClipTag: (clipId: string, tag: string) => void;
+  removeClipTag: (clipId: string, tag: string) => void;
   removeClip: (clipId: string) => void;
   duplicateClip: (clipId: string) => Clip | undefined;
   updateClipStatus: (clipId: string, status: ClipGenerationStatus, extra?: Partial<Clip>) => void;
@@ -743,7 +748,7 @@ export interface ProjectState extends MidiSliceActions {
   saveClipVersion: (clipId: string) => void;
   /** Restore clip audio fields from a version by index. */
   setActiveVersion: (clipId: string, idx: number) => void;
-  setClipFade: (clipId: string, fade: Partial<Pick<Clip, 'fadeInDuration' | 'fadeOutDuration' | 'fadeInCurve' | 'fadeOutCurve'>>) => void;
+  setClipFade: (clipId: string, fade: Partial<Pick<Clip, 'fadeInDuration' | 'fadeOutDuration' | 'fadeInCurve' | 'fadeOutCurve' | 'fadeInCurvePoint' | 'fadeOutCurvePoint'>>) => void;
   setClipTimeStretch: (clipId: string, rate: number) => void;
   setClipPitchShift: (clipId: string, semitones: number) => void;
   setClipStretchMode: (clipId: string, mode: StretchMode) => void;
@@ -1868,6 +1873,25 @@ function buildTrackOrderMapForMove(
   return orderMap;
 }
 
+function insertTrackPreservingOrder(existingTracks: Track[], track: Track): Track[] {
+  const requestedOrder = Number.isFinite(track.order) && track.order > 0
+    ? Math.floor(track.order)
+    : existingTracks.length + 1;
+  const hasOrderConflict = existingTracks.some((candidate) => candidate.order === requestedOrder);
+  const shiftedTracks = hasOrderConflict
+    ? existingTracks.map((candidate) => (
+        candidate.order >= requestedOrder
+          ? { ...candidate, order: candidate.order + 1 }
+          : candidate
+      ))
+    : existingTracks;
+
+  return [...shiftedTracks, { ...track, order: requestedOrder }]
+    .map((candidate, originalIndex) => ({ candidate, originalIndex }))
+    .sort((a, b) => a.candidate.order - b.candidate.order || a.originalIndex - b.originalIndex)
+    .map(({ candidate }) => candidate);
+}
+
 function createTrackPresetSnapshot(track: Track, name: string): TrackPreset {
   const settings: TrackPresetSettings = {
     color: track.color,
@@ -2153,10 +2177,10 @@ function applyMasteringPreferences(mastering: MasteringState): MasteringState {
 }
 
 function detectPlaybackLatencyFromEngine() {
-  const engine =
-    'getExistingAudioEngine' in audioEngineHooks
-      ? audioEngineHooks.getExistingAudioEngine?.() ?? null
-      : null;
+  const mod = _audioEngineModule;
+  const engine = mod && 'getExistingAudioEngine' in mod
+    ? mod.getExistingAudioEngine?.() ?? null
+    : null;
   if (!engine) return createDefaultPlaybackLatencySettings();
   return detectPlaybackLatencySettings(undefined, {
     baseLatency: engine.ctx.baseLatency,
@@ -2244,6 +2268,7 @@ export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
   project: null,
+  isViewerMode: _isViewerMode,
 
   setProject: (project) => {
     _clearHistory();
@@ -2809,6 +2834,7 @@ export const useProjectStore = create<ProjectState>()(
       ...options,
     };
 
+    const { bounceTrackToAudioAsset } = await import('../services/bounceInPlace');
     const bounced = await bounceTrackToAudioAsset(state.project, track, resolvedOptions);
     const latest = get();
     if (!latest.project) return;
@@ -3144,6 +3170,7 @@ export const useProjectStore = create<ProjectState>()(
 
   saveTrackPreset: (trackId, presetName) => {
     const state = get();
+    if (_isViewerMode()) return undefined;
     if (!state.project) throw new Error('No project');
     const track = state.project.tracks.find((candidate) => candidate.id === trackId);
     if (!track) throw new Error(`Track '${trackId}' not found`);
@@ -3163,8 +3190,9 @@ export const useProjectStore = create<ProjectState>()(
     return preset;
   },
 
-  applyTrackPreset: (presetId) => {
+  applyTrackPreset: (presetId, options) => {
     const state = get();
+    if (_isViewerMode()) return undefined;
     if (!state.project) return undefined;
     const preset = (state.project.trackPresets ?? []).find((candidate) => candidate.id === presetId);
     if (!preset) return undefined;
@@ -3178,10 +3206,11 @@ export const useProjectStore = create<ProjectState>()(
         ...preset.settings,
         effects: preset.effects,
         midiEffects: preset.midiEffects,
+        order: options?.order,
       },
     );
 
-    const newTracks = [...state.project.tracks, track];
+    const newTracks = insertTrackPreservingOrder(state.project.tracks, track);
     set({
       project: {
         ...state.project,
@@ -3379,6 +3408,7 @@ export const useProjectStore = create<ProjectState>()(
 
   deleteTrackPreset: (presetId) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({
@@ -4466,6 +4496,61 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  addClipTag: (clipId, tag) => {
+    const normalized = tag.trim();
+    if (!normalized) return;
+
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
+    if (!clip) return;
+    if (clip.tags?.includes(normalized)) return;
+
+    _pushHistory(state.project, { label: `Tag clip "${normalized}"`, scope: 'arrangement' });
+    const newTracks = state.project.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) =>
+        c.id === clipId ? { ...c, tags: [...(c.tags ?? []), normalized] } : c,
+      ),
+    }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  removeClipTag: (clipId, tag) => {
+    const normalized = tag.trim();
+    if (!normalized) return;
+
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
+    if (!clip || !clip.tags?.includes(normalized)) return;
+
+    _pushHistory(state.project, { label: `Untag clip "${normalized}"`, scope: 'arrangement' });
+    const newTracks = state.project.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) =>
+        c.id === clipId ? { ...c, tags: c.tags?.filter((label) => label !== normalized) } : c,
+      ),
+    }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: newTracks,
+      },
+    });
+  },
+
   toggleClipMuted: (clipIds) => {
     const state = get();
     if (_isViewerMode()) return;
@@ -4783,7 +4868,7 @@ export const useProjectStore = create<ProjectState>()(
         try {
           const blob = await loadAudioBlobByKey(audioKey);
           if (blob) {
-            const engine = audioEngineHooks.getAudioEngine();
+            const engine = (await getAudioEngineModule()).getAudioEngine();
             const buffer = await engine.decodeAudioData(blob);
             const samples = buffer.getChannelData(0);
             rangeStart = snapClipBoundaryToAudio(sourceClip, rangeStart, samples, buffer.sampleRate);
@@ -5002,7 +5087,7 @@ export const useProjectStore = create<ProjectState>()(
         return;
       }
 
-      const engine = audioEngineHooks.getAudioEngine();
+      const engine = (await getAudioEngineModule()).getAudioEngine();
       const buffer = await engine.decodeAudioData(blob);
       const samples = buffer.getChannelData(0);
 
@@ -5040,7 +5125,7 @@ export const useProjectStore = create<ProjectState>()(
       const blob = await loadAudioBlobByKey(audioKey);
       if (!blob) return;
 
-      const engine = audioEngineHooks.getAudioEngine();
+      const engine = (await getAudioEngineModule()).getAudioEngine();
       const buffer = await engine.decodeAudioData(blob);
       const samples = buffer.getChannelData(0);
       const audioOffset = clip.audioOffset ?? 0;
@@ -5126,7 +5211,14 @@ export const useProjectStore = create<ProjectState>()(
     const lyrics = clips.map((clip) => clip.lyrics.trim()).filter(Boolean).join('\n');
     const source = clips.every((clip) => clip.source === 'generated') ? 'generated' : 'uploaded';
 
+    const historyBucket = _history.arrangement[GLOBAL_HISTORY_BUCKET];
+    const previousHistoryTail = historyBucket?.[historyBucket.length - 1];
     _pushHistory(state.project);
+    // Capture only an entry actually pushed by this action so rollback does not
+    // remove a pre-existing drag-batch snapshot when _pushHistory is a no-op.
+    const pushedEntry = historyBucket?.[historyBucket.length - 1] !== previousHistoryTail
+      ? historyBucket?.[historyBucket.length - 1]
+      : undefined;
 
     let consolidatedClip: Clip;
     if (mediaType === 'midi') {
@@ -5168,7 +5260,10 @@ export const useProjectStore = create<ProjectState>()(
           audioOffset: 0,
         };
       } catch (error) {
-        _history.arrangement[GLOBAL_HISTORY_BUCKET]?.pop();
+        // Remove our entry if it's still the most recent (identity check)
+        if (pushedEntry && historyBucket && historyBucket.length > 0 && historyBucket[historyBucket.length - 1] === pushedEntry) {
+          historyBucket.pop();
+        }
         toastError(error instanceof Error ? error.message : 'Unable to consolidate the selected audio clips');
         return undefined;
       }
@@ -7564,7 +7659,7 @@ export const useProjectStore = create<ProjectState>()(
     const audioKey = await saveAudioBlob(get().project!.id, clipId, 'isolated', wavBlob);
 
     // Compute waveform peaks for visual display
-    const waveformPeaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const waveformPeaks = await computeWaveformWithMipmap(audioKey, audioBuffer);
 
     // Create a new stems track with the rendered audio clip
     const newTrack = createTrackFromTemplate(
@@ -9218,6 +9313,7 @@ export const useProjectStore = create<ProjectState>()(
       throw new Error(`Audio for clip '${clipId}' not found`);
     }
 
+    const { separateClipAudioToStems } = await import('../services/stemSeparation');
     const preparedStems = await separateClipAudioToStems({
       clipId,
       sourceBlob,
@@ -9327,6 +9423,7 @@ export const useProjectStore = create<ProjectState>()(
     if (!audioKey) return undefined;
 
     const bpm = state.project.bpm;
+    const { convertClipAudioToMidi } = await import('../services/audioToMidi');
     const result = await convertClipAudioToMidi(audioKey, bpm, {
       threshold: options?.threshold ?? 0.15,
       minConfidence: options?.minConfidence ?? 0.5,
@@ -9357,7 +9454,8 @@ export const useProjectStore = create<ProjectState>()(
     const project = get().project;
     if (!project) return;
 
-    const engine = audioEngineHooks.getAudioEngine();
+    const engine = (await getAudioEngineModule()).getAudioEngine();
+    const { exportTrackStems, getStemExportTracks, trackHasExportableContent } = await import('../engine/exportMix');
     const exportableTracks = getStemExportTracks(project, { scope: 'all-audible' }).filter(trackHasExportableContent);
     const stemExports = await exportTrackStems(
       project,
@@ -9636,6 +9734,7 @@ export const useProjectStore = create<ProjectState>()(
 
   extractGrooveFromClip: (clipId, name, options) => {
     const state = get();
+    if (_isViewerMode()) return undefined;
     if (!state.project) return undefined;
 
     let notes: MidiNote[] | undefined;
@@ -9756,6 +9855,7 @@ export const useProjectStore = create<ProjectState>()(
 
   applyGrooveToClip: (clipId, noteIds, grooveId, options) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
 
     const groove = state.project.groovePool?.find((g) => g.id === grooveId);
@@ -9786,6 +9886,7 @@ export const useProjectStore = create<ProjectState>()(
 
   addGrooveTemplate: (template) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({
@@ -9799,6 +9900,7 @@ export const useProjectStore = create<ProjectState>()(
 
   deleteGrooveTemplate: (grooveId) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({
@@ -9887,6 +9989,7 @@ export const useProjectStore = create<ProjectState>()(
 
   renameGrooveTemplate: (grooveId, name) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({

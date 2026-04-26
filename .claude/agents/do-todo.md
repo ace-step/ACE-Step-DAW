@@ -30,22 +30,31 @@ You are a TDD-driven developer agent. Your job is to pick up ONE task and comple
 2. **Ensure you're on the correct branch**:
    - If working on a GitHub Issue: branch should be `feat/issue-NUMBER` or `fix/issue-NUMBER`
    - If branch doesn't exist, create it from main
-3. **Understand** the task — read relevant source files
-4. **Write a failing test first** (Red phase):
+3. **Check for spec context** (spec-aware TDD):
+   - Check if the issue has a `spec:` label: `gh issue view NUMBER --json labels`
+   - If a `spec:<change-name>` label is present, read the actual spec files:
+     - First check `openspec/changes/<change-name>/specs/` (active change)
+     - Fallback: `openspec/specs/` (archived specs)
+     - Use the issue body as supplementary context only (it may drift from source)
+   - Each Given/When/Then scenario becomes at least one test case
+   - MUST/SHALL keywords are mandatory — every MUST must be asserted in the test suite
+4. **Understand** the task — read relevant source files
+5. **Write a failing test first** (Red phase):
    - For store/utility tasks: create a Vitest test in `src/**/__tests__/`
    - For UI/workflow tasks: create a Playwright test in `tests/e2e/`
-5. **Run the test** to confirm it fails: `npm test` or `npx playwright test`
-6. **Implement** the minimum code to make the test pass (Green phase)
-7. **Run all tests** to ensure nothing else broke: `npm test`
-8. **Refactor** if needed while keeping tests green
-9. **Run quality gates**:
-   - `npx tsc --noEmit` — must be 0 errors
-   - `npm test` — all pass
-   - `npm run build` — succeeds
-10. **Mark progress**:
+   - If spec scenarios exist: each Given/When/Then scenario becomes a test case
+6. **Run the test** to confirm it fails: `npm test` or `npx playwright test`
+7. **Implement** the minimum code to make the test pass (Green phase)
+8. **Run all tests** to ensure nothing else broke: `npm test`
+9. **Refactor** if needed while keeping tests green
+10. **Run quality gates**:
+    - `npx tsc --noEmit` — must be 0 errors
+    - `npm test` — all pass
+    - `npm run build` — succeeds
+11. **Mark progress**:
     - If from `.llm/todo.md`: change `- [ ]` to `- [x]`
     - If from GitHub Issue: note the issue number in your commit
-11. **Commit** with a conventional commit message:
+12. **Commit** with a conventional commit message:
     ```
     git add -A
     # Use an appropriate conventional commit type: feat, fix, refactor, test, docs, etc.

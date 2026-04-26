@@ -1,49 +1,61 @@
+/**
+ * SynthEngine unison voice stacking — unit tests
+ *
+ * Phase 5L migration: voices and main synth are NativeBasicPolySynth
+ * instances over `getAudioEngine().ctx`. We mock the context with a
+ * minimal node factory so the engine code runs unmodified; tests
+ * observe the voice-allocation bookkeeping via `getUnisonVoices`.
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock Tone.js before importing SynthEngine
-const mockConnect = vi.fn().mockReturnThis();
-const mockToDestination = vi.fn().mockReturnThis();
-const mockDispose = vi.fn();
-const mockReleaseAll = vi.fn();
-const mockTriggerAttackRelease = vi.fn();
-const mockSet = vi.fn();
-
-vi.mock('tone', () => {
-  class MockPolySynth {
-    connect = mockConnect;
-    toDestination = mockToDestination;
-    dispose = mockDispose;
-    releaseAll = mockReleaseAll;
-    triggerAttackRelease = mockTriggerAttackRelease;
-    set = mockSet;
-  }
-  class MockGain {
-    connect = mockConnect;
-    toDestination = mockToDestination;
-    dispose = mockDispose;
-    gain = { value: 1 };
-  }
-  class MockPanner {
-    connect = mockConnect;
-    toDestination = mockToDestination;
-    dispose = mockDispose;
-    pan = { value: 0 };
-  }
-  return {
-    PolySynth: MockPolySynth,
-    Synth: class {},
-    Gain: MockGain,
-    Panner: MockPanner,
-    Frequency: (val: number, type: string) => ({
-      toFrequency: () => val * 10,
-    }),
-    getContext: () => ({ state: 'running' }),
+const { mockCtx } = vi.hoisted(() => {
+  const makeParam = () => ({
+    value: 0,
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+    cancelScheduledValues: vi.fn(),
+    cancelAndHoldAtTime: vi.fn(),
+  });
+  const makeGain = () => ({ gain: makeParam(), connect: vi.fn(), disconnect: vi.fn() });
+  const makeOsc = () => ({
+    type: 'sine' as OscillatorType,
+    frequency: makeParam(),
+    detune: makeParam(),
     start: vi.fn(),
+    stop: vi.fn(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    onended: null as (() => void) | null,
+  });
+  const makePanner = () => ({ pan: makeParam(), connect: vi.fn(), disconnect: vi.fn() });
+  return {
+    mockCtx: {
+      state: 'running' as AudioContextState,
+      currentTime: 0,
+      destination: {} as AudioNode,
+      createGain: vi.fn(makeGain),
+      createOscillator: vi.fn(makeOsc),
+      createBiquadFilter: vi.fn(),
+      createStereoPanner: vi.fn(makePanner),
+      createConstantSource: vi.fn(() => ({
+        offset: makeParam(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      })),
+    },
   };
 });
 
+vi.mock('../../hooks/useAudioEngine', () => ({
+  getAudioEngine: vi.fn(() => ({
+    ctx: mockCtx,
+    resume: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 import { synthEngine } from '../SynthEngine';
-import type { UnisonSettings } from '../../types/project';
 
 describe('SynthEngine unison voice stacking', () => {
   beforeEach(() => {
@@ -51,32 +63,27 @@ describe('SynthEngine unison voice stacking', () => {
     synthEngine.dispose();
   });
 
-  it('creates a single synth voice when unison voices is 1', () => {
+  it('creates no extra voices when unison voices = 1', () => {
     synthEngine.ensureTrackSynth('track1', 'lead');
     synthEngine.applyUnison('track1', { voices: 1, detune: 0, spread: 0 });
-    // With 1 voice, no extra unison voices should be created
     const voices = synthEngine.getUnisonVoices('track1');
-    expect(voices).toHaveLength(0); // 0 extra voices, main synth is the only one
+    expect(voices).toHaveLength(0);
   });
 
-  it('creates additional synth voices when unison > 1', () => {
+  it('creates N-1 extra voices when unison voices > 1', () => {
     synthEngine.ensureTrackSynth('track1', 'lead');
     synthEngine.applyUnison('track1', { voices: 4, detune: 25, spread: 0.8 });
     const voices = synthEngine.getUnisonVoices('track1');
-    // 4 voices total means 3 extra unison voices (main + 3)
     expect(voices).toHaveLength(3);
   });
 
   it('disposes old unison voices when reapplying', () => {
     synthEngine.ensureTrackSynth('track1', 'pad');
     synthEngine.applyUnison('track1', { voices: 4, detune: 25, spread: 0.5 });
-    const firstVoices = synthEngine.getUnisonVoices('track1');
-    expect(firstVoices).toHaveLength(3);
+    expect(synthEngine.getUnisonVoices('track1')).toHaveLength(3);
 
-    // Reapply with fewer voices
     synthEngine.applyUnison('track1', { voices: 2, detune: 10, spread: 0.3 });
-    const secondVoices = synthEngine.getUnisonVoices('track1');
-    expect(secondVoices).toHaveLength(1);
+    expect(synthEngine.getUnisonVoices('track1')).toHaveLength(1);
   });
 
   it('cleans up unison voices when track synth is removed', () => {

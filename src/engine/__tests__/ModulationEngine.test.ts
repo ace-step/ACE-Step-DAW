@@ -1,54 +1,105 @@
+/**
+ * ModulationEngine — unit tests
+ *
+ * Phase 5I migration: engine pulls its AudioContext from
+ * `getAudioEngine().ctx` instead of creating Tone nodes. We mock that
+ * context and track the native nodes via vi spies.
+ */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mockLfoStart = vi.fn();
-const mockLfoStop = vi.fn();
-const mockLfoDispose = vi.fn();
-const mockLfoConnect = vi.fn();
-const mockLfoFrequency = { value: 1 };
+// We expose the mock factories via hoisted refs so individual tests
+// can reach in and assert behaviour on the most-recently-created node.
+const {
+  mockCtx,
+  makeMockAudioParam,
+  mocks,
+} = vi.hoisted(() => {
+  type MockParam = {
+    value: number;
+    setValueAtTime: ReturnType<typeof vi.fn>;
+  };
+  const makeMockAudioParam = (): MockParam => ({
+    value: 0,
+    setValueAtTime: vi.fn(),
+  });
 
-const mockSignalDispose = vi.fn();
-const mockSignalConnect = vi.fn();
-let mockSignalValue = 0;
+  // Shared mock handles — cleared between tests via vi.clearAllMocks().
+  const mocks = {
+    oscStart: vi.fn(),
+    oscStop: vi.fn(),
+    oscConnect: vi.fn(),
+    oscDisconnect: vi.fn(),
+    constantStart: vi.fn(),
+    constantStop: vi.fn(),
+    constantConnect: vi.fn(),
+    constantDisconnect: vi.fn(),
+    gainConnect: vi.fn(),
+    gainDisconnect: vi.fn(),
+    shaperConnect: vi.fn(),
+    shaperDisconnect: vi.fn(),
+    // Handles kept in mutable slots so tests can inspect them.
+    lastOsc: null as any,
+    lastConstant: null as any,
+  };
 
-const mockMultiplyConnect = vi.fn();
-const mockMultiplyDispose = vi.fn();
+  const makeOsc = () => {
+    const osc = {
+      type: 'sine',
+      frequency: makeMockAudioParam(),
+      start: mocks.oscStart,
+      stop: mocks.oscStop,
+      connect: mocks.oscConnect,
+      disconnect: mocks.oscDisconnect,
+    };
+    mocks.lastOsc = osc;
+    return osc;
+  };
+  const makeConstant = () => {
+    const c = {
+      offset: makeMockAudioParam(),
+      start: mocks.constantStart,
+      stop: mocks.constantStop,
+      connect: mocks.constantConnect,
+      disconnect: mocks.constantDisconnect,
+    };
+    mocks.lastConstant = c;
+    return c;
+  };
+  const makeGain = () => ({
+    gain: makeMockAudioParam(),
+    connect: mocks.gainConnect,
+    disconnect: mocks.gainDisconnect,
+  });
+  const makeShaper = () => ({
+    curve: null as Float32Array | null,
+    connect: mocks.shaperConnect,
+    disconnect: mocks.shaperDisconnect,
+  });
 
-const mockScaleConnect = vi.fn();
-const mockScaleDispose = vi.fn();
-
-vi.mock('tone', () => {
   return {
-    LFO: class MockLFO {
-      frequency = mockLfoFrequency;
-      start = mockLfoStart;
-      stop = mockLfoStop;
-      dispose = mockLfoDispose;
-      connect = mockLfoConnect;
+    mockCtx: {
+      state: 'running' as AudioContextState,
+      currentTime: 0,
+      createOscillator: vi.fn(makeOsc),
+      createConstantSource: vi.fn(makeConstant),
+      createGain: vi.fn(makeGain),
+      createWaveShaper: vi.fn(makeShaper),
     },
-    Signal: class MockSignal {
-      constructor(v: number) { mockSignalValue = v; }
-      get value() { return mockSignalValue; }
-      set value(v: number) { mockSignalValue = v; }
-      dispose = mockSignalDispose;
-      connect = mockSignalConnect;
-    },
-    Multiply: class MockMultiply {
-      constructor(public factor: number) {}
-      connect = mockMultiplyConnect;
-      dispose = mockMultiplyDispose;
-    },
-    Scale: class MockScale {
-      constructor(public outputMin: number, public outputMax: number) {}
-      connect = mockScaleConnect;
-      dispose = mockScaleDispose;
-    },
-    Param: class MockParam {},
+    makeMockAudioParam,
+    mocks,
   };
 });
 
+vi.mock('../../hooks/useAudioEngine', () => ({
+  getAudioEngine: vi.fn(() => ({
+    ctx: mockCtx,
+    resume: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 import { modulationEngine } from '../ModulationEngine';
 import type { ModulationSettings } from '../../types/project';
-import type { ModulationTargets } from '../ModulationEngine';
+import type { ModulationTargets, ModulationTarget } from '../ModulationEngine';
 
 function makeSettings(overrides?: Partial<ModulationSettings>): ModulationSettings {
   return {
@@ -62,39 +113,43 @@ function makeSettings(overrides?: Partial<ModulationSettings>): ModulationSettin
 }
 
 function makeMockTargets(): ModulationTargets {
+  // We use plain objects as AudioParam/AudioNode stand-ins. The
+  // engine only ever connects nodes into these — it doesn't read
+  // properties off them — so opaque object identity is enough.
   return {
-    filterCutoff: {} as ModulationTargets['filterCutoff'],
-    amp: {} as ModulationTargets['amp'],
+    filterCutoff: {} as unknown as ModulationTarget,
+    amp: {} as unknown as ModulationTarget,
   };
 }
 
 describe('ModulationEngine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSignalValue = 0;
-    // re-assign arrow fn refs so vi.clearAllMocks doesn't break them
+    mocks.lastOsc = null;
+    mocks.lastConstant = null;
   });
 
   afterEach(() => {
     modulationEngine.removeTrack('test-track');
+    modulationEngine.removeTrack('track-1');
+    modulationEngine.removeTrack('track-2');
   });
 
   describe('applyModulation', () => {
     it('does nothing with empty slots', () => {
       const settings = makeSettings({ slots: [] });
       modulationEngine.applyModulation('test-track', settings, makeMockTargets());
-      // No LFOs should be created
-      expect(mockLfoStart).not.toHaveBeenCalled();
+      expect(mocks.oscStart).not.toHaveBeenCalled();
     });
 
-    it('creates LFO1 source and connects to filter cutoff', () => {
+    it('creates LFO1 source and wires it through a gain scaler to the target', () => {
       const settings = makeSettings({
         slots: [{ source: 'lfo1', destination: 'filterCutoff', amount: 0.5, bipolar: true }],
       });
       modulationEngine.applyModulation('test-track', settings, makeMockTargets());
-      expect(mockLfoStart).toHaveBeenCalled();
-      expect(mockLfoConnect).toHaveBeenCalled();
-      expect(mockMultiplyConnect).toHaveBeenCalled();
+      expect(mocks.oscStart).toHaveBeenCalledTimes(1);
+      expect(mocks.oscConnect).toHaveBeenCalled();       // osc → scaler
+      expect(mocks.gainConnect).toHaveBeenCalled();      // scaler → target
     });
 
     it('creates LFO2 source when used', () => {
@@ -102,20 +157,24 @@ describe('ModulationEngine', () => {
         slots: [{ source: 'lfo2', destination: 'amp', amount: 0.3, bipolar: false }],
       });
       modulationEngine.applyModulation('test-track', settings, makeMockTargets());
-      expect(mockLfoStart).toHaveBeenCalled();
+      expect(mocks.oscStart).toHaveBeenCalledTimes(1);
+      // bipolar=false + LFO source → WaveShaper is created to fold [-1,1]→[0,1]
+      expect(mockCtx.createWaveShaper).toHaveBeenCalledTimes(1);
     });
 
-    it('creates macro source as Signal', () => {
+    it('creates macro source as ConstantSourceNode with initial offset', () => {
       const settings = makeSettings({
         macros: [0.75, 0, 0, 0],
         slots: [{ source: 'macro1', destination: 'filterCutoff', amount: 1, bipolar: false }],
       });
       modulationEngine.applyModulation('test-track', settings, makeMockTargets());
-      expect(mockSignalValue).toBe(0.75);
-      expect(mockSignalConnect).toHaveBeenCalled();
+      expect(mockCtx.createConstantSource).toHaveBeenCalledTimes(1);
+      expect(mocks.lastConstant.offset.value).toBe(0.75);
+      expect(mocks.constantStart).toHaveBeenCalled();
+      expect(mocks.constantConnect).toHaveBeenCalled();
     });
 
-    it('reuses same source for multiple slots', () => {
+    it('reuses the same source for multiple slots', () => {
       const settings = makeSettings({
         slots: [
           { source: 'lfo1', destination: 'filterCutoff', amount: 0.5, bipolar: true },
@@ -123,19 +182,19 @@ describe('ModulationEngine', () => {
         ],
       });
       modulationEngine.applyModulation('test-track', settings, makeMockTargets());
-      // LFO should only be created once, but connected twice via two scalers
-      expect(mockLfoStart).toHaveBeenCalledTimes(1);
-      expect(mockMultiplyConnect).toHaveBeenCalledTimes(2);
+      // Only one OscillatorNode is created — the second slot reuses it.
+      expect(mockCtx.createOscillator).toHaveBeenCalledTimes(1);
+      // Two scaler gains though — one per slot.
+      expect(mockCtx.createGain).toHaveBeenCalledTimes(2);
     });
 
     it('skips slots with unavailable targets', () => {
       const settings = makeSettings({
         slots: [{ source: 'lfo1', destination: 'pan', amount: 0.5, bipolar: true }],
       });
-      // Targets don't include 'pan'
-      modulationEngine.applyModulation('test-track', settings, { filterCutoff: {} as never });
-      // LFO created but no Multiply connected to target
-      expect(mockMultiplyConnect).not.toHaveBeenCalled();
+      modulationEngine.applyModulation('test-track', settings, { filterCutoff: {} as ModulationTarget });
+      // No scaler gain created because we bailed before that step.
+      expect(mockCtx.createGain).not.toHaveBeenCalled();
     });
 
     it('skips unsupported sources (velocity, modWheel, envelopes)', () => {
@@ -143,52 +202,50 @@ describe('ModulationEngine', () => {
         slots: [{ source: 'velocity', destination: 'filterCutoff', amount: 0.5, bipolar: false }],
       });
       modulationEngine.applyModulation('test-track', settings, makeMockTargets());
-      // No source created, no connection
-      expect(mockLfoStart).not.toHaveBeenCalled();
-      expect(mockMultiplyConnect).not.toHaveBeenCalled();
+      expect(mockCtx.createOscillator).not.toHaveBeenCalled();
+      expect(mockCtx.createGain).not.toHaveBeenCalled();
     });
   });
 
   describe('setMacro', () => {
-    it('updates macro signal value', () => {
+    it('updates the macro source offset', () => {
       const settings = makeSettings({
         macros: [0.5, 0, 0, 0],
         slots: [{ source: 'macro1', destination: 'filterCutoff', amount: 1, bipolar: false }],
       });
       modulationEngine.applyModulation('test-track', settings, makeMockTargets());
       modulationEngine.setMacro('test-track', 0, 0.8);
-      expect(mockSignalValue).toBe(0.8);
+      expect(mocks.lastConstant.offset.value).toBe(0.8);
     });
 
-    it('clamps macro value to 0-1', () => {
+    it('clamps macro value to [0, 1]', () => {
       const settings = makeSettings({
         macros: [0, 0, 0, 0],
         slots: [{ source: 'macro1', destination: 'filterCutoff', amount: 1, bipolar: false }],
       });
       modulationEngine.applyModulation('test-track', settings, makeMockTargets());
       modulationEngine.setMacro('test-track', 0, 1.5);
-      expect(mockSignalValue).toBe(1);
+      expect(mocks.lastConstant.offset.value).toBe(1);
     });
 
     it('is a no-op for unknown track', () => {
-      modulationEngine.setMacro('nonexistent', 0, 0.5);
-      // Should not throw
+      expect(() => modulationEngine.setMacro('nonexistent', 0, 0.5)).not.toThrow();
     });
   });
 
   describe('setLfoRate', () => {
-    it('updates LFO frequency', () => {
+    it('updates the LFO oscillator frequency', () => {
       const settings = makeSettings({
         slots: [{ source: 'lfo1', destination: 'filterCutoff', amount: 0.5, bipolar: true }],
       });
       modulationEngine.applyModulation('test-track', settings, makeMockTargets());
       modulationEngine.setLfoRate('test-track', 0, 5);
-      expect(mockLfoFrequency.value).toBe(5);
+      expect(mocks.lastOsc.frequency.value).toBe(5);
     });
   });
 
   describe('removeTrack', () => {
-    it('disposes all sources and connections', () => {
+    it('stops and disconnects all sources', () => {
       const settings = makeSettings({
         slots: [
           { source: 'lfo1', destination: 'filterCutoff', amount: 0.5, bipolar: true },
@@ -197,15 +254,18 @@ describe('ModulationEngine', () => {
       });
       modulationEngine.applyModulation('test-track', settings, makeMockTargets());
       modulationEngine.removeTrack('test-track');
-      expect(mockLfoStop).toHaveBeenCalled();
-      expect(mockLfoDispose).toHaveBeenCalled();
-      expect(mockSignalDispose).toHaveBeenCalled();
-      expect(mockMultiplyDispose).toHaveBeenCalledTimes(2);
+      // Each source is `stop()`ed exactly once (per source, not per slot).
+      expect(mocks.oscStop).toHaveBeenCalledTimes(1);
+      expect(mocks.constantStop).toHaveBeenCalledTimes(1);
+      // Disconnect assertions are "at least once" — the slot's dispose
+      // path and the source's dispose path both ask the upstream node
+      // to disconnect, which is fine (native disconnect is idempotent).
+      expect(mocks.oscDisconnect).toHaveBeenCalled();
+      expect(mocks.constantDisconnect).toHaveBeenCalled();
     });
 
     it('is a no-op for unknown track', () => {
-      modulationEngine.removeTrack('nonexistent');
-      // Should not throw
+      expect(() => modulationEngine.removeTrack('nonexistent')).not.toThrow();
     });
   });
 
@@ -217,7 +277,7 @@ describe('ModulationEngine', () => {
       modulationEngine.applyModulation('track-1', settings, makeMockTargets());
       modulationEngine.applyModulation('track-2', settings, makeMockTargets());
       modulationEngine.releaseAll();
-      expect(mockLfoStop).toHaveBeenCalledTimes(2);
+      expect(mocks.oscStop).toHaveBeenCalledTimes(2);
     });
   });
 });

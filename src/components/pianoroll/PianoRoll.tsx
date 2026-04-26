@@ -7,6 +7,7 @@ import { CHORD_SHAPES, DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../
 import { QuickSamplerEditor } from './QuickSamplerEditor';
 import { ZoneMapEditor } from './ZoneMapEditor';
 import { GranularPanel } from './GranularPanel';
+import { GrooveTemplatesPanel } from './GrooveTemplatesPanel';
 import { GeneratePatternDialog } from './GeneratePatternDialog';
 import { PianoRollCanvas } from './PianoRollCanvas';
 import { PianoRollEmptyState } from './PianoRollEmptyState';
@@ -87,6 +88,7 @@ export function PianoRoll() {
   const midiAiPanelOpen = useMidiAiStore((s) => s.panelOpen);
   const openMidiAiPanel = useMidiAiStore((s) => s.openPanel);
   const closeMidiAiPanel = useMidiAiStore((s) => s.closePanel);
+  const [groovePanelOpen, setGroovePanelOpen] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -473,6 +475,18 @@ export function PianoRoll() {
 
         <button
           className={`px-2 py-1 rounded text-[10px] transition-colors ${
+            groovePanelOpen
+              ? 'bg-emerald-600/40 text-emerald-200'
+              : 'bg-emerald-600/15 text-emerald-100 hover:bg-emerald-600/30'
+          }`}
+          onClick={() => setGroovePanelOpen((v) => !v)}
+          title="Toggle groove templates panel"
+        >
+          Groove
+        </button>
+
+        <button
+          className={`px-2 py-1 rounded text-[10px] transition-colors ${
             chordPanelOpen
               ? 'bg-cyan-600/40 text-cyan-200'
               : 'bg-cyan-600/15 text-cyan-100 hover:bg-cyan-600/30'
@@ -562,6 +576,11 @@ export function PianoRoll() {
         </div>
       </div>
 
+      {groovePanelOpen && (
+        <div className="border-b border-zinc-700/50 max-h-48 overflow-y-auto">
+          <GrooveTemplatesPanel />
+        </div>
+      )}
       {chordPanelOpen && <ChordSuggestionPanel />}
       {midiAiPanelOpen && <MidiAiPanel />}
 

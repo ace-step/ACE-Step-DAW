@@ -10,6 +10,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'transport.end',         category: 'transport', label: 'Jump to End',                 defaultCombo: { code: 'End' }, contexts: ['global'] },
   { id: 'transport.nudgeLeft',   category: 'transport', label: 'Nudge Playhead Left',         defaultCombo: { code: 'ArrowLeft' }, contexts: ['timeline'] },
   { id: 'transport.nudgeRight',  category: 'transport', label: 'Nudge Playhead Right',        defaultCombo: { code: 'ArrowRight' }, contexts: ['timeline'] },
+  { id: 'transport.punchToggle', category: 'transport', label: 'Toggle Punch In/Out',         defaultCombo: { code: 'KeyP', shift: true }, contexts: ['global'] },
   { id: 'transport.punchIn',     category: 'transport', label: 'Set Punch-In Point',          defaultCombo: { code: 'KeyI' }, contexts: ['global'] },
   { id: 'transport.punchOut',    category: 'transport', label: 'Set Punch-Out Point',         defaultCombo: { code: 'KeyO', shift: true }, contexts: ['global'] },
   { id: 'transport.captureMidi', category: 'transport', label: 'Capture MIDI',                defaultCombo: { code: 'KeyF' }, contexts: ['global'] },
@@ -61,6 +62,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'panels.modelLibrary',   category: 'panels',    label: 'Toggle Model Library',        defaultCombo: { code: 'KeyM', shift: true }, contexts: ['global'] },
   { id: 'panels.strudel',        category: 'panels',    label: 'Toggle Strudel',              defaultCombo: { code: 'KeyU' }, contexts: ['global'] },
   { id: 'panels.aiAssistant',    category: 'panels',    label: 'Toggle AI Assistant',         defaultCombo: { code: 'Slash', mod: true }, contexts: ['global'] },
+  { id: 'panels.clipInspector',  category: 'panels',    label: 'Toggle Clip Inspector',       defaultCombo: { code: 'KeyI', shift: true }, contexts: ['global'] },
   { id: 'view.autoScroll',        category: 'view',      label: 'Toggle Auto-Scroll',          defaultCombo: { code: 'KeyF', shift: true }, contexts: ['global'] },
 
   { id: 'project.new',           category: 'project',   label: 'New Project',                 defaultCombo: { code: 'KeyN', mod: true }, contexts: ['global'] },

@@ -22,6 +22,7 @@ import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../constants/defaults';
 import { extractContextAudioLazy } from './lazyContextAudioExtractor';
 import { computeEta } from '../utils/generationProgress';
 import { createDebugLogger } from '../utils/debugLogger';
+import { extractServerPath, sanitizeServerPath } from '../utils/serverPath';
 
 const logger = createDebugLogger('ace-step:generation');
 
@@ -1337,8 +1338,9 @@ export async function generateBatch(options: GenerateBatchOptions): Promise<void
           opts.srcAudioPath = contextAudioPath;
         } else if (!firstCall && prevClipId) {
           const prevClip = useProjectStore.getState().getClipById(prevClipId);
-          if (prevClip?.serverCumulativePath) {
-            opts.srcAudioPath = prevClip.serverCumulativePath;
+          const serverCumulativePath = sanitizeServerPath(prevClip?.serverCumulativePath);
+          if (serverCumulativePath) {
+            opts.srcAudioPath = serverCumulativePath;
           }
         }
         firstCall = false;
@@ -1741,8 +1743,9 @@ export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): P
         };
         if (prevClipId) {
           const prevClip = useProjectStore.getState().getClipById(prevClipId);
-          if (prevClip?.serverCumulativePath) {
-            clipOpts.srcAudioPath = prevClip.serverCumulativePath;
+          const serverCumulativePath = sanitizeServerPath(prevClip?.serverCumulativePath);
+          if (serverCumulativePath) {
+            clipOpts.srcAudioPath = serverCumulativePath;
           }
         }
         prevClipId = clipId;
@@ -2702,21 +2705,6 @@ export async function generateVocalReplacement(opts: VocalReplacementOptions): P
   });
 }
 
-/**
- * Extract a server-local file path from the audio URL returned by the backend.
- * The backend URL is typically `/v1/audio?path=/tmp/.../output.wav`.
- */
-function extractServerPath(audioPath: string): string | null {
-  try {
-    const url = new URL(audioPath, 'http://localhost');
-    const p = url.searchParams.get('path');
-    if (p) return p;
-  } catch {
-    // not a valid URL — fall through
-  }
-  if (audioPath.startsWith('/') && !audioPath.includes('?')) return audioPath;
-  return null;
-}
 
 // ---------------------------------------------------------------------------
 // Text2Music — Full-song generation

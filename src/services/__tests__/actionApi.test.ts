@@ -120,6 +120,7 @@ function createMockStore(project: MockProject | null = null): ProjectStore {
     resizeMidiNote: vi.fn(),
     saveTrackPreset: vi.fn(() => makeTrackPreset()),
     applyTrackPreset: vi.fn(() => makeTrack()),
+    isViewerMode: vi.fn(() => false),
     consolidateClips: vi.fn(async () => makeClip({ id: 'consolidated-1' })),
     separateStems: vi.fn(async () => [makeTrack({ id: 'stem-1' }), makeTrack({ id: 'stem-2' })]),
     bounceInPlace: vi.fn(async () => makeClip({ id: 'bounced-1' })),
@@ -391,6 +392,16 @@ describe('createProjectActionApi', () => {
     it('returns ok with preset on success', () => {
       const result = api.saveTrackPreset({ trackId: 'track-1', presetName: 'My Preset' });
       expect(result.ok).toBe(true);
+    });
+
+    it('returns ACTION_FAILED in viewer mode', () => {
+      (store.getState() as Record<string, unknown>).isViewerMode = vi.fn(() => true);
+      const result = api.saveTrackPreset({ trackId: 'track-1', presetName: 'My Preset' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('ACTION_FAILED');
+        expect(result.error.message).toMatch(/viewer mode/i);
+      }
     });
   });
 

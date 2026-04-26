@@ -612,6 +612,7 @@ function _applyHistorySnapshot(current: Project | null, snapshot: Project, entry
 
 export interface ProjectState extends MidiSliceActions {
   project: Project | null;
+  isViewerMode: () => boolean;
 
   setProject: (project: Project) => void;
   createProject: (params?: {
@@ -721,7 +722,7 @@ export interface ProjectState extends MidiSliceActions {
   createQuickSamplerFromAsset: (assetId: string, options?: { trackId?: string; rootNote?: number }) => Track | undefined;
   /** Recreate a new track from a persisted asset snapshot. */
   restoreAssetToNewTrack: (assetId: string, startTime: number, options?: { order?: number }) => Track | undefined;
-  saveTrackPreset: (trackId: string, presetName: string) => TrackPreset;
+  saveTrackPreset: (trackId: string, presetName: string) => TrackPreset | undefined;
   applyTrackPreset: (presetId: string) => Track | undefined;
   deleteTrackPreset: (presetId: string) => void;
   renameTrack: (trackId: string, newName: string) => void;
@@ -2248,6 +2249,7 @@ export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
   project: null,
+  isViewerMode: _isViewerMode,
 
   setProject: (project) => {
     _clearHistory();
@@ -3149,7 +3151,7 @@ export const useProjectStore = create<ProjectState>()(
 
   saveTrackPreset: (trackId, presetName) => {
     const state = get();
-    if (_isViewerMode()) return undefined as unknown as TrackPreset;
+    if (_isViewerMode()) return undefined;
     if (!state.project) throw new Error('No project');
     const track = state.project.tracks.find((candidate) => candidate.id === trackId);
     if (!track) throw new Error(`Track '${trackId}' not found`);

@@ -98,12 +98,36 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
 
   return (
     <>
+      {/* Proximity sentinel — larger hover target when collapsed (24px invisible zone above the bar) */}
+      {statusBarAutoHide && isCollapsed && (
+        <div
+          className="h-6 w-full"
+          data-testid="status-bar-sentinel"
+          onMouseEnter={() => setHovered(true)}
+        />
+      )}
       <div
-        className={`border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted overflow-hidden transition-all duration-200 ease-out ${isCollapsed ? 'status-bar-collapsed' : ''}`}
+        className={`status-bar border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted overflow-hidden ${isCollapsed ? 'status-bar-collapsed' : ''}`}
         data-testid="status-bar"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
+        {/* Collapsed mini-row: only critical dots visible within the 8px clamp */}
+        {isCollapsed && (
+          <div className="flex h-2 items-center gap-1.5 px-3" data-testid="status-bar-collapsed-row">
+            <span
+              className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${connected ? 'bg-emerald-500' : 'bg-zinc-500'}`}
+              title={connected ? 'Online' : 'Offline'}
+            />
+            {saveStatus && (
+              <span
+                className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${saveStatus === 'saved' ? 'bg-emerald-500' : saveStatus === 'saving' ? 'bg-amber-400' : 'bg-zinc-500'}`}
+                title={saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving...' : 'Unsaved'}
+                data-testid="collapsed-save-dot"
+              />
+            )}
+          </div>
+        )}
         {hasActiveJobs && (
           <div className="flex h-6 items-center gap-3 px-3" data-testid="status-bar-job-row">
             <span className="text-daw-accent truncate tabular-nums">

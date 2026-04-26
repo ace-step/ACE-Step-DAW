@@ -54,20 +54,39 @@ describe('StatusBar auto-hide', () => {
     expect(bar.className).toContain('status-bar-collapsed');
   });
 
-  it('always shows connection dot in collapsed state', () => {
+  it('shows dedicated collapsed row with connection dot', () => {
     useUIStore.setState({ statusBarAutoHide: true });
     render(<StatusBar />);
-    const dot = screen.getByTestId('connection-dot');
-    expect(dot).toBeInTheDocument();
+    const collapsedRow = screen.getByTestId('status-bar-collapsed-row');
+    expect(collapsedRow).toBeInTheDocument();
   });
 
-  it('always shows save status in collapsed state', () => {
+  it('shows save dot in collapsed state when saveStatus is provided', () => {
     useUIStore.setState({ statusBarAutoHide: true });
     render(<StatusBar saveStatus="saved" lastSavedAt={Date.now()} />);
+    const saveDot = screen.getByTestId('collapsed-save-dot');
+    expect(saveDot).toBeInTheDocument();
+  });
+
+  it('renders proximity sentinel div when collapsed for easier hover target', () => {
+    useUIStore.setState({ statusBarAutoHide: true });
+    render(<StatusBar />);
+    const sentinel = screen.getByTestId('status-bar-sentinel');
+    expect(sentinel).toBeInTheDocument();
+  });
+
+  it('expands when hovering the proximity sentinel', () => {
+    useUIStore.setState({ statusBarAutoHide: true });
+    render(<StatusBar />);
+    const sentinel = screen.getByTestId('status-bar-sentinel');
+    fireEvent.mouseEnter(sentinel);
     const bar = screen.getByTestId('status-bar');
-    expect(bar.className).toContain('status-bar-collapsed');
-    // SaveStatusIndicator should still render
-    expect(screen.getByTestId('status-connection')).toBeInTheDocument();
+    expect(bar.className).not.toContain('status-bar-collapsed');
+  });
+
+  it('does NOT render sentinel when auto-hide is off', () => {
+    render(<StatusBar />);
+    expect(screen.queryByTestId('status-bar-sentinel')).not.toBeInTheDocument();
   });
 
   it('model names have max-width truncation to prevent overflow', () => {
@@ -97,5 +116,20 @@ describe('StatusBar overflow prevention', () => {
     render(<StatusBar />);
     const metaRow = screen.getByTestId('status-bar-meta-row');
     expect(metaRow.className).toContain('min-w-0');
+  });
+});
+
+describe('StatusBar auto-hide persistence', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useUIStore.setState(useUIStore.getInitialState(), true);
+  });
+
+  it('statusBarAutoHide is included in persisted state', () => {
+    useUIStore.getState().setStatusBarAutoHide(true);
+    expect(useUIStore.getState().statusBarAutoHide).toBe(true);
+
+    useUIStore.getState().setStatusBarAutoHide(false);
+    expect(useUIStore.getState().statusBarAutoHide).toBe(false);
   });
 });

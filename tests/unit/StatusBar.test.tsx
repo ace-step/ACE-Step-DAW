@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import { StatusBar, _resetLastKnownConnection } from '../../src/components/layout/StatusBar';
 import { useGenerationStore } from '../../src/store/generationStore';
 import { useProjectStore } from '../../src/store/projectStore';
+import { useUIStore } from '../../src/store/uiStore';
 
 const healthCheckMock = vi.fn();
 const CURRENT_YEAR = new Date().getFullYear();
@@ -17,6 +18,7 @@ describe('StatusBar', () => {
     vi.clearAllMocks();
     useGenerationStore.setState(useGenerationStore.getInitialState(), true);
     useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useUIStore.setState({ statusBarAutoHide: false });
     _resetLastKnownConnection();
   });
 

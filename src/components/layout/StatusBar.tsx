@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { healthCheck } from '../../services/aceStepApi';
 import { useGenerationStore } from '../../store/generationStore';
 import { useModelStore } from '../../store/modelStore';
@@ -13,6 +13,7 @@ const HEALTH_POLL_INTERVAL_MS = 10_000;
 const DEFAULT_SOURCE_CODE_URL = 'https://github.com/ace-step/ACE-Step-DAW';
 const CURRENT_YEAR = new Date().getFullYear();
 const DEFAULT_COPYRIGHT_NOTICE = `ACE Studio © ${CURRENT_YEAR}`;
+const COLLAPSE_DELAY_MS = 400;
 
 let lastKnownBackendConnection = false;
 
@@ -28,6 +29,8 @@ interface StatusBarProps {
 
 export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
   const [connected, setConnected] = useState(lastKnownBackendConnection);
+  const [hovered, setHovered] = useState(false);
+  const collapseTimer = useRef<number | null>(null);
   const jobs = useGenerationStore((s) => s.jobs);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
@@ -35,6 +38,8 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
   const zoomOut = useUIStore((s) => s.zoomOut);
   const showKeyboardShortcutsDialog = useUIStore((s) => s.showKeyboardShortcutsDialog);
   const setShowKeyboardShortcutsDialog = useUIStore((s) => s.setShowKeyboardShortcutsDialog);
+  const autoHide = useUIStore((s) => s.statusBarAutoHide);
+  const setAutoHide = useUIStore((s) => s.setStatusBarAutoHide);
   const activeJobs = [...jobs]
     .filter((j) => j.status === 'generating' || j.status === 'queued' || j.status === 'processing')
     .sort((a, b) => (a.lastUpdatedAt ?? 0) - (b.lastUpdatedAt ?? 0));
@@ -53,7 +58,6 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
       const wasDisconnected = !lastKnownBackendConnection;
       lastKnownBackendConnection = ok;
       if (active) setConnected(ok);
-      // On first successful connection (or reconnect), sync model state from server
       if (ok && wasDisconnected) {
         void useModelStore.getState().refreshModels();
       }
@@ -73,10 +77,30 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (collapseTimer.current !== null) window.clearTimeout(collapseTimer.current);
+    };
+  }, []);
+
+  const handleMouseEnter = useCallback(() => {
+    if (collapseTimer.current !== null) {
+      window.clearTimeout(collapseTimer.current);
+      collapseTimer.current = null;
+    }
+    setHovered(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    collapseTimer.current = window.setTimeout(() => {
+      setHovered(false);
+      collapseTimer.current = null;
+    }, COLLAPSE_DELAY_MS);
+  }, []);
+
   const jobCount = activeJobs.length;
   const jobLabel = jobCount === 1 ? '1 job' : `${jobCount} jobs`;
   const hasActiveJobs = activeJobs.length > 0;
-  // Per-model loaded status
   const t2mName = categoryOverrides.text2music || activeModelId || null;
   const legoName = categoryOverrides.lego || null;
   const lmName = activeLmModelId || null;
@@ -93,27 +117,54 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
     return currentDistance < nearestDistance ? index : nearestIndex;
   }, 0);
 
-  return (
-    <>
-      <div className="border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted" data-testid="status-bar">
-        {hasActiveJobs && (
-          <div className="flex h-6 items-center gap-3 px-3" data-testid="status-bar-job-row">
-            <span className="text-daw-accent truncate tabular-nums">
-              Generating: {primaryJob?.trackName ?? 'unknown'}
-              {primaryJob?.stage ? ` \u2022 ${primaryJob.stage}` : ''}
-              {primaryJob?.progressPercent != null ? ` ${Math.round(primaryJob.progressPercent)}%` : ''}
-              {' '}({jobLabel})
-            </span>
-            <span className="flex-1" />
-          </div>
-        )}
+  const expanded = !autoHide || hovered || hasActiveJobs;
 
+  return (
+    <div
+      className="border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted overflow-hidden transition-all duration-200 ease-out"
+      data-testid="status-bar"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {/* Job progress row — always visible when generating */}
+      {hasActiveJobs && (
+        <div className="flex h-6 items-center gap-3 px-3 overflow-hidden" data-testid="status-bar-job-row">
+          <span className="text-daw-accent truncate tabular-nums">
+            Generating: {primaryJob?.trackName ?? 'unknown'}
+            {primaryJob?.stage ? ` • ${primaryJob.stage}` : ''}
+            {primaryJob?.progressPercent != null ? ` ${Math.round(primaryJob.progressPercent)}%` : ''}
+            {' '}({jobLabel})
+          </span>
+          <span className="flex-1" />
+        </div>
+      )}
+
+      {/* Collapsed indicator — shown when auto-hide is active and bar is collapsed */}
+      {autoHide && !expanded && (
         <div
-          className={`flex h-6 items-center gap-3 px-3 ${hasActiveJobs ? 'border-t border-white/4' : ''}`}
-          data-testid="status-bar-meta-row"
+          className="flex h-4 items-center gap-2 px-3"
+          data-testid="status-bar-collapsed"
         >
           <span
-            className="inline-flex items-center gap-1 text-daw-text-muted"
+            className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${connected ? 'bg-emerald-500' : 'bg-zinc-500'}`}
+            data-testid="connection-dot-collapsed"
+          />
+          {saveStatus && (
+            <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
+          )}
+          <span className="flex-1" />
+        </div>
+      )}
+
+      {/* Full meta row — shown when expanded */}
+      {expanded && (
+        <div
+          className={`flex h-6 items-center gap-3 px-3 overflow-hidden min-w-0 ${hasActiveJobs ? 'border-t border-white/4' : ''}`}
+          data-testid="status-bar-meta-row"
+        >
+          {/* Left: connection + models */}
+          <span
+            className="inline-flex items-center gap-1 shrink-0 text-daw-text-muted"
             data-testid="status-connection"
             title={connected ? 'Backend server connected' : 'Backend server disconnected'}
           >
@@ -123,29 +174,33 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
             />
             <span>{connected ? 'Online' : 'Offline'}</span>
           </span>
-          <span className="hidden lg:inline-flex items-center gap-3 min-w-0 truncate text-daw-text-muted" data-testid="status-model-name">
+          <span className="hidden lg:inline-flex items-center gap-3 min-w-0 overflow-hidden text-daw-text-muted" data-testid="status-model-name">
             {t2mName ? (
               <span className="inline-flex items-center gap-1 min-w-0">
                 <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isT2mLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                <span className="truncate">Mixture: {t2mName}</span>
+                <span className="truncate max-w-[140px]">Mixture: {t2mName}</span>
               </span>
             ) : null}
             {legoName ? (
               <span className="inline-flex items-center gap-1 min-w-0">
                 <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isLegoLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                <span className="truncate">Stems: {legoName}</span>
+                <span className="truncate max-w-[140px]">Stems: {legoName}</span>
               </span>
             ) : null}
             {lmName ? (
               <span className="inline-flex items-center gap-1 min-w-0">
                 <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isLmLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                <span className="truncate">LM: {lmName}</span>
+                <span className="truncate max-w-[140px]">LM: {lmName}</span>
               </span>
             ) : null}
             {!t2mName && !legoName && !lmName && <span>No model</span>}
           </span>
-          <span className="flex-1" />
-          <div className="hidden items-center gap-1.5 text-[9px] text-daw-text-muted/80 md:flex" data-testid="status-legal-notice">
+
+          {/* Center spacer */}
+          <span className="flex-1 min-w-0" />
+
+          {/* Right: legal, save, onboarding, shortcuts, zoom */}
+          <div className="hidden items-center gap-1.5 text-[9px] text-daw-text-muted/80 md:flex shrink-0" data-testid="status-legal-notice">
             <span className="whitespace-nowrap text-daw-text-muted/90" data-testid="status-copyright-notice">{copyrightNotice}</span>
             <span
               className="inline-flex items-center rounded-full border border-white/8 px-1.5 py-[1px] text-[8px] uppercase tracking-[0.16em] text-daw-text-muted/75"
@@ -181,7 +236,25 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
             <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
           )}
           <OnboardingProgress />
-          <div className="hidden md:flex items-center gap-1.5 text-daw-text-muted">
+          <div className="hidden md:flex items-center gap-1.5 text-daw-text-muted shrink-0">
+            {/* Auto-hide toggle */}
+            <button
+              type="button"
+              onClick={() => setAutoHide(!autoHide)}
+              className={`flex h-[18px] w-[18px] items-center justify-center rounded border transition-colors ${
+                autoHide
+                  ? 'border-white/12 bg-white/[0.06] text-zinc-100'
+                  : 'border-transparent bg-transparent text-daw-text-muted hover:border-white/8 hover:bg-daw-hover-subtle hover:text-zinc-200'
+              }`}
+              title={autoHide ? 'Status bar auto-hide: ON' : 'Status bar auto-hide: OFF'}
+              data-testid="status-autohide-toggle"
+              aria-label="Toggle status bar auto-hide"
+              aria-pressed={autoHide}
+            >
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M2 10h10M4.5 7h5M6 4h2" />
+              </svg>
+            </button>
             <button
               type="button"
               onClick={() => setShowKeyboardShortcutsDialog(true)}
@@ -238,7 +311,7 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
             </div>
           </div>
         </div>
-      </div>
-    </>
+      )}
+    </div>
   );
 }

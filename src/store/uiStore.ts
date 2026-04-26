@@ -83,6 +83,7 @@ export interface UIState {
   historyFocusClipId: string | null;
   showMixer: boolean;
   showClipInspector: boolean;
+  statusBarAutoHide: boolean;
   mixerHeight: number;
   showAssetsPanel: boolean;
   assetsPanelWidth: number;
@@ -320,6 +321,7 @@ export interface UIState {
   setHistoryFocusScope: (scope: HistoryScope, target?: HistoryTarget) => void;
   setShowMixer: (v: boolean) => void;
   setShowClipInspector: (v: boolean) => void;
+  setStatusBarAutoHide: (v: boolean) => void;
   toggleClipInspector: () => void;
   setMixerHeight: (v: number) => void;
   setShowAssetsPanel: (v: boolean) => void;
@@ -661,6 +663,7 @@ export const useUIStore = create<UIState>()(
   historyFocusClipId: null,
   showMixer: false,
   showClipInspector: false,
+  statusBarAutoHide: true,
   mixerHeight: 420,
   showAssetsPanel: false,
   assetsPanelWidth: 240,
@@ -1005,6 +1008,7 @@ export const useUIStore = create<UIState>()(
   }),
   setShowMixer: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showMixer: true } : { showMixer: false }),
   setShowClipInspector: (v) => set({ showClipInspector: v }),
+  setStatusBarAutoHide: (v) => set({ statusBarAutoHide: v }),
   toggleClipInspector: () => set((s) => ({ showClipInspector: !s.showClipInspector })),
   setMixerHeight: (v) => set({ mixerHeight: Math.min(500, Math.max(160, v)) }),
   setShowAssetsPanel: (v) => set({ showAssetsPanel: v }),
@@ -1425,6 +1429,7 @@ export const useUIStore = create<UIState>()(
         // Panel open/close states
         showMixer: state.showMixer,
         showClipInspector: state.showClipInspector,
+        statusBarAutoHide: state.statusBarAutoHide,
         showLibrary: state.showLibrary,
         loopBrowserOpen: state.loopBrowserOpen,
         showVirtualKeyboard: state.showVirtualKeyboard,

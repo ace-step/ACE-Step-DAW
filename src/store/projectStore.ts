@@ -1887,7 +1887,9 @@ function insertTrackPreservingOrder(existingTracks: Track[], track: Track): Trac
     : existingTracks;
 
   return [...shiftedTracks, { ...track, order: requestedOrder }]
-    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+    .map((candidate, originalIndex) => ({ candidate, originalIndex }))
+    .sort((a, b) => a.candidate.order - b.candidate.order || a.originalIndex - b.originalIndex)
+    .map(({ candidate }) => candidate);
 }
 
 function createTrackPresetSnapshot(track: Track, name: string): TrackPreset {
@@ -2961,7 +2963,7 @@ export const useProjectStore = create<ProjectState>()(
       Object.keys(overrides).length > 0 ? overrides : undefined,
     );
 
-    const newTracks = insertTrackPreservingOrder(state.project.tracks, track);
+    const newTracks = [...state.project.tracks, track];
     const nextProject = ensureProjectSession({
       ...state.project,
       updatedAt: Date.now(),

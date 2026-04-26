@@ -1,8 +1,7 @@
 import type { SequencerPattern } from '../types/project';
 import { getSample } from './sampleManager';
 import { audioBufferToWavBlob } from '../utils/wav';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
-import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { saveAudioBlob } from './audioFileManager';
 import { useProjectStore } from '../store/projectStore';
 import { getAudioEngine } from '../hooks/useAudioEngine';
@@ -97,7 +96,6 @@ export async function bounceSequencerToAudio(
   }
 
   const wavBlob = audioBufferToWavBlob(trimmed);
-  const peaks = computeWaveformPeaks(trimmed, CLIP_WAVEFORM_PEAK_COUNT);
 
   const store = useProjectStore.getState();
   const project = store.project;
@@ -111,6 +109,7 @@ export async function bounceSequencerToAudio(
   });
 
   const isolatedKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
+  const peaks = await computeWaveformWithMipmap(isolatedKey, trimmed);
 
   store.updateClipStatus(clip.id, 'ready', {
     isolatedAudioKey: isolatedKey,

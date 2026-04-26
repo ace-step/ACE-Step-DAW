@@ -14,7 +14,6 @@ import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { AssetClip } from '../../types/project';
 import { setDragPayload, clearDragPayload } from '../../utils/dragPayload';
 import { createDebugLogger } from '../../utils/debugLogger';
-import * as Tone from 'tone';
 
 const log = createDebugLogger('loop-browser');
 
@@ -50,26 +49,51 @@ const CATEGORY_ACTIVE_COLORS: Record<string, string> = {
 };
 
 // ─── Preview Player Singleton ───────────────────────────────────────────────
+//
+// Native Web Audio preview — no Tone.js dependency. We keep a single
+// `AudioBufferSourceNode` + lazily-created persistent `GainNode`
+// wired to the engine's AudioContext destination. The source node
+// is one-shot by WebAudio spec (cannot be restarted after stop()),
+// so each preview allocates a fresh one.
 
-let previewPlayer: Tone.Player | null = null;
-let previewGain: Tone.Gain | null = null;
+let previewSource: AudioBufferSourceNode | null = null;
+let previewGain: GainNode | null = null;
 
 function stopPreview() {
-  try { previewPlayer?.stop(); } catch { /* not started */ }
-  previewPlayer?.dispose();
-  previewPlayer = null;
+  if (previewSource) {
+    try { previewSource.stop(); } catch { /* not started */ }
+    try { previewSource.disconnect(); } catch { /* already disconnected */ }
+    previewSource = null;
+  }
 }
 
 async function playPreview(audioBuffer: AudioBuffer) {
-  await Tone.start();
+  const engine = getAudioEngine();
+  await engine.resume();
   stopPreview();
+
+  const ctx = engine.ctx;
   if (!previewGain) {
-    previewGain = new Tone.Gain(0.8).toDestination();
+    previewGain = ctx.createGain();
+    previewGain.gain.value = 0.8;
+    previewGain.connect(ctx.destination);
   }
-  const toneBuffer = new Tone.ToneAudioBuffer(audioBuffer);
-  previewPlayer = new Tone.Player(toneBuffer);
-  previewPlayer.connect(previewGain);
-  previewPlayer.start();
+  const source = ctx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(previewGain);
+  source.start();
+  previewSource = source;
+  // Release the reference automatically when playback finishes so a
+  // subsequent stopPreview() doesn't call stop() on a finished node.
+  // Also disconnect the source and clear its handler so the graph
+  // edge + closure are released immediately on end — matches the
+  // synchronous cleanup path in `stopPreview()` (Copilot review on
+  // PR #1725).
+  source.onended = () => {
+    try { source.disconnect(); } catch { /* already disconnected */ }
+    source.onended = null;
+    if (previewSource === source) previewSource = null;
+  };
 }
 
 // ─── Mini Waveform Component ────────────────────────────────────────────────

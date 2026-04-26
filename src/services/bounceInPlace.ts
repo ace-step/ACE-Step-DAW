@@ -8,8 +8,7 @@ import {
 import { createSamplerConfig } from '../engine/SamplerEngine';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import { audioBufferToWavBlob } from '../utils/wav';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
-import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { loadAudioBlobByKey, saveAudioBlob } from './audioFileManager';
 import {
   normalizedToMixerValue,
@@ -417,6 +416,6 @@ export async function bounceTrackToAudioAsset(
     audioKey,
     startTime: range.startTime,
     duration: range.duration,
-    waveformPeaks: computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT),
+    waveformPeaks: await computeWaveformWithMipmap(audioKey, buffer),
   };
 }

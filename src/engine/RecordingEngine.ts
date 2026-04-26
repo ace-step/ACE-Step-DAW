@@ -3,10 +3,55 @@
  * input level metering, and real-time waveform capture.
  */
 
-import * as Tone from 'tone';
 import { createDebugLogger } from '../utils/debugLogger';
+import { getAudioEngine } from '../hooks/useAudioEngine';
 
 const log = createDebugLogger('recording-engine');
+
+/**
+ * Fire a short percussive click using only native Web Audio —
+ * drop-in replacement for the `Tone.MembraneSynth.triggerAttackRelease`
+ * pattern used by the count-in and metronome below.
+ *
+ * Models a kick-like click: starts at `startFreq`, exponentially
+ * sweeps to `endFreq` over `decayMs`, with a linear attack and
+ * exponential amplitude decay.
+ *
+ * Cleanup: oscillator `stop()` ends playback; the `onended` handler
+ * disconnects both nodes so the graph edges + closures are
+ * released deterministically instead of waiting for browser GC
+ * (codex P3 on PR #1731, matching the pattern in
+ * `LoopBrowser.playPreview`).
+ */
+function playClick(
+  ctx: AudioContext,
+  destination: AudioNode,
+  startFreq: number,
+  endFreq: number,
+  decayMs: number,
+  volume: number,
+): void {
+  const now = ctx.currentTime;
+  const endTime = now + decayMs / 1000;
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(startFreq, now);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(endFreq, 1), endTime);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(volume, now + 0.001);
+  gain.gain.exponentialRampToValueAtTime(0.0001, endTime);
+
+  osc.connect(gain).connect(destination);
+  osc.start(now);
+  osc.stop(endTime + 0.02);
+  osc.onended = () => {
+    try { osc.disconnect(); } catch { /* already disconnected */ }
+    try { gain.disconnect(); } catch { /* already disconnected */ }
+    osc.onended = null;
+  };
+}
 
 export interface AudioInputDevice {
   deviceId: string;
@@ -404,39 +449,39 @@ class RecordingEngine {
     const totalBeats = bars * beatsPerBar;
     const beatDuration = 60 / bpm;
 
-    await Tone.start();
+    try {
+      const engine = getAudioEngine();
+      await engine.resume();
+      const ctx = engine.ctx;
+      // Hi click (downbeat) and lo click (other beats) — pitch
+      // sweeps match the old Tone.MembraneSynth character
+      // (pitchDecay 0.01, octaves 6/4 from C5/C4): ~3139 → 523 Hz
+      // over 10 ms for hi, ~1046 → 261 Hz for lo. Previous values
+      // (800→120, 400→90 over 60 ms) sounded too low and soft
+      // (codex P3 on PR #1731).
+      const clickHi = () => playClick(ctx, ctx.destination, 3139, 523, 10, 0.6);
+      const clickLo = () => playClick(ctx, ctx.destination, 1046, 261, 10, 0.5);
 
-    const clickHi = new Tone.MembraneSynth({
-      pitchDecay: 0.01,
-      octaves: 6,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
-    }).toDestination();
+      for (let i = 0; i < totalBeats; i++) {
+        const bar = Math.floor(i / beatsPerBar);
+        const beat = i % beatsPerBar;
+        onBeat(bar, beat, totalBeats - i);
 
-    const clickLo = new Tone.MembraneSynth({
-      pitchDecay: 0.01,
-      octaves: 4,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
-    }).toDestination();
+        if (beat === 0) {
+          clickHi();
+        } else {
+          clickLo();
+        }
 
-    for (let i = 0; i < totalBeats; i++) {
-      const bar = Math.floor(i / beatsPerBar);
-      const beat = i % beatsPerBar;
-      onBeat(bar, beat, totalBeats - i);
-
-      if (beat === 0) {
-        clickHi.triggerAttackRelease('C5', '32n');
-      } else {
-        clickLo.triggerAttackRelease('C4', '32n');
+        await new Promise<void>(resolve => setTimeout(resolve, beatDuration * 1000));
       }
-
-      await new Promise<void>(resolve => setTimeout(resolve, beatDuration * 1000));
+    } finally {
+      // Always reset isCountingIn, even if engine.resume() rejects
+      // or onBeat throws — otherwise the engine can get stuck
+      // reporting `countingIn === true` forever (Copilot review
+      // on PR #1731).
+      this.isCountingIn = false;
     }
-
-    this.isCountingIn = false;
-    clickHi.dispose();
-    clickLo.dispose();
   }
 
   get countingIn() { return this.isCountingIn; }
@@ -444,36 +489,41 @@ class RecordingEngine {
   // --- Metronome ---
 
   startMetronome(bpm: number, beatsPerBar: number): () => void {
-    const clickHi = new Tone.MembraneSynth({
-      pitchDecay: 0.008,
-      octaves: 6,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
-    }).toDestination();
-    clickHi.volume.value = -6;
-
-    const clickLo = new Tone.MembraneSynth({
-      pitchDecay: 0.008,
-      octaves: 4,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.01 },
-    }).toDestination();
-    clickLo.volume.value = -10;
+    // Recording-time metronome. Not sample-accurate: clicks fire
+    // when the JS timer wakes up (subject to UI stall, GC,
+    // background-tab throttling). The app's sample-accurate
+    // metronome lives in the Rust engine (Phase 3E); this helper
+    // has no current call sites in `src/` as of Phase 5E, but is
+    // retained for future recording-session UX that may need
+    // wallclock-driven click beneath the sample-accurate playback
+    // metronome (codex P2 note on PR #1731).
+    const engine = getAudioEngine();
+    // Fire-and-forget resume — if the user hasn't triggered a
+    // gesture yet the ctx may be suspended and clicks would be
+    // silent. `resume()` is a no-op when already running (Copilot
+    // review on PR #1731).
+    void engine.resume();
+    const ctx = engine.ctx;
+    // -6 dB ≈ 0.5 linear, -10 dB ≈ 0.316 linear (matches old
+    // Tone.MembraneSynth volume.value settings).
+    const hiVolume = 0.5;
+    const loVolume = 0.316;
+    const clickHi = () => playClick(ctx, ctx.destination, 3139, 523, 10, hiVolume);
+    const clickLo = () => playClick(ctx, ctx.destination, 1046, 261, 10, loVolume);
 
     let beat = 0;
-    const id = Tone.getTransport().scheduleRepeat((time) => {
+    const beatInterval = (60 / bpm) * 1000;
+    const intervalId = setInterval(() => {
       if (beat % beatsPerBar === 0) {
-        clickHi.triggerAttackRelease('C5', '32n', time);
+        clickHi();
       } else {
-        clickLo.triggerAttackRelease('C4', '32n', time);
+        clickLo();
       }
       beat++;
-    }, `${beatsPerBar}n`);
+    }, beatInterval);
 
     return () => {
-      Tone.getTransport().clear(id);
-      clickHi.dispose();
-      clickLo.dispose();
+      clearInterval(intervalId);
     };
   }
 

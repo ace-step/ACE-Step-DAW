@@ -163,7 +163,7 @@ export function VideoExportDialog() {
 
   // Feature-detect MP4 support on mount
   useEffect(() => {
-    canConvertToMp4().then(setMp4Supported);
+    canConvertToMp4().then(setMp4Supported).catch(() => { /* MP4 unavailable */ });
   }, []);
 
   useEffect(() => {

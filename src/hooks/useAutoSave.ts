@@ -47,8 +47,20 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
     try {
       await saveProjectToIDB(project);
       lastSavedUpdatedAtRef.current = project.updatedAt;
-      isDirtyRef.current = false;
-      setStatus('saved');
+      // Re-check if project changed during the async save
+      const latestProject = useProjectStore.getState().project;
+      if (latestProject && latestProject.updatedAt !== project.updatedAt) {
+        isDirtyRef.current = true;
+        setStatus('unsaved');
+      } else {
+        isDirtyRef.current = false;
+        setStatus('saved');
+        // Only clear debounce timer when no concurrent changes detected
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+      }
       setLastSavedAt(Date.now());
       if (isManualSaveRef.current) {
         toastSuccess('Project saved');
@@ -58,12 +70,6 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
       toastError('Save failed — will retry automatically');
     }
     isManualSaveRef.current = false;
-
-    // Clear any pending debounce timer since we just saved
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
   }, []);
 
   // Subscribe to project store changes and schedule debounced saves
@@ -91,8 +97,15 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
         setStatus('saving');
         void saveProjectToIDB(currentProject).then(() => {
           lastSavedUpdatedAtRef.current = currentProject.updatedAt;
-          isDirtyRef.current = false;
-          setStatus('saved');
+          // Re-check if project changed during the async save
+          const latestProject = useProjectStore.getState().project;
+          if (latestProject && latestProject.updatedAt !== currentProject.updatedAt) {
+            isDirtyRef.current = true;
+            setStatus('unsaved');
+          } else {
+            isDirtyRef.current = false;
+            setStatus('saved');
+          }
           setLastSavedAt(Date.now());
         }).catch(() => {
           setStatus('unsaved');

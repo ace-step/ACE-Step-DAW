@@ -100,7 +100,7 @@ function noteNameToFreq(note: string): number {
  * Convert a duration value (number in seconds or Tone.js notation like '8n')
  * to seconds. Pure function — callers must supply the current BPM.
  */
-export function parseDuration(dur: number | string, bpm = 120): number {
+export function parseDuration(dur: number | string, bpm: number): number {
   if (typeof dur === 'number') return dur;
   const match = dur.match(/^(\d+)n$/);
   if (match) {

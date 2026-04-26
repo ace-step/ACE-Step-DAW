@@ -30,6 +30,14 @@ export function BeatPad({ trackId }: BeatPadProps) {
       const pads = track.drumMachine?.pads;
       if (pads) drumEngine.syncTrackPadParams(trackId, pads);
       setEngineReady(true);
+    }).catch((error) => {
+      // Drum engine init failed; engineReady remains false and pad hits
+      // continue to rely on triggerPad's trigger-time fallback path.
+      console.error('Failed to initialize drum engine track', {
+        trackId,
+        drumKit: track.drumKit ?? '808',
+        error,
+      });
     });
     return () => { cancelled = true; };
   }, [trackId, track?.drumKit]); // eslint-disable-line react-hooks/exhaustive-deps

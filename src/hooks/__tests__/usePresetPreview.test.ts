@@ -1,41 +1,57 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
-// Mock Tone.js
-vi.mock('tone', () => {
-  class MockGain {
-    gain = { value: 0 };
-    connect = vi.fn().mockReturnThis();
-    toDestination = vi.fn().mockReturnThis();
-    dispose = vi.fn();
-  }
-  class MockPolySynth {
-    connect = vi.fn().mockReturnThis();
-    triggerAttackRelease = vi.fn();
-    releaseAll = vi.fn();
-    dispose = vi.fn();
-  }
-  class MockSynth {}
-  class MockFMSynth {
-    connect = vi.fn().mockReturnThis();
-    triggerAttackRelease = vi.fn();
-    releaseAll = vi.fn();
-    dispose = vi.fn();
-  }
+// Phase 5G: PreviewEngine pulls its AudioContext from `getAudioEngine().ctx`
+// instead of creating its own via Tone.js. The mock hands out the minimal
+// set of AudioContext factories NativeSynths touches.
+const { mockCtx } = vi.hoisted(() => {
+  const makeAudioParam = () => ({
+    value: 0,
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+    exponentialRampToValueAtTime: vi.fn(),
+    cancelScheduledValues: vi.fn(),
+  });
+  const makeGain = () => ({
+    gain: makeAudioParam(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  });
+  const makeOsc = () => ({
+    type: 'sine' as OscillatorType,
+    frequency: makeAudioParam(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+    onended: null as (() => void) | null,
+  });
+  const makeFilter = () => ({
+    type: 'lowpass' as BiquadFilterType,
+    frequency: makeAudioParam(),
+    Q: makeAudioParam(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  });
   return {
-    getContext: vi.fn().mockReturnValue({ state: 'running' }),
-    getTransport: vi.fn().mockReturnValue({ clear: vi.fn() }),
-    start: vi.fn().mockResolvedValue(undefined),
-    Gain: MockGain,
-    Synth: MockSynth,
-    PolySynth: MockPolySynth,
-    FMSynth: MockFMSynth,
-    Frequency: vi.fn().mockImplementation((val: number) => ({
-      toFrequency: () => 440 * Math.pow(2, (val - 69) / 12),
-    })),
-    now: vi.fn().mockReturnValue(0),
+    mockCtx: {
+      state: 'running' as AudioContextState,
+      currentTime: 0,
+      sampleRate: 48000,
+      destination: {} as AudioNode,
+      createGain: vi.fn(makeGain),
+      createOscillator: vi.fn(makeOsc),
+      createBiquadFilter: vi.fn(makeFilter),
+    },
   };
 });
+
+vi.mock('../../hooks/useAudioEngine', () => ({
+  getAudioEngine: vi.fn(() => ({
+    ctx: mockCtx,
+    resume: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
 // Mock project store
 vi.mock('../../store/projectStore', () => ({

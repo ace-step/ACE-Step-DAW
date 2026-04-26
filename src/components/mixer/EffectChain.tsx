@@ -451,6 +451,8 @@ function EffectDevice({
         {/* Preset selector */}
         <div className="relative" data-no-drag>
           <button
+            aria-haspopup="menu"
+            aria-expanded={showPresets}
             className="flex items-center gap-0.5 text-[9px] text-white/40 hover:text-white/60 transition-colors px-1 py-0.5 rounded hover:bg-white/[0.06]"
             onClick={(e) => { e.stopPropagation(); setShowPresets(!showPresets); }}
           >
@@ -459,12 +461,27 @@ function EffectDevice({
           </button>
           {showPresets && (
             <div
+              role="menu"
+              aria-label={`${EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type} presets`}
+              tabIndex={-1}
+              ref={(node) => { if (node) requestAnimationFrame(() => node.focus()); }}
               className="absolute right-0 top-full mt-1 bg-daw-surface-2 border border-white/10 rounded shadow-xl z-50 py-1 min-w-[100px]"
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+                if (!items.length) { if (e.key === 'Escape') setShowPresets(false); return; }
+                const idx = items.findIndex((item) => item === document.activeElement);
+                if (e.key === 'ArrowDown') { e.preventDefault(); items[idx < 0 ? 0 : (idx + 1) % items.length].focus(); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); items[idx < 0 ? items.length - 1 : (idx - 1 + items.length) % items.length].focus(); }
+                else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+                else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+                else if (e.key === 'Escape' || e.key === 'Tab') { setShowPresets(false); }
+              }}
             >
               {presets.map((preset, i) => (
                 <button
                   key={i}
+                  role="menuitem"
                   className="w-full text-left px-3 py-1 text-[10px] text-white/60 hover:bg-white/10 hover:text-white/80"
                   onClick={() => { applyPreset(i); setShowPresets(false); }}
                 >
@@ -479,6 +496,8 @@ function EffectDevice({
         {!fullWidth && (
           <button
             data-no-drag
+            aria-label={collapsed ? `Expand ${EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}` : `Collapse ${EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}`}
+            aria-expanded={!collapsed}
             className="h-4 w-4 flex items-center justify-center text-white/25 hover:text-white/50 transition-colors"
             onClick={(e) => { e.stopPropagation(); setCollapsed(!collapsed); }}
           >
@@ -493,11 +512,26 @@ function EffectDevice({
       {/* Right-click context menu (compact view) */}
       {ctxMenu && (
         <div
+          role="menu"
+          aria-label={`${EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type} actions`}
+          tabIndex={-1}
+          ref={(node) => { if (node) requestAnimationFrame(() => node.focus()); }}
           className="fixed bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl py-1 min-w-[130px]"
           style={{ left: Math.min(ctxMenu.x, window.innerWidth - 160), top: Math.min(ctxMenu.y, window.innerHeight - 200), zIndex: 9999 }}
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+            if (!items.length) { if (e.key === 'Escape') setCtxMenu(null); return; }
+            const idx = items.findIndex((item) => item === document.activeElement);
+            if (e.key === 'ArrowDown') { e.preventDefault(); items[idx < 0 ? 0 : (idx + 1) % items.length].focus(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); items[idx < 0 ? items.length - 1 : (idx - 1 + items.length) % items.length].focus(); }
+            else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+            else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+            else if (e.key === 'Escape') { e.preventDefault(); setCtxMenu(null); }
+          }}
         >
           <button
+            role="menuitem"
             className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
             onClick={() => { addTrackEffect(track.id, effect.type); setCtxMenu(null); }}
           >
@@ -505,6 +539,7 @@ function EffectDevice({
           </button>
           {index > 0 && (
             <button
+              role="menuitem"
               className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
               onClick={() => { reorderTrackEffect(track.id, index, index - 1); setCtxMenu(null); }}
             >
@@ -513,14 +548,16 @@ function EffectDevice({
           )}
           {index < effects.length - 1 && (
             <button
+              role="menuitem"
               className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
               onClick={() => { reorderTrackEffect(track.id, index, index + 1); setCtxMenu(null); }}
             >
               Move Right
             </button>
           )}
-          <div className="border-t border-white/5 my-1" />
+          <div className="border-t border-white/5 my-1" role="separator" />
           <button
+            role="menuitem"
             className="w-full text-left px-3 py-1.5 text-[10px] text-red-400/70 hover:bg-white/10"
             onClick={() => { removeTrackEffect(track.id, effect.id); setCtxMenu(null); }}
           >

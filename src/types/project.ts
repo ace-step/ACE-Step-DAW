@@ -990,8 +990,11 @@ export interface ClipGenerationParams {
   useProjectMeta?: boolean;
   inferenceSteps?: number;
   guidanceScale?: number;
+  temperature?: number;
   shift?: number;
   negativePrompt?: string;
+  /** Style tags persisted for edit/regenerate — prepended to prompt at generation time */
+  styleTags?: string[];
   // lego params
   globalCaption?: string;
   sampleMode?: boolean;
@@ -1056,6 +1059,18 @@ export interface Clip {
   fadeInCurve?: 'linear' | 'exponential' | 'equal-power';
   /** Fade out curve shape. */
   fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
+  /**
+   * Optional bezier control point for the fade-in curve, in normalized
+   * coordinates. The bezier passes through (0, 0) silence at fade start
+   * and (1, 1) unity at fade end; the curve's geometric midpoint is dragged
+   * to {x, y} (so x runs along the fade duration, y is gain at that point).
+   * When set, this overrides `fadeInCurve` for both audio playback and the
+   * waveform amplitude rendering. Old projects without this field continue
+   * to use the preset.
+   */
+  fadeInCurvePoint?: { x: number; y: number };
+  /** Same as fadeInCurvePoint, for the fade-out region. */
+  fadeOutCurvePoint?: { x: number; y: number };
   /** Time-stretch playback rate (1 = original speed, 0.5 = half, 2 = double). */
   timeStretchRate?: number;
   /** Pitch shift in semitones (0 = original pitch). */

@@ -38,11 +38,7 @@ vi.mock('../../hooks/useAudioEngine', () => ({
 }));
 
 vi.mock('../../utils/waveformPeaks', () => ({
-  computeWaveformPeaks: vi.fn(() => [0.1, 0.3, 0.5]),
-}));
-
-vi.mock('../../utils/clipAudio', () => ({
-  CLIP_WAVEFORM_PEAK_COUNT: 240,
+  computeWaveformWithMipmap: vi.fn(async () => [0.1, 0.3, 0.5]),
 }));
 
 vi.mock('../../hooks/useToast', () => ({

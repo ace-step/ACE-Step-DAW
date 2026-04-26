@@ -10,6 +10,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'transport.end',         category: 'transport', label: 'Jump to End',                 defaultCombo: { code: 'End' }, contexts: ['global'] },
   { id: 'transport.nudgeLeft',   category: 'transport', label: 'Nudge Playhead Left',         defaultCombo: { code: 'ArrowLeft' }, contexts: ['timeline'] },
   { id: 'transport.nudgeRight',  category: 'transport', label: 'Nudge Playhead Right',        defaultCombo: { code: 'ArrowRight' }, contexts: ['timeline'] },
+  { id: 'transport.punchToggle', category: 'transport', label: 'Toggle Punch In/Out',         defaultCombo: { code: 'KeyP', shift: true }, contexts: ['global'] },
   { id: 'transport.punchIn',     category: 'transport', label: 'Set Punch-In Point',          defaultCombo: { code: 'KeyI' }, contexts: ['global'] },
   { id: 'transport.punchOut',    category: 'transport', label: 'Set Punch-Out Point',         defaultCombo: { code: 'KeyO', shift: true }, contexts: ['global'] },
   { id: 'transport.captureMidi', category: 'transport', label: 'Capture MIDI',                defaultCombo: { code: 'KeyF' }, contexts: ['global'] },

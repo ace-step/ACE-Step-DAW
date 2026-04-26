@@ -59,7 +59,12 @@ export function InstrumentPicker() {
   };
 
   const handlePresetSelect = (presetId: string) => {
-    const track = applyTrackPreset(presetId);
+    const insertOptions = selectedEmptySlotIndex !== null
+      ? { order: selectedEmptySlotIndex + 1 }
+      : undefined;
+    const track = insertOptions
+      ? applyTrackPreset(presetId, insertOptions)
+      : applyTrackPreset(presetId);
     if (!track) {
       toastError('Track presets cannot be applied in viewer mode.');
       return;

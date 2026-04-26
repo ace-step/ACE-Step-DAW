@@ -723,7 +723,7 @@ export interface ProjectState extends MidiSliceActions {
   /** Recreate a new track from a persisted asset snapshot. */
   restoreAssetToNewTrack: (assetId: string, startTime: number, options?: { order?: number }) => Track | undefined;
   saveTrackPreset: (trackId: string, presetName: string) => TrackPreset | undefined;
-  applyTrackPreset: (presetId: string) => Track | undefined;
+  applyTrackPreset: (presetId: string, options?: { order?: number }) => Track | undefined;
   deleteTrackPreset: (presetId: string) => void;
   renameTrack: (trackId: string, newName: string) => void;
   setInputMonitoring: (trackId: string, mode: InputMonitoringMode) => void;
@@ -3171,7 +3171,7 @@ export const useProjectStore = create<ProjectState>()(
     return preset;
   },
 
-  applyTrackPreset: (presetId) => {
+  applyTrackPreset: (presetId, options) => {
     const state = get();
     if (_isViewerMode()) return undefined;
     if (!state.project) return undefined;
@@ -3187,6 +3187,7 @@ export const useProjectStore = create<ProjectState>()(
         ...preset.settings,
         effects: preset.effects,
         midiEffects: preset.midiEffects,
+        order: options?.order,
       },
     );
 

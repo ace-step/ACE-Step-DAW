@@ -7,6 +7,7 @@
 import { useState, useCallback } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import type { TrackPreset } from '../../types/project';
+import { toastError } from '../../hooks/useToast';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -135,6 +136,24 @@ export function TrackPresetManager() {
   const presets = useProjectStore((s) => s.project?.trackPresets ?? []);
   const applyTrackPreset = useProjectStore((s) => s.applyTrackPreset);
   const deleteTrackPreset = useProjectStore((s) => s.deleteTrackPreset);
+  const isViewerMode = useProjectStore((s) => s.isViewerMode());
+
+  const handleApplyPreset = useCallback((presetId: string) => {
+    const track = applyTrackPreset(presetId);
+    if (!track) {
+      toastError(isViewerMode
+        ? 'Track presets cannot be applied in viewer mode.'
+        : 'Track preset could not be applied.');
+    }
+  }, [applyTrackPreset, isViewerMode]);
+
+  const handleDeletePreset = useCallback((presetId: string) => {
+    if (isViewerMode) {
+      toastError('Track presets cannot be deleted in viewer mode.');
+      return;
+    }
+    deleteTrackPreset(presetId);
+  }, [deleteTrackPreset, isViewerMode]);
 
   return (
     <div className="flex flex-col h-full">
@@ -165,8 +184,8 @@ export function TrackPresetManager() {
             <PresetRow
               key={preset.id}
               preset={preset}
-              onApply={() => applyTrackPreset(preset.id)}
-              onDelete={() => deleteTrackPreset(preset.id)}
+              onApply={() => handleApplyPreset(preset.id)}
+              onDelete={() => handleDeletePreset(preset.id)}
             />
           ))
         )}

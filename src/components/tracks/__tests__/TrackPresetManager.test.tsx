@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { TrackPresetManager } from '../TrackPresetManager';
 import { useProjectStore } from '../../../store/projectStore';
+import { useToastStore } from '../../../hooks/useToast';
 import type { Project, TrackPreset } from '../../../types/project';
 
 function makePreset(overrides: Partial<TrackPreset> = {}): TrackPreset {
@@ -43,7 +44,8 @@ function setupProject(presets: TrackPreset[] = []) {
 
 describe('TrackPresetManager', () => {
   beforeEach(() => {
-    useProjectStore.setState({ project: null });
+    useProjectStore.setState({ project: null, isViewerMode: () => false });
+    useToastStore.getState().clearToasts();
   });
 
   it('renders empty state when no presets exist', () => {
@@ -86,6 +88,32 @@ describe('TrackPresetManager', () => {
     render(<TrackPresetManager />);
     fireEvent.click(screen.getByRole('button', { name: /apply preset/i }));
     expect(applyTrackPreset).toHaveBeenCalledWith('p1');
+  });
+
+  it('shows feedback when applying a preset is blocked in viewer mode', () => {
+    setupProject([makePreset({ id: 'p1' })]);
+    useProjectStore.setState({
+      applyTrackPreset: vi.fn(() => undefined),
+      isViewerMode: () => true,
+    });
+
+    render(<TrackPresetManager />);
+    fireEvent.click(screen.getByRole('button', { name: /apply preset/i }));
+    expect(useToastStore.getState().toasts[0].message).toMatch(/viewer mode/i);
+  });
+
+  it('shows feedback instead of deleting presets in viewer mode', () => {
+    setupProject([makePreset({ id: 'p1' })]);
+    const deleteTrackPreset = vi.fn();
+    useProjectStore.setState({
+      deleteTrackPreset,
+      isViewerMode: () => true,
+    });
+
+    render(<TrackPresetManager />);
+    fireEvent.click(screen.getByRole('button', { name: /delete preset/i }));
+    expect(deleteTrackPreset).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts[0].message).toMatch(/viewer mode/i);
   });
 
   it('shows save preset form with track selector when multiple tracks exist', () => {

@@ -1500,8 +1500,6 @@ export const useUIStore = create<UIState>()(
         videoRecordingSettings: state.videoRecordingSettings,
         // Groove pool
         grooveStrength: state.grooveStrength,
-        // Track preset manager
-        showTrackPresetManager: state.showTrackPresetManager,
       }),
     },
   ),

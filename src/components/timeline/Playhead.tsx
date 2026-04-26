@@ -38,7 +38,7 @@ export function Playhead() {
           style={{
             transform: `translateX(${transportX}px)`,
             willChange: 'transform',
-            minHeight: '100vh',
+            height: '100%',
             backgroundColor: '#ffffff',
             boxShadow: '0 0 3px rgba(0, 0, 0, 0.35), 0 0 8px rgba(0, 0, 0, 0.15)',
           }}

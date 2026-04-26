@@ -5,6 +5,7 @@ import { EDGE_HANDLE_PX, HEADER_RAIL_HEIGHT_PX } from './useClipDrag';
 export function useClipHover(clipBlockRef: React.RefObject<HTMLDivElement | null>) {
   const [hoveredResizeEdge, setHoveredResizeEdge] = useState<'left' | 'right' | null>(null);
   const [hoverSeekX, setHoverSeekX] = useState<number | null>(null);
+  const [isPointerInside, setIsPointerInside] = useState(false);
 
   const setResizeCursor = useCallback((cursor: 'w-resize' | 'e-resize' | null) => {
     const nextCursor = cursor === 'w-resize' ? CURSOR_BRACKET_LEFT
@@ -47,15 +48,18 @@ export function useClipHover(clipBlockRef: React.RefObject<HTMLDivElement | null
   }, [setResizeCursor]);
 
   const handleMouseEnter = useCallback((e: React.MouseEvent) => {
+    setIsPointerInside(true);
     syncHoverState(e.clientX, e.clientY, e.altKey, e.currentTarget as HTMLElement);
   }, [syncHoverState]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isPointerInside) setIsPointerInside(true);
     syncHoverState(e.clientX, e.clientY, e.altKey, e.currentTarget as HTMLElement);
-  }, [syncHoverState]);
+  }, [syncHoverState, isPointerInside]);
 
   const handleMouseLeave = useCallback((e: React.MouseEvent) => {
     const el = e.currentTarget as HTMLElement;
+    setIsPointerInside(false);
     setHoveredResizeEdge(null);
     setHoverSeekX(null);
     el.style.cursor = '';
@@ -75,6 +79,7 @@ export function useClipHover(clipBlockRef: React.RefObject<HTMLDivElement | null
   return {
     hoveredResizeEdge,
     hoverSeekX,
+    isPointerInside,
     handleMouseEnter,
     handleMouseMove,
     handleMouseLeave,

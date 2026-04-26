@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { configureNativeDsp, revertToToneDsp, isNativeDsp } from '../configureNativeDsp';
-import { getDSPFactory, setDSPFactory, ToneDSPFactory } from '../ToneAdapter';
+/**
+ * configureNativeDsp — unit tests
+ *
+ * Phase 5Q: Tone.js is uninstalled; `ToneDSPFactory` and
+ * `revertToToneDsp` are gone (the latter is a preserved no-op for
+ * external callers). Tests now only cover the install path.
+ */
+import { describe, it, expect, vi } from 'vitest';
+import { configureNativeDsp, isNativeDsp } from '../configureNativeDsp';
+import { getDSPFactory } from '../ToneAdapter';
 import { NativeDSPFactory } from '../NativeAdapter';
 
-// Mock AudioContext
 function createMockCtx(): AudioContext {
   const mockParam = () => ({
     value: 0, defaultValue: 0, minValue: -3.4e38, maxValue: 3.4e38,
@@ -55,58 +61,35 @@ function createMockCtx(): AudioContext {
 }
 
 describe('configureNativeDsp', () => {
-  beforeEach(() => {
-    // Reset to a mock Tone factory
-    revertToToneDsp();
-  });
-
-  it('switches the global factory to NativeDSPFactory', () => {
+  it('installs NativeDSPFactory as the global factory', () => {
     const ctx = createMockCtx();
     configureNativeDsp(ctx);
     expect(getDSPFactory()).toBeInstanceOf(NativeDSPFactory);
     expect(isNativeDsp()).toBe(true);
   });
 
-  it('returns the new NativeDSPFactory instance', () => {
+  it('returns the installed NativeDSPFactory instance', () => {
     const ctx = createMockCtx();
     const factory = configureNativeDsp(ctx);
     expect(factory).toBeInstanceOf(NativeDSPFactory);
     expect(factory.sampleRate).toBe(44100);
   });
 
-  it('creates working effect nodes through the global factory', () => {
+  it('exposes working effect nodes via the global factory', () => {
     const ctx = createMockCtx();
     configureNativeDsp(ctx);
-
     const factory = getDSPFactory();
     const gain = factory.createGain({ gain: 0.5 });
     expect(gain).toBeDefined();
     expect(gain.gain).toBeDefined();
   });
 
-  it('creates working synth nodes through the global factory', () => {
+  it('exposes working synth nodes via the global factory', () => {
     const ctx = createMockCtx();
     configureNativeDsp(ctx);
-
     const factory = getDSPFactory();
     const synth = factory.createPolySynth();
     expect(synth).toBeDefined();
     expect(() => synth.triggerAttackRelease('C4', 0.5)).not.toThrow();
-  });
-
-  it('revertToToneDsp restores previous factory', () => {
-    const ctx = createMockCtx();
-
-    const originalFactory = getDSPFactory();
-    configureNativeDsp(ctx);
-    expect(isNativeDsp()).toBe(true);
-
-    revertToToneDsp();
-    expect(getDSPFactory()).toBe(originalFactory);
-    expect(isNativeDsp()).toBe(false);
-  });
-
-  it('isNativeDsp returns false initially', () => {
-    expect(isNativeDsp()).toBe(false);
   });
 });

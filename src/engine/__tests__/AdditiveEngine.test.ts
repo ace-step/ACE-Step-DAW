@@ -1,44 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPresetPartials, createDefaultAdditiveSettings } from '../AdditiveEngine';
 
-// Mock Tone.js — additive engine uses raw AudioContext for partials
-const mockGainNode = {
-  gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
-  connect: vi.fn(),
-  disconnect: vi.fn(),
-};
-
-const mockOscNode = {
-  type: 'sine' as OscillatorType,
-  frequency: { value: 440 },
-  connect: vi.fn(),
-  start: vi.fn(),
-  stop: vi.fn(),
-};
-
-vi.mock('tone', () => ({
-  Gain: function MockGain() {
-    return {
-      connect: vi.fn(),
-      toDestination: vi.fn(),
-      dispose: vi.fn(),
-      gain: { value: 1 },
-      input: {},
-    };
-  },
-  Frequency: vi.fn((pitch: number, _type: string) => ({
-    toFrequency: () => 440 * Math.pow(2, (pitch - 69) / 12),
-  })),
-  getContext: vi.fn(() => ({
-    state: 'running',
-    rawContext: {
+// Phase 5F migration: AdditiveEngine no longer imports Tone
+// directly — it pulls the AudioContext from `getAudioEngine().ctx`.
+// Use `vi.hoisted` so the mock factories don't close over
+// module-level consts that may be undefined at hoist time
+// (Copilot review on PR #1733, matching the GranularEngine test
+// pattern).
+const { mockCtx } = vi.hoisted(() => {
+  const makeMockGain = () => ({
+    gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  });
+  const makeMockOsc = () => ({
+    type: 'sine' as OscillatorType,
+    frequency: { value: 440 },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  });
+  return {
+    mockCtx: {
+      state: 'running' as AudioContextState,
       currentTime: 0,
       destination: {},
-      createGain: () => ({ ...mockGainNode }),
-      createOscillator: () => ({ ...mockOscNode }),
+      createGain: vi.fn(makeMockGain),
+      createOscillator: vi.fn(makeMockOsc),
     },
+  };
+});
+
+vi.mock('../../hooks/useAudioEngine', () => ({
+  getAudioEngine: vi.fn(() => ({
+    ctx: mockCtx,
+    resume: vi.fn().mockResolvedValue(undefined),
   })),
-  start: vi.fn(),
 }));
 
 async function createFreshEngine() {

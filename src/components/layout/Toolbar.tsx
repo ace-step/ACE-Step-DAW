@@ -732,6 +732,8 @@ export function Toolbar() {
   const toggleLoop = useTransportStore((s) => s.toggleLoop);
   const metronomeEnabled = useTransportStore((s) => s.metronomeEnabled);
   const toggleMetronome = useTransportStore((s) => s.toggleMetronome);
+  const punchEnabled = useTransportStore((s) => s.punchEnabled);
+  const togglePunch = useTransportStore((s) => s.togglePunch);
   useEffect(() => {
     (window as unknown as Record<string, unknown>).__commandPaletteRuntime = {
       play,
@@ -865,6 +867,20 @@ export function Toolbar() {
         </Tooltip>
         <ControlBarButton onClick={() => void toggleRecord()} title="Record (R)" shortcutHint="R" active={isRecording}>
           <div className={`h-[20px] w-[20px] rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-70'}`} />
+        </ControlBarButton>
+        <ControlBarButton
+          active={punchEnabled}
+          onClick={togglePunch}
+          title="Punch In/Out (Shift+P)"
+          shortcutHint="Shift+P"
+          disableHoverHighlight
+        >
+          <svg width="20" height="20" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="3" width="12" height="8" rx="1.5" />
+            <line x1="5" y1="3" x2="5" y2="11" strokeDasharray="1.5 1" />
+            <line x1="9" y1="3" x2="9" y2="11" strokeDasharray="1.5 1" />
+            <rect x="5" y="5" width="4" height="4" rx="0.5" fill={punchEnabled ? 'currentColor' : 'none'} opacity="0.6" />
+          </svg>
         </ControlBarButton>
         <Tooltip content="Metronome" shortcut="K" side="bottom">
         <button

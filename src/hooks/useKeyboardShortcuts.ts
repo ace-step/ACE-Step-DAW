@@ -5,7 +5,6 @@ import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
 import { useGenerationStore } from '../store/generationStore';
 import { useShortcutsStore } from '../store/shortcutsStore';
-import { generateSingleClip } from '../services/generationPipeline';
 import { useRecording } from './useRecording';
 import { getMidiCaptureService } from '../services/midiCaptureService';
 import {
@@ -306,8 +305,10 @@ export function useKeyboardShortcuts() {
           const trackIds = [...new Set(selectedClips.map((clip) => clip.trackId))];
           if (trackIds.length === 1) {
             void (async () => {
-              const consolidatedClip = await project.consolidateClips(trackIds[0], selectedIds);
-              if (consolidatedClip) ui.selectClip(consolidatedClip.id, false);
+              try {
+                const consolidatedClip = await project.consolidateClips(trackIds[0], selectedIds);
+                if (consolidatedClip) ui.selectClip(consolidatedClip.id, false);
+              } catch { /* consolidation errors handled by the store */ }
             })();
           }
         }
@@ -318,7 +319,7 @@ export function useKeyboardShortcuts() {
         event.preventDefault();
         if (!anyModalOpen && !generation.isGenerating) {
           const [clipId] = ui.selectedClipIds;
-          if (clipId) generateSingleClip(clipId);
+          if (clipId) void import('../services/generationPipeline').then(m => m.generateSingleClip(clipId)).catch(err => console.error('Failed to generate clip', err));
         }
         return;
       }
@@ -561,6 +562,7 @@ export function useKeyboardShortcuts() {
         if (project.project) seek(project.project.totalDuration);
         return;
       }
+      if (matches('transport.punchToggle')) { event.preventDefault(); transport.togglePunch(); return; }
       if (matches('transport.punchIn')) { event.preventDefault(); transport.setPunchIn(transport.currentTime); return; }
       if (matches('transport.punchOut')) { event.preventDefault(); transport.setPunchOut(transport.currentTime); return; }
       if (matches('transport.captureMidi')) {
@@ -577,7 +579,11 @@ export function useKeyboardShortcuts() {
         event.preventDefault();
         const vr = ui.videoRecording;
         if (vr.status === 'recording') ui.stopVideoRecording();
-        else if (vr.status === 'idle' || vr.status === 'done' || vr.status === 'error') void ui.startVideoRecording();
+        else if (vr.status === 'idle' || vr.status === 'done' || vr.status === 'error') {
+          void ui.startVideoRecording().catch((error) => {
+            console.error('Failed to start video recording via keyboard shortcut.', error);
+          });
+        }
         return;
       }
 

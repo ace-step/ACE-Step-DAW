@@ -1,0 +1,17 @@
+{
+  "name": "ace-waveform-wasm",
+  "type": "module",
+  "description": "WASM bindings for ace-waveform mipmap — callable from Web Workers",
+  "version": "0.1.0",
+  "license": "MIT OR Apache-2.0",
+  "files": [
+    "ace_waveform_wasm_bg.wasm",
+    "ace_waveform_wasm.js",
+    "ace_waveform_wasm.d.ts"
+  ],
+  "main": "ace_waveform_wasm.js",
+  "types": "ace_waveform_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

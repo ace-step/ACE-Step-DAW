@@ -63,9 +63,9 @@ describe('TrackPresetManager', () => {
   });
 
   it('shows track type for each preset', () => {
-    setupProject([makePreset({ trackType: 'midi' })]);
+    setupProject([makePreset({ trackType: 'pianoRoll' })]);
     render(<TrackPresetManager />);
-    expect(screen.getByText(/midi/i)).toBeTruthy();
+    expect(screen.getByText(/pianoRoll/i)).toBeTruthy();
   });
 
   it('calls deleteTrackPreset when delete is clicked', () => {

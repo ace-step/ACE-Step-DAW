@@ -3,7 +3,7 @@ import type { Clip, Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
-import { regenerateClip } from '../../services/generationPipeline';
+import { toastError } from '../../hooks/useToast';
 import { ClipContextMenu } from './ClipContextMenu';
 import { GRID_BEATS_MAP } from '../pianoroll/PianoRollConstants';
 
@@ -78,7 +78,7 @@ export function ClipContextMenuContainer({
   } : undefined;
 
   const clipAIContext = (!isMidiClip && isReady) ? {
-    onRegenerate: () => { onClose(); regenerateClip(clip.id); },
+    onRegenerate: () => { onClose(); void import('../../services/generationPipeline').then(m => m.regenerateClip(clip.id)).catch(err => console.error('Failed to regenerate clip', err)); },
     hasPrompt: !!clip.prompt,
     isReady,
     ...(hasAudio ? { onSeparateStems: () => { onClose(); setStemSeparationModal(clip.id); } } : {}),
@@ -98,10 +98,15 @@ export function ClipContextMenuContainer({
   } : undefined;
 
   const handleConsolidate = async () => {
-    const consolidatedClip = await consolidateClips(track.id, selectedActionClipIds);
-    onClose();
-    if (consolidatedClip) {
-      selectClip(consolidatedClip.id, false);
+    try {
+      const consolidatedClip = await consolidateClips(track.id, selectedActionClipIds);
+      onClose();
+      if (consolidatedClip) {
+        selectClip(consolidatedClip.id, false);
+      }
+    } catch {
+      onClose();
+      toastError('Failed to consolidate clips');
     }
   };
 

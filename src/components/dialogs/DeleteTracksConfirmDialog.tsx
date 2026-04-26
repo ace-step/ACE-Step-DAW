@@ -36,6 +36,7 @@ export function DeleteTracksConfirmDialog() {
             type="button"
             onClick={cancel}
             className="text-lg leading-none text-zinc-400 transition-colors hover:text-zinc-200"
+            aria-label="Close delete confirmation"
           >
             &times;
           </button>

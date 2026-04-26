@@ -139,7 +139,7 @@ describe('ClipBlock resize modifiers', () => {
     expect(getClip().contentOffset).toBeCloseTo(0.5, 2);
   });
 
-  it('uses Shift-resize to repitch-stretch the right edge', () => {
+  it('uses Shift-resize to time-stretch the right edge', () => {
     const { container } = renderClip();
     const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
     clipBlock.getBoundingClientRect = () => ({
@@ -154,17 +154,17 @@ describe('ClipBlock resize modifiers', () => {
       toJSON: () => ({}),
     });
 
-    fireEvent.mouseDown(clipBlock, { button: 0, clientX: 398 });
+    fireEvent.mouseDown(clipBlock, { button: 0, clientX: 398, shiftKey: true });
     fireEvent.mouseMove(window, { clientX: 598, shiftKey: true });
     fireEvent.mouseUp(window, { shiftKey: true });
 
     expect(getClip().duration).toBeCloseTo(6, 2);
     expect(getClip().contentOffset).toBeUndefined();
-    expect(getClip().stretchMode).toBe('repitch');
+    expect(getClip().stretchMode).toBe('complexPro');
     expect(getClip().timeStretchRate).toBeCloseTo(4 / 6, 2);
   });
 
-  it('uses Shift-resize to repitch-stretch the left edge', () => {
+  it('uses Shift-resize to time-stretch the left edge', () => {
     const { container } = renderClip();
     const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
     clipBlock.getBoundingClientRect = () => ({
@@ -179,14 +179,14 @@ describe('ClipBlock resize modifiers', () => {
       toJSON: () => ({}),
     });
 
-    fireEvent.mouseDown(clipBlock, { button: 0, clientX: 2 });
+    fireEvent.mouseDown(clipBlock, { button: 0, clientX: 2, shiftKey: true });
     fireEvent.mouseMove(window, { clientX: -98, shiftKey: true });
     fireEvent.mouseUp(window, { shiftKey: true });
 
     expect(getClip().startTime).toBe(0);
     expect(getClip().duration).toBeCloseTo(5, 2);
     expect(getClip().contentOffset).toBeUndefined();
-    expect(getClip().stretchMode).toBe('repitch');
+    expect(getClip().stretchMode).toBe('complexPro');
     expect(getClip().timeStretchRate).toBeCloseTo(4 / 5, 2);
   });
 });

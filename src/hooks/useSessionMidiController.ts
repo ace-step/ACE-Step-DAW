@@ -79,6 +79,8 @@ export function useSessionMidiController(enabled: boolean) {
       if (!cancelled) {
         setMidiState(state);
       }
+    }).catch(() => {
+      // Web MIDI may be unsupported — leave default disconnected state
     });
 
     setMidiEventHandler(handleMidiEvent);

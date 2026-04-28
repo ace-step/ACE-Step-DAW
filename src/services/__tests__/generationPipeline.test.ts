@@ -611,10 +611,9 @@ describe('generateText2Music', () => {
 
     expect(mockLoadAudioBlobByKey).toHaveBeenCalledWith('voice-audio:voice-1');
     const [, params, options] = mockReleaseLegoTask.mock.calls[0];
-    expect(params.reference_voice_path).toBe('uploaded');
-    expect(params.audio_influence).toBe(70);
-    expect(params.style_influence).toBe(35);
-    expect(options.referenceVoiceBlob).toBe(voiceBlob);
+    expect(params.reference_audio_path).toBeUndefined();
+    expect(params.audio_cover_strength).toBe(0.7);
+    expect(options.referenceAudioBlob).toBe(voiceBlob);
   });
 
   it('fails when generation lock is already held', async () => {

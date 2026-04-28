@@ -315,18 +315,16 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
     if (params.negativePrompt?.trim()) taskParams.negative_prompt = params.negativePrompt.trim();
 
-    // Voice cloning: load voice blob from IDB and upload alongside generation request
-    let referenceVoiceBlob: Blob | undefined;
+    // Voice cloning: load voice blob from IDB and upload it as ACE-Step reference audio.
+    let referenceAudioBlob: Blob | undefined;
     const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
     if (selectedVoiceId) {
       const voiceProfile = useVoiceStore.getState().getVoiceById(selectedVoiceId);
       if (voiceProfile) {
         const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
         if (blob) {
-          referenceVoiceBlob = blob;
-          taskParams.reference_voice_path = 'uploaded';
-          taskParams.audio_influence = voiceProfile.defaultAudioInfluence;
-          taskParams.style_influence = voiceProfile.defaultStyleInfluence;
+          referenceAudioBlob = blob;
+          taskParams.audio_cover_strength = voiceProfile.defaultAudioInfluence / 100;
         }
       }
     }
@@ -341,7 +339,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     const silenceBlob = generateSilenceWav(params.durationSeconds ?? 60);
     const releaseResp = await api.releaseLegoTask(silenceBlob, taskParams, {
       signal: abortCtrl.signal,
-      referenceVoiceBlob,
+      referenceAudioBlob,
     });
     const taskId = releaseResp.task_id;
     genStore.updateJob(jobId, { taskId });
@@ -886,17 +884,15 @@ async function generateClipInternal(
       params.sample_query = clip.prompt;
     }
 
-    // Voice cloning: load voice blob from IDB and upload alongside generation request
-    let referenceVoiceBlob: Blob | undefined;
+    // Voice cloning: load voice blob from IDB and upload it as ACE-Step reference audio.
+    let referenceAudioBlob: Blob | undefined;
     if (track.voiceProfileId) {
       const voiceProfile = useVoiceStore.getState().getVoiceById(track.voiceProfileId);
       if (voiceProfile) {
         const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
         if (blob) {
-          referenceVoiceBlob = blob;
-          params.reference_voice_path = 'uploaded';
-          params.audio_influence = voiceProfile.defaultAudioInfluence;
-          params.style_influence = voiceProfile.defaultStyleInfluence;
+          referenceAudioBlob = blob;
+          params.audio_cover_strength = voiceProfile.defaultAudioInfluence / 100;
         }
       }
     }
@@ -925,7 +921,7 @@ async function generateClipInternal(
 
     const releaseResp = await api.releaseLegoTask(srcAudioBlob, params, {
       signal: abortCtrl.signal,
-      referenceVoiceBlob,
+      referenceAudioBlob,
     });
     const taskId = releaseResp.task_id;
     useGenerationStore.getState().updateJob(jobId, { taskId });
@@ -3128,8 +3124,8 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       params.negative_prompt = request.negativePrompt.trim();
     }
 
-    // Voice cloning: load selected voice blob from IDB and upload alongside generation request.
-    let referenceVoiceBlob: Blob | undefined;
+    // Voice cloning: load selected voice blob from IDB and upload it as ACE-Step reference audio.
+    let referenceAudioBlob: Blob | undefined;
     const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
     if (selectedVoiceId) {
       const voiceProfile = useVoiceStore.getState().getVoiceById(selectedVoiceId);
@@ -3138,10 +3134,8 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
         const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
         throwIfAborted(abortController.signal);
         if (blob) {
-          referenceVoiceBlob = blob;
-          params.reference_voice_path = 'uploaded';
-          params.audio_influence = voiceProfile.defaultAudioInfluence;
-          params.style_influence = voiceProfile.defaultStyleInfluence;
+          referenceAudioBlob = blob;
+          params.audio_cover_strength = voiceProfile.defaultAudioInfluence / 100;
         }
       }
     }
@@ -3159,7 +3153,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     const silenceBlob = generateSilenceWav(request.durationSeconds);
     const releaseResp = await api.releaseLegoTask(silenceBlob, params, {
       signal: abortController.signal,
-      referenceVoiceBlob,
+      referenceAudioBlob,
     });
     const taskId = releaseResp.task_id;
     genStore.updateJob(jobId, { taskId });

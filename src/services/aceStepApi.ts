@@ -342,7 +342,7 @@ const RELEASE_TASK_MAX_RETRIES = 3;
 
 interface ApiRequestOptions {
   signal?: AbortSignal;
-  referenceVoiceBlob?: Blob;
+  referenceAudioBlob?: Blob;
 }
 
 async function releaseTask(
@@ -373,8 +373,8 @@ async function releaseTask(
     if (uploadBlob) {
       formData.append('src_audio', uploadBlob, 'src_audio.wav');
     }
-    if (options?.referenceVoiceBlob) {
-      formData.append('reference_voice', options.referenceVoiceBlob, 'reference_voice.wav');
+    if (options?.referenceAudioBlob) {
+      formData.append('reference_audio', options.referenceAudioBlob, 'reference_audio.wav');
     }
     for (const [key, value] of Object.entries(params)) {
       if (value === null || value === undefined) continue;

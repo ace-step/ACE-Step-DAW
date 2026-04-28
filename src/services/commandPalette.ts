@@ -1117,6 +1117,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
           state.cancelLearnMode();
         } else {
           useUIStore.getState().setShowMidiControllerPanel(true);
+          state.setEnabled(true);
           state.startLearnMode('master:volume', 'Master Volume');
         }
       },

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MidiControllerPanel } from '../MidiControllerPanel';
 import { useUIStore } from '../../../store/uiStore';
@@ -48,8 +48,24 @@ function resetStores() {
   useMidiControllerStore.setState(useMidiControllerStore.getInitialState());
 }
 
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+
 describe('MidiControllerPanel', () => {
   beforeEach(resetStores);
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    Object.defineProperty(URL, 'createObjectURL', {
+      value: originalCreateObjectURL,
+      configurable: true,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      value: originalRevokeObjectURL,
+      configurable: true,
+    });
+  });
 
   it('renders nothing when panel is hidden', () => {
     render(<MidiControllerPanel />);
@@ -115,6 +131,35 @@ describe('MidiControllerPanel', () => {
     fireEvent.click(screen.getByText(/Mappings/));
     fireEvent.click(screen.getByLabelText('Remove mapping for Track 1 Volume'));
     expect(useMidiControllerStore.getState().mappings).toHaveLength(0);
+  });
+
+  it('delays revoking exported mapping blob URL until after the click dispatch', () => {
+    vi.useFakeTimers();
+    const createObjectURL = vi.fn(() => 'blob:midi-mappings');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', {
+      value: createObjectURL,
+      configurable: true,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      value: revokeObjectURL,
+      configurable: true,
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    useMidiControllerStore.setState({
+      mappings: [makeMapping()],
+    });
+    useUIStore.setState({ showMidiControllerPanel: true });
+    render(<MidiControllerPanel />);
+
+    fireEvent.click(screen.getByText('Export'));
+
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+
+    vi.runAllTimers();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:midi-mappings');
   });
 
   it('toggles enabled state', () => {

@@ -222,6 +222,7 @@ describe('commandPalette', () => {
       targetParam: 'master:volume',
       targetLabel: 'Master Volume',
     });
+    expect(useMidiControllerStore.getState().enabled).toBe(true);
   });
 
   // ── Search scoring ──

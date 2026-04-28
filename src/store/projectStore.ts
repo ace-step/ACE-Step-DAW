@@ -10740,8 +10740,7 @@ export const useProjectStore = create<ProjectState>()(
   ),
 );
 
-function _externalSetStateMayReplaceProject(partial: Parameters<typeof useProjectStore.setState>[0]) {
-  if (typeof partial === 'function') return true;
+function _externalSetStateMayReplaceProject(partial: unknown) {
   if (!partial || typeof partial !== 'object') return false;
   return 'project' in partial;
 }
@@ -10749,6 +10748,16 @@ function _externalSetStateMayReplaceProject(partial: Parameters<typeof useProjec
 const _setProjectStoreState = useProjectStore.setState;
 useProjectStore.setState = ((...args: Parameters<typeof _setProjectStoreState>) => {
   const [partial, replace] = args;
+  if (typeof partial === 'function') {
+    const wrappedPartial = ((state: ProjectState) => {
+      const result = partial(state);
+      if (replace || _externalSetStateMayReplaceProject(result)) {
+        _clearAbCompareState();
+      }
+      return result;
+    }) as typeof partial;
+    return _setProjectStoreState(wrappedPartial, replace);
+  }
   if (replace || _externalSetStateMayReplaceProject(partial)) {
     _clearAbCompareState();
   }

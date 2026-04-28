@@ -73,14 +73,14 @@ describe('cancelJob', () => {
     expect(updated?.status).toBe('error');
   });
 
-  it('releases the generation lock when cancelling the last active job', () => {
+  it('leaves the generation lock for the owning pipeline to release', () => {
     useGenerationStore.setState({ isGenerating: true });
     const job = createTestJob({ id: 'job-1', status: 'generating' });
     registerJobAbortController(job.id);
     useGenerationStore.getState().addJob(job);
     useGenerationStore.getState().cancelJob('job-1');
 
-    expect(useGenerationStore.getState().isGenerating).toBe(false);
+    expect(useGenerationStore.getState().isGenerating).toBe(true);
   });
 
   it('does not release lock if other active jobs remain', () => {
@@ -133,14 +133,14 @@ describe('cancelAllJobs', () => {
     expect(updated.find((j) => j.id === 'j4')?.status).toBe('error');
   });
 
-  it('releases the generation lock', () => {
+  it('leaves the generation lock for the owning pipeline to release', () => {
     useGenerationStore.setState({ isGenerating: true });
     const job = createTestJob({ id: 'j1', status: 'generating' });
     registerJobAbortController(job.id);
     useGenerationStore.getState().addJob(job);
     useGenerationStore.getState().cancelAllJobs();
 
-    expect(useGenerationStore.getState().isGenerating).toBe(false);
+    expect(useGenerationStore.getState().isGenerating).toBe(true);
   });
 });
 

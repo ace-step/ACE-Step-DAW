@@ -631,23 +631,13 @@ export const useGenerationStore = create<GenerationState>()(
         // Only mark cancelled when an underlying controller was actually aborted.
         if (!abortPipelineJob(jobId)) return;
 
-        set((state) => {
-          const updatedJobs = state.jobs.map((j) =>
+        set((state) => ({
+          jobs: state.jobs.map((j) =>
             j.id === jobId
               ? { ...j, status: 'cancelled' as const, progress: 'Cancelled', stage: 'Cancelled', progressPercent: null, etaSeconds: null, etaConfidence: 'none' as const, completedAt: Date.now(), lastUpdatedAt: Date.now() }
               : j,
-          );
-
-          // Release generation lock if no more active jobs remain
-          const hasActiveJobs = updatedJobs.some(
-            (j) => j.status === 'queued' || j.status === 'generating' || j.status === 'processing',
-          );
-
-          return {
-            jobs: updatedJobs,
-            isGenerating: hasActiveJobs ? state.isGenerating : false,
-          };
-        });
+          ),
+        }));
       },
 
       cancelAllJobs: () => {
@@ -662,21 +652,13 @@ export const useGenerationStore = create<GenerationState>()(
 
         if (abortedJobIds.size === 0) return;
 
-        set((state) => {
-          const updatedJobs = state.jobs.map((j) =>
+        set((state) => ({
+          jobs: state.jobs.map((j) =>
             abortedJobIds.has(j.id)
               ? { ...j, status: 'cancelled' as const, progress: 'Cancelled', stage: 'Cancelled', progressPercent: null, etaSeconds: null, etaConfidence: 'none' as const, completedAt: Date.now(), lastUpdatedAt: Date.now() }
               : j,
-          );
-          const hasActiveJobs = updatedJobs.some(
-            (j) => j.status === 'queued' || j.status === 'generating' || j.status === 'processing',
-          );
-
-          return {
-            jobs: updatedJobs,
-            isGenerating: hasActiveJobs ? state.isGenerating : false,
-          };
-        });
+          ),
+        }));
       },
 
       setIsGenerating: (v) => set({ isGenerating: v }),

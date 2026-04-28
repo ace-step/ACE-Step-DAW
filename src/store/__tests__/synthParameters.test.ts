@@ -16,6 +16,29 @@ describe('synth parameter store actions', () => {
     useProjectStore.setState({ project: null });
   });
 
+  describe('updateSynthOscillatorType', () => {
+    it('sets oscillator type on a track', () => {
+      const track = setupTrack();
+      useProjectStore.getState().updateSynthOscillatorType(track.id, 'sawtooth');
+      const updated = useProjectStore.getState().project!.tracks.find(t => t.id === track.id)!;
+      expect(updated.synthOscillatorType).toBe('sawtooth');
+    });
+
+    it('updates oscillator type to different waveform', () => {
+      const track = setupTrack();
+      useProjectStore.getState().updateSynthOscillatorType(track.id, 'sine');
+      useProjectStore.getState().updateSynthOscillatorType(track.id, 'square');
+      const updated = useProjectStore.getState().project!.tracks.find(t => t.id === track.id)!;
+      expect(updated.synthOscillatorType).toBe('square');
+    });
+
+    it('does nothing when project is null', () => {
+      useProjectStore.setState({ project: null });
+      useProjectStore.getState().updateSynthOscillatorType('nonexistent', 'sine');
+      expect(useProjectStore.getState().project).toBeNull();
+    });
+  });
+
   describe('updateSynthEnvelope', () => {
     it('sets envelope values on a track', () => {
       const track = setupTrack();

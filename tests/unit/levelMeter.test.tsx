@@ -35,7 +35,7 @@ describe('LevelMeter', () => {
   it('renders a canvas element with correct aria-label for track meter', () => {
     render(<LevelMeter trackId="track-1" />);
     const canvas = screen.getByTestId('meter-canvas');
-    expect(canvas).toBeDefined();
+    expect(canvas).not.toBeNull();
     expect(canvas.tagName.toLowerCase()).toBe('canvas');
     expect(canvas.getAttribute('aria-label')).toBe('Mixer level meter for track-1');
   });

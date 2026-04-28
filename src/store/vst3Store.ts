@@ -6,7 +6,9 @@ import type {
   VST3ActiveInstance,
   VST3ScanProgress,
   VST3Parameter,
+  CompanionAppStatus,
 } from '../types/vst3';
+import { MIN_COMPANION_VERSION } from '../types/vst3';
 import { toastSuccess, toastError } from '../hooks/useToast';
 import { _getBridgeClient } from '../hooks/useVST3Connection';
 import { VST3PluginAdapter } from '../services/vst3bridge/VST3PluginAdapter';
@@ -17,6 +19,7 @@ export interface VST3Store {
   connectionStatus: VST3ConnectionStatus;
   connectionError: string | null;
   companionVersion: string | null;
+  companionAppStatus: CompanionAppStatus;
 
   /* ── Scanned plugin catalogue ───────────────────────── */
   plugins: VST3PluginInfo[];
@@ -28,6 +31,12 @@ export interface VST3Store {
 
   /* ── Per-track plugin ordering ──────────────────────── */
   pluginOrder: Record<string, string[]>;
+
+  /* ── Favorites ─────────────────────────────────────── */
+  favoritePluginIds: Set<string>;
+
+  /* ── Setup wizard ──────────────────────────────────── */
+  setupWizardDismissed: boolean;
 
   /* ── Actions ────────────────────────────────────────── */
   connect: () => void;
@@ -44,10 +53,18 @@ export interface VST3Store {
   reorderPlugins: (trackId: string, instanceIds: string[]) => void;
   setSidechain: (instanceId: string, sourceTrackId: string | null) => void;
 
+  /* ── Favorites ──────────────────────────────────────── */
+  toggleFavorite: (pluginId: string) => void;
+  isFavorite: (pluginId: string) => boolean;
+
+  /* ── Setup wizard ──────────────────────────────────── */
+  dismissSetupWizard: () => void;
+
   /* ── Public setters (used by hooks / bridge callbacks) ── */
   setConnectionStatus: (status: VST3ConnectionStatus) => void;
   setConnectionError: (error: string | null) => void;
   setCompanionVersion: (version: string | null) => void;
+  setCompanionAppStatus: (status: CompanionAppStatus) => void;
   setScannedPlugins: (plugins: VST3PluginInfo[]) => void;
   markAllInstancesOffline: () => void;
 
@@ -62,15 +79,46 @@ export interface VST3Store {
   _updateParameter: (instanceId: string, paramId: number, value: number) => void;
 }
 
+/** Load favorites from localStorage */
+function loadFavorites(): Set<string> {
+  try {
+    const raw = localStorage.getItem('vst3-favorites');
+    if (raw) return new Set(JSON.parse(raw) as string[]);
+  } catch { /* ignore corrupt data */ }
+  return new Set();
+}
+
+/** Persist favorites to localStorage */
+function saveFavorites(ids: Set<string>): void {
+  try {
+    localStorage.setItem('vst3-favorites', JSON.stringify([...ids]));
+  } catch {
+    /* ignore persistence failures so UI state updates still succeed */
+  }
+}
+
+/** Compare semver strings: returns true if version >= minimum */
+function isVersionAcceptable(version: string, minimum: string): boolean {
+  const parse = (v: string) => v.split('.').map(Number);
+  const [aMaj = 0, aMin = 0, aPat = 0] = parse(version);
+  const [bMaj = 0, bMin = 0, bPat = 0] = parse(minimum);
+  if (aMaj !== bMaj) return aMaj > bMaj;
+  if (aMin !== bMin) return aMin > bMin;
+  return aPat >= bPat;
+}
+
 export const useVST3Store = create<VST3Store>()((set, get) => ({
   connectionStatus: 'disconnected',
   connectionError: null,
   companionVersion: null,
+  companionAppStatus: 'unknown' as CompanionAppStatus,
   plugins: [],
   scanning: false,
   scanProgress: null,
   instances: {},
   pluginOrder: {},
+  favoritePluginIds: loadFavorites(),
+  setupWizardDismissed: (() => { try { return localStorage.getItem('vst3-setup-dismissed') === 'true'; } catch { return false; } })(),
 
   // ── Connection ──────────────────────────────────────────
   connect: () => {
@@ -152,8 +200,8 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
       // Create the audio adapter and register with the plugin engine
       // so audio routing (effects) and MIDI (instruments) work through the graph
       try {
-        const { getContext } = await import('tone');
-        const ctx = getContext().rawContext as AudioContext;
+        const { getAudioEngine } = await import('../hooks/useAudioEngine');
+        const ctx = getAudioEngine().ctx;
         const adapter = new VST3PluginAdapter(
           instanceId,
           { ...pluginInfo, uid: pluginInfo.id },
@@ -268,10 +316,59 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
     }
   },
 
+  // ── Favorites ──────────────────────────────────────────
+  toggleFavorite: (pluginId: string) => {
+    const { favoritePluginIds } = get();
+    const next = new Set(favoritePluginIds);
+    if (next.has(pluginId)) next.delete(pluginId);
+    else next.add(pluginId);
+    saveFavorites(next);
+    set({ favoritePluginIds: next });
+  },
+
+  isFavorite: (pluginId: string) => get().favoritePluginIds.has(pluginId),
+
+  // ── Setup wizard ──────────────────────────────────────
+  dismissSetupWizard: () => {
+    localStorage.setItem('vst3-setup-dismissed', 'true');
+    set({ setupWizardDismissed: true });
+  },
+
   // ── Public setters (used by hooks) ──────────────────────
-  setConnectionStatus: (status) => set({ connectionStatus: status }),
+  setConnectionStatus: (status) => {
+    const prev = get().connectionStatus;
+    set({ connectionStatus: status });
+
+    // Derive companionAppStatus from connection transitions
+    if (status === 'connected') {
+      const version = get().companionVersion;
+      if (version && !isVersionAcceptable(version, MIN_COMPANION_VERSION)) {
+        set({ companionAppStatus: 'outdated' });
+      } else {
+        set({ companionAppStatus: 'running' });
+      }
+    } else if (status === 'error') {
+      // If we never connected before, likely not installed
+      if (prev === 'connecting' && get().companionAppStatus === 'unknown') {
+        set({ companionAppStatus: 'not-installed' });
+      }
+    } else if (status === 'disconnected' && prev === 'connected') {
+      set({ companionAppStatus: 'not-running' });
+    }
+  },
   setConnectionError: (error) => set({ connectionError: error }),
-  setCompanionVersion: (version) => set({ companionVersion: version }),
+  setCompanionVersion: (version) => {
+    set({ companionVersion: version });
+    // Re-derive companionAppStatus when version arrives while connected
+    if (get().connectionStatus === 'connected' && version) {
+      if (!isVersionAcceptable(version, MIN_COMPANION_VERSION)) {
+        set({ companionAppStatus: 'outdated' });
+      } else {
+        set({ companionAppStatus: 'running' });
+      }
+    }
+  },
+  setCompanionAppStatus: (status) => set({ companionAppStatus: status }),
   setScannedPlugins: (plugins) => set({ plugins, scanning: false, scanProgress: null }),
   markAllInstancesOffline: () => {
     const { instances } = get();

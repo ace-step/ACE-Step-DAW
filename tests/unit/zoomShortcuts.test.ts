@@ -131,7 +131,7 @@ describe('Zoom shortcut actions (Z / Shift+Z)', () => {
       const { SHORTCUT_ACTION_MAP } = await import('../../src/constants/shortcutDefaults');
       const action = SHORTCUT_ACTION_MAP['view.zoomToSelection'];
 
-      expect(action).toBeDefined();
+      expect(action).not.toBeUndefined();
       expect(action.defaultCombo).toEqual({ code: 'KeyZ' });
       expect(action.contexts).toContain('timeline');
     });
@@ -140,7 +140,7 @@ describe('Zoom shortcut actions (Z / Shift+Z)', () => {
       const { SHORTCUT_ACTION_MAP } = await import('../../src/constants/shortcutDefaults');
       const action = SHORTCUT_ACTION_MAP['view.zoomToFit'];
 
-      expect(action).toBeDefined();
+      expect(action).not.toBeUndefined();
       expect(action.defaultCombo).toEqual({ code: 'KeyZ', shift: true });
       expect(action.contexts).toContain('timeline');
     });

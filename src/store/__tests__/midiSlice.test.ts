@@ -66,7 +66,7 @@ describe('midiSlice', () => {
   describe('addMidiNote', () => {
     it('adds a note to the clip and returns the note ID', () => {
       const noteId = slice.addMidiNote('clip-1', { pitch: 64, startBeat: 2, durationBeats: 0.5, velocity: 80 });
-      expect(noteId).toBeDefined();
+      expect(noteId).not.toBeUndefined();
       expect(project!.tracks[0].clips[0].midiData!.notes).toHaveLength(2);
       expect(project!.tracks[0].clips[0].midiData!.notes[1].pitch).toBe(64);
     });

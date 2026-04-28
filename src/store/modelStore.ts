@@ -1,9 +1,14 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { ModelEntry, LmModelEntry, StatsResponse, ModelCategory, GenerationIntent } from '../types/api';
+import type { ModelEntry, LmModelEntry, StatsResponse, ModelCategory, GenerationIntent, ModelCapability, AiTaskType } from '../types/api';
 import { listModels, initModel, getStats, inferModelCategory } from '../services/aceStepApi';
+import { checkProviderHealth as checkProviderHealthApi, TASK_TYPE_TO_CAPABILITY, type ProviderHealthResult } from '../services/unifiedTaskRouter';
+import { GpuMemoryManager, type GpuMemoryState } from '../services/gpuMemoryManager';
 
 const POLLING_INTERVAL_MS = 30_000;
+
+/** Shared GPU memory manager instance — tracks model VRAM across the session */
+const gpuMemoryManager = new GpuMemoryManager();
 
 /**
  * Map a GenerationIntent to the required ModelCategory.
@@ -40,6 +45,11 @@ export interface ModelStore {
   lastRefreshedAt: number;
   stats: StatsResponse | null;
 
+  /** Per-capability provider health status (#741) */
+  providerHealth: Partial<Record<ModelCapability, ProviderHealthResult>>;
+  /** Estimated GPU memory state (#741) */
+  gpuMemory: GpuMemoryState;
+
   // Existing actions
   refreshModels: () => Promise<void>;
   switchModel: (name: string) => Promise<void>;
@@ -53,10 +63,23 @@ export interface ModelStore {
   getModelsByCategory: (category: ModelCategory) => ModelEntry[];
   getActiveModelCategory: () => ModelCategory | null;
   getDefaultModelForCategory: (category: ModelCategory) => string | null;
+  /** Return the name of a currently-loaded model matching the given category, or null. */
+  getLoadedModelForCategory: (category: ModelCategory) => string | null;
 
   // Intent-driven actions
   ensureModelForIntent: (intent: GenerationIntent) => Promise<void>;
   setCategoryModelOverride: (category: ModelCategory, modelName: string | null) => void;
+
+  // Unified multi-provider features (#741)
+  checkProviderHealth: (capability: ModelCapability) => Promise<void>;
+  checkAllProviderHealth: () => Promise<void>;
+  getProviderStatus: (capability: ModelCapability) => ProviderHealthResult['status'] | 'unknown';
+  isProviderAvailable: (capability: ModelCapability) => boolean;
+  getCapabilityForTaskType: (taskType: AiTaskType) => ModelCapability;
+
+  // GPU memory management (#741)
+  getGpuMemoryState: () => GpuMemoryState;
+  canFitModel: (vramGb: number) => boolean;
 }
 
 export const useModelStore = create<ModelStore>()(
@@ -72,12 +95,18 @@ export const useModelStore = create<ModelStore>()(
       connected: false,
       lastRefreshedAt: 0,
       stats: null,
+      providerHealth: {},
+      gpuMemory: gpuMemoryManager.getState(),
 
       refreshModels: async () => {
         try {
           const response = await listModels();
           const loadedModel = response.models.find((m) => m.is_loaded);
           const loadedLmModel = response.lm_models.find((m) => m.is_loaded);
+
+          // Sync GPU memory tracker with server inventory
+          gpuMemoryManager.syncFromInventory(response.models);
+
           set({
             availableModels: response.models,
             availableLmModels: response.lm_models,
@@ -85,6 +114,7 @@ export const useModelStore = create<ModelStore>()(
             activeLmModelId: loadedLmModel?.name ?? response.loaded_lm_model ?? null,
             connected: true,
             lastRefreshedAt: Date.now(),
+            gpuMemory: gpuMemoryManager.getState(),
           });
         } catch {
           set({ connected: false });
@@ -170,6 +200,15 @@ export const useModelStore = create<ModelStore>()(
         return null;
       },
 
+      getLoadedModelForCategory: (category: ModelCategory) => {
+        const loaded = get().availableModels.filter(
+          (m) => m.is_loaded && inferModelCategory(m) === category,
+        );
+        if (loaded.length > 0) return loaded[0].name;
+        // Fallback to getDefaultModelForCategory (unloaded but available)
+        return null;
+      },
+
       // --- Intent-driven actions ---
 
       ensureModelForIntent: async (intent: GenerationIntent) => {
@@ -213,6 +252,70 @@ export const useModelStore = create<ModelStore>()(
           overrides[category] = modelName;
         }
         set({ categoryModelOverrides: overrides });
+      },
+
+      // --- Unified multi-provider features (#741) ---
+
+      checkProviderHealth: async (capability: ModelCapability) => {
+        try {
+          const result = await checkProviderHealthApi(capability);
+          set({
+            providerHealth: {
+              ...get().providerHealth,
+              [capability]: result,
+            },
+          });
+        } catch (err) {
+          set({
+            providerHealth: {
+              ...get().providerHealth,
+              [capability]: {
+                capability,
+                status: 'error' as const,
+                lastChecked: Date.now(),
+                error: err instanceof Error ? err.message : String(err),
+              },
+            },
+          });
+        }
+      },
+
+      checkAllProviderHealth: async () => {
+        const capabilities: ModelCapability[] = [
+          'music_generation',
+          'stem_separation',
+          'ai_mixing',
+          'midi_generation',
+          'chord_generation',
+        ];
+        await Promise.allSettled(
+          capabilities.map((cap) => get().checkProviderHealth(cap)),
+        );
+      },
+
+      getProviderStatus: (capability: ModelCapability) => {
+        const health = get().providerHealth[capability];
+        return health?.status ?? 'unknown';
+      },
+
+      isProviderAvailable: (capability: ModelCapability) => {
+        const status = get().getProviderStatus(capability);
+        // Optimistic: treat unknown as available (not yet checked)
+        return status === 'healthy' || status === 'unknown';
+      },
+
+      getCapabilityForTaskType: (taskType: AiTaskType) => {
+        return TASK_TYPE_TO_CAPABILITY[taskType];
+      },
+
+      // --- GPU memory management (#741) ---
+
+      getGpuMemoryState: () => {
+        return gpuMemoryManager.getState();
+      },
+
+      canFitModel: (vramGb: number) => {
+        return gpuMemoryManager.canFitModel(vramGb);
       },
     }),
     {

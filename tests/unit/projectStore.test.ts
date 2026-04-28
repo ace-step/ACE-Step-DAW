@@ -291,7 +291,7 @@ describe('projectStore', () => {
     it('creates a default effect automation lane once and removes it when the effect is deleted', () => {
       const track = useProjectStore.getState().addTrack('drums');
       const effectId = useProjectStore.getState().addTrackEffect(track.id, 'filter');
-      expect(effectId).toBeDefined();
+      expect(typeof effectId).toBe('string');
 
       const filterParameter = {
         type: 'effect',
@@ -547,7 +547,7 @@ describe('projectStore', () => {
 
       const consolidated = await useProjectStore.getState().consolidateClips(track.id, [clipA.id, clipB.id]);
 
-      expect(consolidated).toBeDefined();
+      expect(consolidated).not.toBeUndefined();
       expect(useProjectStore.getState().project?.tracks[0].clips).toHaveLength(1);
       expect(consolidated?.midiData?.notes).toHaveLength(2);
       expect(consolidated?.midiData?.notes.map((note) => note.startBeat)).toEqual([0, 2.5]);
@@ -590,12 +590,71 @@ describe('projectStore', () => {
 
       const consolidated = await useProjectStore.getState().consolidateClips(track.id, [clipA.id, clipB.id]);
 
-      expect(consolidated).toBeDefined();
+      expect(consolidated).not.toBeUndefined();
       expect(consolidated?.isolatedAudioKey).toBe('merged-audio-key');
       expect(consolidated?.generationStatus).toBe('ready');
       expect(consolidated?.duration).toBe(1.5);
       expect(useProjectStore.getState().project?.tracks[0].clips).toHaveLength(1);
       expect(mockSaveAudioBlob).toHaveBeenCalledTimes(1);
+    });
+
+    it('safely rolls back history when audio consolidation fails (regression #1585)', async () => {
+      const track = useProjectStore.getState().addTrack('drums', 'sample');
+      const clipA = useProjectStore.getState().addClip(track.id, {
+        startTime: 0, duration: 0.5, prompt: 'kick-a', globalCaption: '', lyrics: '', source: 'uploaded',
+      });
+      const clipB = useProjectStore.getState().addClip(track.id, {
+        startTime: 1, duration: 0.5, prompt: 'kick-b', globalCaption: '', lyrics: '', source: 'uploaded',
+      });
+      useProjectStore.getState().updateClip(clipA.id, {
+        generationStatus: 'ready', isolatedAudioKey: 'audio-a',
+      });
+      useProjectStore.getState().updateClip(clipB.id, {
+        generationStatus: 'ready', isolatedAudioKey: 'audio-b',
+      });
+
+      // Force audio decode to fail
+      mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['wav'], { type: 'audio/wav' }));
+      mockDecodeAudioData.mockRejectedValue(new Error('decode failed'));
+
+      const result = await useProjectStore.getState().consolidateClips(track.id, [clipA.id, clipB.id]);
+
+      expect(result).toBeUndefined();
+      // Original clips should still be present (history rollback worked)
+      const clips = useProjectStore.getState().project?.tracks[0].clips;
+      expect(clips).toHaveLength(2);
+    });
+
+    it('keeps drag-batch history when audio consolidation fails during a drag', async () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('drums', 'sample');
+      const clipA = store.addClip(track.id, {
+        startTime: 0, duration: 0.5, prompt: 'kick-a', globalCaption: '', lyrics: '', source: 'uploaded',
+      });
+      const clipB = store.addClip(track.id, {
+        startTime: 1, duration: 0.5, prompt: 'kick-b', globalCaption: '', lyrics: '', source: 'uploaded',
+      });
+      store.updateClip(clipA.id, {
+        generationStatus: 'ready', isolatedAudioKey: 'audio-a',
+      });
+      store.updateClip(clipB.id, {
+        generationStatus: 'ready', isolatedAudioKey: 'audio-b',
+      });
+
+      mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['wav'], { type: 'audio/wav' }));
+      mockDecodeAudioData.mockRejectedValue(new Error('decode failed'));
+
+      const historyBeforeDrag = store.getUndoHistory();
+      store.beginDrag({ scope: 'arrangement', label: 'Drag clips' });
+      const historyDuringDrag = store.getUndoHistory();
+
+      const result = await store.consolidateClips(track.id, [clipA.id, clipB.id]);
+      store.endDrag();
+
+      expect(result).toBeUndefined();
+      expect(useProjectStore.getState().getUndoHistory()).toHaveLength(historyDuringDrag.length);
+      expect(historyDuringDrag).toHaveLength(historyBeforeDrag.length + 1);
+      expect(useProjectStore.getState().getUndoHistory().at(-1)?.snapshot).toEqual(historyDuringDrag.at(-1)?.snapshot);
     });
   });
 
@@ -612,7 +671,7 @@ describe('projectStore', () => {
 
       const duplicate = useProjectStore.getState().duplicateTrack(original.id);
 
-      expect(duplicate).toBeDefined();
+      expect(duplicate).not.toBeUndefined();
       expect(duplicate!.id).not.toBe(original.id);
       expect(duplicate!.displayName).toBe('Drums (copy)');
       expect(duplicate!.clips).toHaveLength(1);
@@ -712,7 +771,7 @@ describe('track presets', () => {
     const preset = store.saveTrackPreset(track.id, 'Fat Bass');
     const newTrack = useProjectStore.getState().applyTrackPreset(preset.id);
 
-    expect(newTrack).toBeDefined();
+    expect(newTrack).not.toBeUndefined();
     expect(newTrack!.trackName).toBe('bass');
     expect(newTrack!.trackType).toBe('pianoRoll');
     expect(newTrack!.volume).toBe(0.4);
@@ -797,7 +856,7 @@ describe('track presets', () => {
 
     const preset = store.saveTrackPreset(bass.id, 'SC Bass');
     const compEffect = preset.effects.find((e) => e.type === 'compressor');
-    expect(compEffect).toBeDefined();
+    expect(compEffect).not.toBeUndefined();
     if (compEffect && 'sidechainSourceTrackId' in compEffect) {
       expect(compEffect.sidechainSourceTrackId).toBeUndefined();
     }
@@ -814,7 +873,7 @@ describe('track presets', () => {
     expect(useProjectStore.getState().project!.trackPresets).toHaveLength(2);
 
     const applied = useProjectStore.getState().applyTrackPreset(p2.id);
-    expect(applied).toBeDefined();
+    expect(applied).not.toBeUndefined();
     expect(applied!.trackName).toBe('synth');
     expect(applied!.trackType).toBe('pianoRoll');
   });
@@ -943,7 +1002,7 @@ describe('setClipFade', () => {
       useProjectStore.getState().applyAudioQuantize(clip.id);
 
       const updated = useProjectStore.getState().project!.tracks[0].clips[0];
-      expect(updated.warpMarkers).toBeDefined();
+      expect(updated.warpMarkers).not.toBeUndefined();
       expect(updated.warpMarkers!.length).toBeGreaterThan(0);
       expect(updated.warpMarkers![0].quantizedTime).toBeCloseTo(0.5, 1);
     });
@@ -982,7 +1041,7 @@ describe('setClipFade', () => {
       useProjectStore.getState().applyAudioQuantize(clip.id, { gridDivision: 0.5 });
 
       const updated = useProjectStore.getState().project!.tracks[0].clips[0];
-      expect(updated.warpMarkers).toBeDefined();
+      expect(updated.warpMarkers).not.toBeUndefined();
       if (updated.warpMarkers && updated.warpMarkers.length > 0) {
         expect(updated.warpMarkers[0].quantizedTime).toBeCloseTo(0.25, 1);
       }

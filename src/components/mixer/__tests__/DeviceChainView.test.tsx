@@ -115,7 +115,7 @@ describe('Device Chain Store Actions', () => {
       const trackId = createTrack();
       const effectId = useProjectStore.getState().addTrackEffect(trackId, 'reverb');
 
-      expect(effectId).toBeDefined();
+      expect(effectId).not.toBeUndefined();
       const track = useProjectStore.getState().project!.tracks.find(t => t.id === trackId)!;
       expect(track.effects).toHaveLength(1);
       expect(track.effects![0].type).toBe('reverb');

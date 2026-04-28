@@ -21,6 +21,9 @@ import {
   isWasmAudioSupported,
   type WasmMeterData,
 } from './WasmEffectNode';
+import { createDebugLogger } from '../../utils/debugLogger';
+
+const logger = createDebugLogger('ace-step:wasm-dsp-bridge');
 
 /** Supported WASM effect types — complete DSP suite */
 export type WasmEffectType =
@@ -69,7 +72,7 @@ export async function initWasmDsp(ctx: AudioContext): Promise<boolean> {
   }
 
   if (!_wasmSupported) {
-    console.warn('[WasmDspBridge] WASM AudioWorklet not supported in this browser');
+    logger.error('WASM AudioWorklet not supported in this browser');
     return false;
   }
 
@@ -80,10 +83,10 @@ export async function initWasmDsp(ctx: AudioContext): Promise<boolean> {
   try {
     await registerWasmProcessor(ctx);
     _wasmRegistered = true;
-    console.info('[WasmDspBridge] WASM effect processor registered');
+    logger.info('WASM effect processor registered');
     return true;
   } catch (err) {
-    console.error('[WasmDspBridge] Failed to register WASM processor:', err);
+    logger.error('Failed to register WASM processor:', err);
     _wasmSupported = false;
     return false;
   }
@@ -106,7 +109,7 @@ export function createWasmEffect(
   try {
     return new WasmEffectNode(ctx, effectType, params);
   } catch (err) {
-    console.error(`[WasmDspBridge] Failed to create WASM ${effectType}:`, err);
+    logger.error(`Failed to create WASM ${effectType}:`, err);
     return null;
   }
 }

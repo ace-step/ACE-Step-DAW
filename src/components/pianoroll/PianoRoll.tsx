@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useState, type SetStateAction } from '
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
-import type { PianoRollGrid, SamplerConfig } from '../../types/project';
+import type { GranularSettings, PianoRollGrid, SamplerConfig } from '../../types/project';
 import { CHORD_SHAPES, DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
 import { QuickSamplerEditor } from './QuickSamplerEditor';
+import { ZoneMapEditor } from './ZoneMapEditor';
+import { GranularPanel } from './GranularPanel';
+import { GrooveTemplatesPanel } from './GrooveTemplatesPanel';
 import { GeneratePatternDialog } from './GeneratePatternDialog';
 import { PianoRollCanvas } from './PianoRollCanvas';
 import { PianoRollEmptyState } from './PianoRollEmptyState';
@@ -13,7 +16,12 @@ import { SynthPresetBrowser } from './SynthPresetBrowser';
 import { getSynthPresetById, type SynthPresetCategory } from '../../data/synthPresets';
 import { createUserPreset, getPresetById, type InstrumentPresetCategory } from '../../data/instrumentPresets';
 import { TransformMenu } from './TransformMenu';
+import { ChordSuggestionPanel } from './ChordSuggestionPanel';
+import { MidiAiPanel } from './MidiAiPanel';
+import { useChordSuggestionStore } from '../../store/chordSuggestionStore';
+import { useMidiAiStore } from '../../store/midiAiStore';
 import { getPianoRollToolShortcut, type PianoRollTool } from './PianoRollConstants';
+import { SynthParameterEditor, PRESET_DEFAULT_OSCILLATOR } from '../synth/SynthParameterEditor';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -31,13 +39,17 @@ export function PianoRoll() {
   const [gridSize, setGridSize] = useState<PianoRollGrid>('1/16');
   const [prZoomX, setPrZoomX] = useState(1);
   const [samplerDropActive, setSamplerDropActive] = useState(false);
+  const [showSynthParams, setShowSynthParams] = useState(false);
 
   const project = useProjectStore((s) => s.project);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const loadSynthPreset = useProjectStore((s) => s.loadSynthPreset);
+  const updateSynthOscillatorType = useProjectStore((s) => s.updateSynthOscillatorType);
   const setTrackSampler = useProjectStore((s) => s.setTrackSampler);
   const clearTrackSampler = useProjectStore((s) => s.clearTrackSampler);
   const updateSamplerConfig = useProjectStore((s) => s.updateSamplerConfig);
+  const updateGranularConfig = useProjectStore((s) => s.updateGranularConfig);
+  const clearGranularConfig = useProjectStore((s) => s.clearGranularConfig);
   const convertMidiClipToStrudel = useProjectStore((s) => s.convertMidiClipToStrudel);
   const convertMidiTrackToStrudel = useProjectStore((s) => s.convertMidiTrackToStrudel);
   const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
@@ -45,6 +57,7 @@ export function PianoRoll() {
     importAudioFileAsSampler,
     importAssetAsQuickSampler,
     openSamplerFilePicker,
+    openGranularFilePicker,
   } = useAudioImport();
 
   const userSynthPresets = useUIStore((s) => s.userSynthPresets);
@@ -70,6 +83,12 @@ export function PianoRoll() {
   const openGeneratePatternDialog = useUIStore((s) => s.openGeneratePatternDialog);
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
   const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
+  const chordPanelOpen = useChordSuggestionStore((s) => s.panelOpen);
+  const toggleChordPanel = useChordSuggestionStore((s) => s.togglePanel);
+  const midiAiPanelOpen = useMidiAiStore((s) => s.panelOpen);
+  const openMidiAiPanel = useMidiAiStore((s) => s.openPanel);
+  const closeMidiAiPanel = useMidiAiStore((s) => s.closePanel);
+  const [groovePanelOpen, setGroovePanelOpen] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -92,10 +111,44 @@ export function PianoRoll() {
       };
 
       const tool = toolByCode[event.code];
-      if (!tool) return;
+      if (tool) {
+        event.preventDefault();
+        setActivePianoRollTool(tool);
+        return;
+      }
 
-      event.preventDefault();
-      setActivePianoRollTool(tool);
+      // AI generation shortcuts
+      const clipId = ui.openPianoRollClipId;
+      const trackId = ui.openPianoRollTrackId;
+
+      // G = Toggle AI Generate panel
+      if (event.code === 'KeyG' && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        const aiState = useMidiAiStore.getState();
+        if (aiState.panelOpen) {
+          aiState.closePanel();
+        } else if (trackId && clipId) {
+          aiState.openPanel(trackId, clipId);
+        }
+        return;
+      }
+
+      // L = Lock/unlock selected notes (when AI panel is open)
+      if (event.code === 'KeyL' && !event.ctrlKey && !event.metaKey) {
+        const aiState = useMidiAiStore.getState();
+        if (!aiState.panelOpen) return;
+        const selected = ui.selectedPianoRollNoteIds;
+        if (selected.length === 0) return;
+        event.preventDefault();
+        // Toggle: if any selected note is unlocked, lock all; otherwise unlock all
+        const anyUnlocked = selected.some((id) => !aiState.lockedNoteIds.has(id));
+        if (anyUnlocked) {
+          aiState.lockNotes(selected);
+        } else {
+          aiState.unlockNotes(selected);
+        }
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -353,11 +406,35 @@ export function PianoRoll() {
           }}
         />
 
+        {track.synthPreset !== 'sampler' && (
+          <button
+            type="button"
+            aria-label="Toggle synth parameters"
+            aria-pressed={showSynthParams ? 'true' : 'false'}
+            className={`px-2 py-1 rounded text-[10px] transition-colors ${
+              showSynthParams
+                ? 'bg-violet-600/50 text-violet-200'
+                : 'bg-white/5 text-zinc-400 hover:bg-white/10'
+            }`}
+            onClick={() => setShowSynthParams((v) => !v)}
+            title="Show/hide synth parameter editor"
+          >
+            Synth Params
+          </button>
+        )}
+
         {/* Legacy preset dropdown (Quick Sampler toggle) */}
         <select
           aria-label="Track synth preset"
           value={track.synthPreset ?? 'piano'}
-          onChange={(e) => updateTrack(track.id, { synthPreset: e.target.value as typeof track.synthPreset })}
+          onChange={(e) => {
+            const preset = e.target.value as typeof track.synthPreset;
+            updateTrack(track.id, { synthPreset: preset });
+            // Reset oscillator to preset default (skip for sampler — no synth params)
+            if (preset !== 'sampler') {
+              updateSynthOscillatorType(track.id, PRESET_DEFAULT_OSCILLATOR[preset ?? 'piano'] ?? 'triangle');
+            }
+          }}
           className="bg-[#111] border border-[#333] rounded px-2 py-1 text-[11px] text-zinc-300"
         >
           <option value="piano">Piano</option>
@@ -393,6 +470,50 @@ export function PianoRoll() {
             title="Generate MIDI pattern from genre/scale constraints"
           >
             Generate Pattern
+          </button>
+        )}
+
+        <button
+          className={`px-2 py-1 rounded text-[10px] transition-colors ${
+            groovePanelOpen
+              ? 'bg-emerald-600/40 text-emerald-200'
+              : 'bg-emerald-600/15 text-emerald-100 hover:bg-emerald-600/30'
+          }`}
+          onClick={() => setGroovePanelOpen((v) => !v)}
+          title="Toggle groove templates panel"
+        >
+          Groove
+        </button>
+
+        <button
+          className={`px-2 py-1 rounded text-[10px] transition-colors ${
+            chordPanelOpen
+              ? 'bg-cyan-600/40 text-cyan-200'
+              : 'bg-cyan-600/15 text-cyan-100 hover:bg-cyan-600/30'
+          }`}
+          onClick={toggleChordPanel}
+          title="Toggle AI chord suggestion panel"
+        >
+          AI Chords
+        </button>
+
+        {clip && (
+          <button
+            className={`px-2 py-1 rounded text-[10px] transition-colors ${
+              midiAiPanelOpen
+                ? 'bg-violet-600/40 text-violet-200'
+                : 'bg-violet-600/15 text-violet-100 hover:bg-violet-600/30'
+            }`}
+            onClick={() => {
+              if (midiAiPanelOpen) {
+                closeMidiAiPanel();
+              } else {
+                openMidiAiPanel(track.id, clip.id);
+              }
+            }}
+            title="Toggle AI MIDI generation panel (infill, continue, variation)"
+          >
+            AI Generate
           </button>
         )}
 
@@ -455,6 +576,14 @@ export function PianoRoll() {
         </div>
       </div>
 
+      {groovePanelOpen && (
+        <div className="border-b border-zinc-700/50 max-h-48 overflow-y-auto">
+          <GrooveTemplatesPanel />
+        </div>
+      )}
+      {chordPanelOpen && <ChordSuggestionPanel />}
+      {midiAiPanelOpen && <MidiAiPanel />}
+
       {track.synthPreset === 'sampler' && (
         <div
           aria-label="Quick Sampler target"
@@ -470,7 +599,26 @@ export function PianoRoll() {
             onClear={() => clearTrackSampler(track.id)}
             onLoadSample={() => openSamplerFilePicker(track.id)}
           />
+          <ZoneMapEditor
+            track={track}
+            onLoadSampleForZone={() => openSamplerFilePicker(track.id)}
+          />
         </div>
+      )}
+
+      {track.instrument?.kind === 'granular' && (
+        <GranularPanel
+          track={track}
+          onConfigChange={(updates: Partial<GranularSettings>) =>
+            updateGranularConfig(track.id, updates)
+          }
+          onClear={() => clearGranularConfig(track.id)}
+          onLoadSample={() => openGranularFilePicker(track.id)}
+        />
+      )}
+
+      {showSynthParams && track.synthPreset !== 'sampler' && track.instrument?.kind !== 'granular' && (
+        <SynthParameterEditor trackId={track.id} />
       )}
 
       {clip ? (

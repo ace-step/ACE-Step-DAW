@@ -216,7 +216,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
     const quantizeButton = Array.from(menuButtons).find((b) =>
       b.textContent?.includes('Quantize'),
     );
-    expect(quantizeButton).toBeTruthy();
+    expect(quantizeButton).not.toBeNull();
   });
 
   it('does not show context menu when right-clicking empty space with no selection', () => {

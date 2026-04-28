@@ -19,6 +19,9 @@ import {
 } from './PianoRollConstants';
 import { drawPianoRoll } from './PianoRollRenderer';
 import { usePianoRollDrag } from './usePianoRollDrag';
+import { useMidiAiStore } from '../../store/midiAiStore';
+import { useMpeStore } from '../../store/mpeStore';
+import { hasExpressionData } from './ExpressionLane';
 
 export interface GhostNote {
   pitch: number;
@@ -57,6 +60,8 @@ export function PianoRollCanvas({
   const animRef = useRef<number>(0);
 
   const [velocityHeight, setVelocityHeight] = useState(VELOCITY_LANE_HEIGHT);
+  const mpeEnabled = useMpeStore((s) => s.enabled);
+  const expressionType = useUIStore((s) => s.pianoRollExpressionType ?? 'pitchBend');
   const [prZoomY, setPrZoomY] = useState(1);
   const [prScrollX, setPrScrollX] = useState(0);
   const [prScrollY, setPrScrollY] = useState(780);
@@ -71,7 +76,22 @@ export function PianoRollCanvas({
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
   const quantizePreviewPositions = useUIStore((s) => s.quantizePreviewPositions);
 
+  // MIDI AI generation state — only active when panel targets this clip
+  const aiPanelOpen = useMidiAiStore((s) => s.panelOpen);
+  const aiTargetClipId = useMidiAiStore((s) => s.targetClipId);
+  const aiActiveForClip = aiPanelOpen && aiTargetClipId === clip.id;
+  const aiLockedNoteIds = useMidiAiStore((s) => s.lockedNoteIds);
+  const aiSelectionStartBeat = useMidiAiStore((s) => s.selectionStartBeat);
+  const aiSelectionEndBeat = useMidiAiStore((s) => s.selectionEndBeat);
+  const aiStatus = useMidiAiStore((s) => s.status);
+  const aiVariations = useMidiAiStore((s) => s.variations);
+  const aiActiveVariationIndex = useMidiAiStore((s) => s.activeVariationIndex);
+  const aiPreviewNotes = aiActiveForClip && aiStatus === 'previewing'
+    ? (aiVariations[aiActiveVariationIndex]?.notes ?? [])
+    : [];
+
   const notes: MidiNote[] = clip.midiData?.notes ?? [];
+  const expressionLaneHeight = mpeEnabled && hasExpressionData(notes) ? 80 : 0;
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
   const currentTime = useTransportStore((s) => s.currentTime);
   const previewEnabled = true;
@@ -345,6 +365,12 @@ export function PianoRollCanvas({
       currentBeat: liveTime,
       drag: dragRef.current,
       quantizePreviewPositions,
+      lockedNoteIds: aiActiveForClip ? aiLockedNoteIds : undefined,
+      aiSelectionStartBeat: aiActiveForClip ? aiSelectionStartBeat : null,
+      aiSelectionEndBeat: aiActiveForClip ? aiSelectionEndBeat : null,
+      aiPreviewNotes: aiActiveForClip ? aiPreviewNotes : undefined,
+      expressionLaneHeight,
+      expressionType,
     });
   }, [
     activeTool,
@@ -364,6 +390,13 @@ export function PianoRollCanvas({
     quantizePreviewPositions,
     selectedNoteIds,
     velocityHeight,
+    aiLockedNoteIds,
+    aiSelectionStartBeat,
+    aiSelectionEndBeat,
+    aiPreviewNotes,
+    aiActiveForClip,
+    expressionLaneHeight,
+    expressionType,
   ]);
 
   useEffect(() => {
@@ -583,6 +616,31 @@ export function PianoRollCanvas({
     quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
   }, [clip.id, selectedNoteIds, quantizeMidiNotes, gridBeats]);
 
+  const handleContextMenuLockNotes = useCallback(() => {
+    setContextMenu(null);
+    if (selectedNoteIds.size > 0) {
+      useMidiAiStore.getState().lockNotes(Array.from(selectedNoteIds));
+    }
+  }, [selectedNoteIds]);
+
+  const handleContextMenuUnlockNotes = useCallback(() => {
+    setContextMenu(null);
+    if (selectedNoteIds.size > 0) {
+      useMidiAiStore.getState().unlockNotes(Array.from(selectedNoteIds));
+    }
+  }, [selectedNoteIds]);
+
+  const handleContextMenuSetAiRegion = useCallback(() => {
+    setContextMenu(null);
+    if (selectedNoteIds.size === 0) return;
+    // Use the bounding box of selected notes as the AI region
+    const selNotes = notes.filter((n) => selectedNoteIds.has(n.id));
+    if (selNotes.length === 0) return;
+    const minBeat = Math.min(...selNotes.map((n) => n.startBeat));
+    const maxBeat = Math.max(...selNotes.map((n) => n.startBeat + n.durationBeats));
+    useMidiAiStore.getState().setSelection(minBeat, maxBeat);
+  }, [selectedNoteIds, notes]);
+
   // --- Hover cursor ---
 
   const handleCanvasMouseMove = useCallback(
@@ -751,7 +809,8 @@ export function PianoRollCanvas({
     <div ref={containerRef} className="flex-1 relative overflow-hidden">
       <canvas
         ref={mergedCanvasRef}
-        aria-label="Piano roll editor"
+        role="application"
+        aria-label="Piano roll note editor"
         data-active-tool={activeTool}
         className="absolute inset-0"
         style={{
@@ -777,6 +836,22 @@ export function PianoRollCanvas({
             onClick={handleContextMenuQuantize}
             shortcut={`${navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl'}+Q`}
           />
+          {aiActiveForClip && selectedNoteIds.size > 0 && (
+            <>
+              <ContextMenuItem
+                label="Lock for AI"
+                onClick={handleContextMenuLockNotes}
+              />
+              <ContextMenuItem
+                label="Unlock for AI"
+                onClick={handleContextMenuUnlockNotes}
+              />
+              <ContextMenuItem
+                label="Set AI Region"
+                onClick={handleContextMenuSetAiRegion}
+              />
+            </>
+          )}
         </ContextMenuWrapper>
       )}
     </div>

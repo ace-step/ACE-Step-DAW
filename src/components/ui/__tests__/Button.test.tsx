@@ -6,7 +6,7 @@ describe('Button component', () => {
   describe('rendering', () => {
     it('renders children text', () => {
       render(<Button>Click me</Button>);
-      expect(screen.getByRole('button', { name: 'Click me' })).toBeDefined();
+      screen.getByRole('button', { name: 'Click me' }); // getBy* throws if not found
     });
 
     it('renders as a button element by default', () => {
@@ -17,7 +17,7 @@ describe('Button component', () => {
 
     it('forwards additional HTML attributes', () => {
       render(<Button title="My tooltip" data-testid="my-btn">Test</Button>);
-      expect(screen.getByTestId('my-btn')).toBeDefined();
+      screen.getByTestId('my-btn'); // getBy* throws if not found
       expect(screen.getByRole('button').getAttribute('title')).toBe('My tooltip');
     });
   });
@@ -90,12 +90,12 @@ describe('Button component', () => {
     });
   });
 
-  describe('consistent transitions', () => {
-    it('includes transition on all variants', () => {
+  describe('consistent micro-interactions', () => {
+    it('uses daw-btn-interactive class on all variants', () => {
       const variants = ['default', 'primary', 'ghost', 'danger'] as const;
       variants.forEach((variant) => {
         const { unmount } = render(<Button variant={variant}>Test</Button>);
-        expect(screen.getByRole('button').className).toContain('transition-');
+        expect(screen.getByRole('button').className).toContain('daw-btn-interactive');
         unmount();
       });
     });
@@ -189,7 +189,7 @@ describe('Button component', () => {
     it('renders a spinner when loading', () => {
       render(<Button loading>Save</Button>);
       const btn = screen.getByRole('button');
-      expect(btn.querySelector('svg')).toBeTruthy();
+      expect(btn.querySelector('svg')).not.toBeNull();
     });
 
     it('sets aria-busy when loading', () => {
@@ -212,7 +212,7 @@ describe('Button component', () => {
 
     it('preserves button width by keeping children visible', () => {
       render(<Button loading>Save</Button>);
-      expect(screen.getByText('Save')).toBeDefined();
+      screen.getByText('Save'); // getBy* throws if not found
     });
   });
 
@@ -232,8 +232,8 @@ describe('Button component', () => {
           <Button>B</Button>
         </ButtonGroup>,
       );
-      expect(screen.getByText('A')).toBeDefined();
-      expect(screen.getByText('B')).toBeDefined();
+      screen.getByText('A'); // getBy* throws if not found
+      screen.getByText('B');
     });
 
     it('has role="group"', () => {
@@ -242,7 +242,7 @@ describe('Button component', () => {
           <Button>A</Button>
         </ButtonGroup>,
       );
-      expect(screen.getByRole('group')).toBeDefined();
+      screen.getByRole('group'); // getBy* throws if not found
     });
   });
 });

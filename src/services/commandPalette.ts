@@ -1,4 +1,6 @@
 import type { Project, ReverbParams, Track, TrackEffect, TrackEffectType, TrackName, TrackType } from '../types/project';
+import { useUIStore } from '../store/uiStore';
+import { canDestructivelyProcessClipAudio } from '../utils/clipAudio';
 
 export type CommandPaletteCommandKind = 'action' | 'setting' | 'parameter';
 
@@ -45,6 +47,7 @@ export interface CommandPaletteContext {
   showTempoLane: boolean;
   loopEnabled: boolean;
   metronomeEnabled: boolean;
+  punchEnabled: boolean;
   expandedTrackId: string | null;
   openPianoRollTrackId: string | null;
   openSequencerTrackId: string | null;
@@ -55,6 +58,7 @@ export interface CommandPaletteContext {
     stop: () => void | Promise<void>;
     toggleLoop: () => void;
     toggleMetronome: () => void;
+    togglePunch: () => void;
     setShowNewProjectDialog: (v: boolean) => void;
     setShowProjectListDialog: (v: boolean) => void;
     openGenerationSettings: () => void;
@@ -79,6 +83,9 @@ export interface CommandPaletteContext {
     splitClip: (clipId: string, splitTime: number) => void;
     splitClipAtZeroCrossing: (clipId: string, splitTime: number) => Promise<void>;
     removeClip: (clipId: string) => void;
+    reverseClip: (clipId: string) => Promise<void>;
+    normalizeClip: (clipId: string) => Promise<void>;
+    adjustClipGain: (clipId: string, gainDb: number) => Promise<void>;
     setEditingClip: (clipId: string | null) => void;
     deselectAll: () => void;
     openEnhancer: (clipId: string, trackId: string, range?: { start: number; end: number } | null) => void;
@@ -418,6 +425,17 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       ['K'],
       'Transport control',
     ),
+    createTrackCommand(
+      'transport:toggle-punch',
+      context.punchEnabled ? 'Disable Punch In/Out' : 'Enable Punch In/Out',
+      'Transport',
+      'action',
+      ['transport', 'punch', 'recording'],
+      ['toggle punch', 'punch recording', 'punch in out'],
+      context.actions.togglePunch,
+      ['Shift', 'P'],
+      'Transport control',
+    ),
   );
 
   // Arrangement operations — use dynamic imports since these are direct store calls
@@ -677,6 +695,44 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
 
   commands.push(
     createTrackCommand(
+      'generation:hum-to-song',
+      'Hum to Song',
+      'Generation',
+      'action',
+      ['hum', 'sing', 'melody', 'record', 'microphone', 'voice', 'generate'],
+      ['hum to song', 'sing a melody', 'record melody', 'hum melody'],
+      () => useUIStore.getState().setShowHumToSongModal(true),
+      undefined,
+      'AI generation',
+    ),
+  );
+
+  // Vocal replacement: only shown when a clip is selected
+  if (context.selectedClipIds.length === 1) {
+    const selectedClipId = context.selectedClipIds[0];
+    const selectedClip = context.project?.tracks
+      .flatMap((t) => t.clips.map((c) => ({ clip: c, track: t })))
+      .find((item) => item.clip.id === selectedClipId);
+    if (selectedClip && selectedClip.clip.generationStatus === 'ready' &&
+        selectedClip.track.trackName !== 'vocals' && selectedClip.track.trackName !== 'backing_vocals') {
+      commands.push(
+        createTrackCommand(
+          'clip:generate-vocals',
+          'Generate Vocals for Selected Clip',
+          'Generation',
+          'action',
+          ['vocal', 'vocals', 'sing', 'lyrics', 'voice', 'replacement', 'add vocals'],
+          ['generate vocals', 'add vocals', 'vocal replacement', 'sing over instrumental'],
+          () => useUIStore.getState().setVocalReplacementModal(selectedClipId),
+          undefined,
+          'AI generation',
+        ),
+      );
+    }
+  }
+
+  commands.push(
+    createTrackCommand(
       'track:add-drums',
       'Add Drums Track',
       'Tracks',
@@ -799,6 +855,57 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
           'Selected clip action',
         ),
       );
+
+      const hasAudio = !!(selectedClip.clip.isolatedAudioKey || selectedClip.clip.cumulativeMixKey);
+      const isMidi = !!selectedClip.clip.midiData;
+      if (hasAudio && !isMidi && canDestructivelyProcessClipAudio(selectedClip.clip)) {
+        commands.push(
+          createTrackCommand(
+            'clip:reverse-selected',
+            'Reverse Selected Clip Audio',
+            'Clips',
+            'action',
+            ['clip', 'reverse', 'audio', 'backwards'],
+            ['reverse clip', 'flip audio'],
+            () => context.actions.reverseClip(selectedClipId),
+            undefined,
+            'Audio processing',
+          ),
+          createTrackCommand(
+            'clip:normalize-selected',
+            'Normalize Selected Clip Audio',
+            'Clips',
+            'action',
+            ['clip', 'normalize', 'audio', 'level', 'peak'],
+            ['normalize clip', 'normalize audio level'],
+            () => context.actions.normalizeClip(selectedClipId),
+            undefined,
+            'Audio processing',
+          ),
+          createTrackCommand(
+            'clip:gain-up-selected',
+            'Gain +3 dB Selected Clip',
+            'Clips',
+            'action',
+            ['clip', 'gain', 'louder', 'volume', 'boost'],
+            ['increase clip volume', 'boost clip gain'],
+            () => context.actions.adjustClipGain(selectedClipId, 3),
+            undefined,
+            'Audio processing',
+          ),
+          createTrackCommand(
+            'clip:gain-down-selected',
+            'Gain −3 dB Selected Clip',
+            'Clips',
+            'action',
+            ['clip', 'gain', 'quieter', 'volume', 'reduce'],
+            ['decrease clip volume', 'reduce clip gain'],
+            () => context.actions.adjustClipGain(selectedClipId, -3),
+            undefined,
+            'Audio processing',
+          ),
+        );
+      }
     }
   }
 
@@ -1054,6 +1161,101 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
           },
           undefined,
           `Capture current pattern code as a version snapshot`,
+        ),
+      );
+    }
+  }
+
+  // MIDI Controller commands
+  commands.push(
+    createTrackCommand(
+      'midi:toggle-panel',
+      'Toggle MIDI Controller Panel',
+      'MIDI',
+      'action',
+      ['midi', 'controller', 'device', 'hardware', 'panel'],
+      ['show midi controllers', 'hide midi panel', 'midi devices'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        const ui = useUIStore.getState();
+        ui.setShowMidiControllerPanel(!ui.showMidiControllerPanel);
+      },
+      undefined,
+      'Show/hide MIDI controller panel',
+    ),
+    createTrackCommand(
+      'midi:learn',
+      'MIDI Learn Master Volume',
+      'MIDI',
+      'parameter',
+      ['midi', 'learn', 'map', 'assign', 'controller', 'master', 'volume'],
+      ['midi learn master volume', 'assign midi controller to master volume', 'map midi'],
+      async () => {
+        const { useMidiControllerStore } = await import('../store/midiControllerStore');
+        const { useUIStore } = await import('../store/uiStore');
+        const state = useMidiControllerStore.getState();
+        if (state.learnMode.active) {
+          state.cancelLearnMode();
+        } else {
+          useUIStore.getState().setShowMidiControllerPanel(true);
+          state.setEnabled(true);
+          state.startLearnMode('master:volume', 'Master Volume');
+        }
+      },
+      undefined,
+      'Arm MIDI learn for the master volume parameter',
+    ),
+    createTrackCommand(
+      'midi:clear-all',
+      'Clear All MIDI Mappings',
+      'MIDI',
+      'action',
+      ['midi', 'clear', 'reset', 'mappings', 'controller'],
+      ['remove all midi mappings', 'reset midi', 'clear controller assignments'],
+      async () => {
+        const { useMidiControllerStore } = await import('../store/midiControllerStore');
+        useMidiControllerStore.getState().clearAllMappings();
+      },
+      undefined,
+      'Remove all MIDI controller mappings',
+    ),
+  );
+
+  // ── Track Preset Manager ──────────────────────────────────────────────
+  commands.push(
+    createTrackCommand(
+      'track-preset-manager',
+      'Track Preset Manager',
+      'Tracks',
+      'action',
+      ['track', 'preset', 'manager', 'save', 'template', 'instrument'],
+      ['manage track presets', 'track templates', 'save track preset'],
+      () => {
+        const current = useUIStore.getState().showTrackPresetManager;
+        useUIStore.getState().setShowTrackPresetManager(!current);
+      },
+      undefined,
+      'Open track preset manager to save, browse, and apply presets',
+    ),
+  );
+
+  // ── Groove Pool ───────────────────────────────────────────────────────
+  if (context.project?.groovePool) {
+    for (const groove of context.project.groovePool) {
+      commands.push(
+        createTrackCommand(
+          `groove:delete:${groove.id}`,
+          `Delete Groove "${groove.name}"`,
+          'Groove',
+          'action',
+          ['groove', 'delete', 'remove', groove.name.toLowerCase()],
+          [`delete groove ${groove.name}`, `remove groove ${groove.name}`],
+          async () => {
+            const { useProjectStore } = await import('../store/projectStore');
+            useProjectStore.getState().deleteGrooveTemplate(groove.id);
+          },
+          undefined,
+          `Remove "${groove.name}" from the groove pool`,
         ),
       );
     }

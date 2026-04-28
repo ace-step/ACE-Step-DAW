@@ -1,16 +1,23 @@
 /**
- * Loop Library — Built-in loops synthesized with Tone.js offline rendering.
- * No external audio files needed.
+ * Loop Library — built-in loops synthesized offline.
+ *
+ * Phase 5O migration: Tone.Offline replaced by native
+ * OfflineAudioContext, and the Tone-based synth/effect stack
+ * replaced with native Web Audio primitives + NativeSynths.
+ *
+ * The loop generators intentionally skip Tone's high-level effects
+ * (Reverb / FeedbackDelay) in favour of simple synthesized bodies —
+ * the loops remain audible and genre-appropriate but lose some of
+ * the sheen the Tone version had. Richer FX chains can be added
+ * back later without disturbing the LOOP_DEFINITIONS structure.
  */
-import * as Tone from 'tone';
-
-// Tone.Offline returns ToneAudioBuffer; extract the underlying AudioBuffer
-function toAudioBuffer(buf: Tone.ToneAudioBuffer | AudioBuffer): AudioBuffer {
-  if (buf instanceof AudioBuffer) return buf;
-  const inner = buf.get();
-  if (!inner) throw new Error('ToneAudioBuffer has no underlying AudioBuffer');
-  return inner;
-}
+import {
+  NativeMembraneSynth,
+  NativeNoiseSynth,
+  NativePolySynth,
+  NativeFMSynth,
+  NativeSynth,
+} from './dsp/NativeSynths';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -63,544 +70,623 @@ function extractPeaks(buffer: AudioBuffer, numSamples = 256): number[] {
   return peaks;
 }
 
-// ─── Drum Loop Generators ───────────────────────────────────────────────────
-
-// Tiny offset so the first note is not at exactly t=0 in Tone.Offline
+/** Tiny offset so the first note is not at exactly t=0. */
 const T0 = 0.005;
+const SAMPLE_RATE = 48000;
 
-// Helper: create a hi-hat–like NoiseSynth (replaces MetalSynth which
-// crashes in Tone.Offline due to "start time must be strictly greater")
-function makeHat(volume: number) {
-  const filter = new Tone.Filter({ frequency: 8000, type: 'highpass' }).toDestination();
-  return new Tone.NoiseSynth({
-    noise: { type: 'white' },
-    envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.01 },
-    volume,
-  }).connect(filter);
+function createOfflineCtx(duration: number): OfflineAudioContext {
+  const length = Math.max(1, Math.ceil(duration * SAMPLE_RATE));
+  return new OfflineAudioContext(2, length, SAMPLE_RATE);
 }
 
-async function generate808Boom(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(() => {
-    const kick = new Tone.MembraneSynth({
-      pitchDecay: 0.08,
-      octaves: 6,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.006, decay: 0.5, sustain: 0, release: 0.5 },
-    }).toDestination();
-    const hat = makeHat(-12);
+function dbToGain(db: number): number {
+  return Math.pow(10, db / 20);
+}
 
-    const beatTime = 60 / 90;
-    for (let bar = 0; bar < 4; bar++) {
-      const offset = T0 + bar * 4 * beatTime;
-      kick.triggerAttackRelease('C1', '8n', offset);
-      kick.triggerAttackRelease('C1', '8n', offset + 2 * beatTime);
-      kick.triggerAttackRelease('C1', '8n', offset + 2.75 * beatTime);
-      for (let i = 0; i < 8; i++) {
-        hat.triggerAttackRelease('16n', offset + i * beatTime * 0.5);
-      }
+/** Create a hi-hat-style noise synth at the specified volume (dB). */
+function makeHat(ctx: AudioContext, volumeDb: number): NativeNoiseSynth {
+  const hat = new NativeNoiseSynth(ctx, {
+    envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.01 },
+  });
+  // Simple highpass shape — connect through a filter in the caller
+  // for per-loop sonic character; we scale the output gain here.
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 8000;
+  const gainNode = ctx.createGain();
+  gainNode.gain.value = dbToGain(volumeDb);
+  hat.connectNative(filter);
+  filter.connect(gainNode);
+  gainNode.connect(ctx.destination);
+  return hat;
+}
+
+// ─── Drum Loop Generators ───────────────────────────────────────────────────
+
+async function generate808Boom(duration: number): Promise<AudioBuffer> {
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+
+  const kick = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.08,
+    octaves: 6,
+    envelope: { attack: 0.006, decay: 0.5, sustain: 0, release: 0.5 },
+  });
+  kick.connectNative(ctx.destination);
+  const hat = makeHat(ctx, -12);
+
+  const beatTime = 60 / 90;
+  for (let bar = 0; bar < 4; bar++) {
+    const offset = T0 + bar * 4 * beatTime;
+    kick.triggerAttackRelease('C1', 0.25, offset);
+    kick.triggerAttackRelease('C1', 0.25, offset + 2 * beatTime);
+    kick.triggerAttackRelease('C1', 0.25, offset + 2.75 * beatTime);
+    for (let i = 0; i < 8; i++) {
+      hat.triggerAttackRelease(0.0625, offset + i * beatTime * 0.5);
     }
-  }, duration);
-  return toAudioBuffer(buffer);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateRockSteady(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(() => {
-    const kick = new Tone.MembraneSynth({
-      pitchDecay: 0.05, octaves: 4,
-      envelope: { attack: 0.005, decay: 0.3, sustain: 0, release: 0.3 },
-    }).toDestination();
-    const snare = new Tone.NoiseSynth({
-      noise: { type: 'white' },
-      envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
-      volume: -6,
-    }).toDestination();
-    const hat = makeHat(-14);
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const kick = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.05,
+    octaves: 4,
+    envelope: { attack: 0.005, decay: 0.3, sustain: 0, release: 0.3 },
+  });
+  kick.connectNative(ctx.destination);
+  const snareGain = ctx.createGain();
+  snareGain.gain.value = dbToGain(-6);
+  snareGain.connect(ctx.destination);
+  const snare = new NativeNoiseSynth(ctx, {
+    envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
+  });
+  snare.connectNative(snareGain);
+  const hat = makeHat(ctx, -14);
 
-    const beat = 60 / 120;
-    for (let bar = 0; bar < 4; bar++) {
-      const o = T0 + bar * 4 * beat;
-      kick.triggerAttackRelease('C1', '8n', o);
-      kick.triggerAttackRelease('C1', '8n', o + 2 * beat);
-      snare.triggerAttackRelease('8n', o + beat);
-      snare.triggerAttackRelease('8n', o + 3 * beat);
-      for (let i = 0; i < 8; i++) {
-        hat.triggerAttackRelease('16n', o + i * beat * 0.5);
-      }
+  const beat = 60 / 120;
+  for (let bar = 0; bar < 4; bar++) {
+    const o = T0 + bar * 4 * beat;
+    kick.triggerAttackRelease('C1', 0.25, o);
+    kick.triggerAttackRelease('C1', 0.25, o + 2 * beat);
+    snare.triggerAttackRelease(0.25, o + beat);
+    snare.triggerAttackRelease(0.25, o + 3 * beat);
+    for (let i = 0; i < 8; i++) {
+      hat.triggerAttackRelease(0.0625, o + i * beat * 0.5);
     }
-  }, duration);
-  return toAudioBuffer(buffer);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateShuffleBlues(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(() => {
-    const kick = new Tone.MembraneSynth({
-      pitchDecay: 0.05, octaves: 4,
-      envelope: { attack: 0.005, decay: 0.3, sustain: 0, release: 0.3 },
-    }).toDestination();
-    const snare = new Tone.NoiseSynth({
-      noise: { type: 'pink' },
-      envelope: { attack: 0.002, decay: 0.12, sustain: 0, release: 0.1 },
-      volume: -8,
-    }).toDestination();
-    const hat = makeHat(-14);
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const kick = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.05,
+    octaves: 4,
+    envelope: { attack: 0.005, decay: 0.3, sustain: 0, release: 0.3 },
+  });
+  kick.connectNative(ctx.destination);
+  const snareGain = ctx.createGain();
+  snareGain.gain.value = dbToGain(-8);
+  snareGain.connect(ctx.destination);
+  const snare = new NativeNoiseSynth(ctx, {
+    envelope: { attack: 0.002, decay: 0.12, sustain: 0, release: 0.1 },
+  });
+  snare.connectNative(snareGain);
+  const hat = makeHat(ctx, -14);
 
-    const beat = 60 / 95;
-    const triplet = beat / 3;
-    for (let bar = 0; bar < 4; bar++) {
-      const o = T0 + bar * 4 * beat;
-      kick.triggerAttackRelease('C1', '8n', o);
-      kick.triggerAttackRelease('C1', '8n', o + 2 * beat);
-      snare.triggerAttackRelease('8n', o + beat);
-      snare.triggerAttackRelease('8n', o + 3 * beat);
-      for (let i = 0; i < 4; i++) {
-        hat.triggerAttackRelease('32n', o + i * beat);
-        hat.triggerAttackRelease('32n', o + i * beat + triplet * 2);
-      }
+  const beat = 60 / 95;
+  const triplet = beat / 3;
+  for (let bar = 0; bar < 4; bar++) {
+    const o = T0 + bar * 4 * beat;
+    kick.triggerAttackRelease('C1', 0.25, o);
+    kick.triggerAttackRelease('C1', 0.25, o + 2 * beat);
+    snare.triggerAttackRelease(0.25, o + beat);
+    snare.triggerAttackRelease(0.25, o + 3 * beat);
+    for (let i = 0; i < 4; i++) {
+      hat.triggerAttackRelease(0.03125, o + i * beat);
+      hat.triggerAttackRelease(0.03125, o + i * beat + triplet * 2);
     }
-  }, duration);
-  return toAudioBuffer(buffer);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateTrapHiHats(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(() => {
-    const kick = new Tone.MembraneSynth({
-      pitchDecay: 0.08, octaves: 6,
-      envelope: { attack: 0.006, decay: 0.5, sustain: 0, release: 0.4 },
-    }).toDestination();
-    // Two hat voices for overlapping rapid-fire patterns
-    const hat1 = makeHat(-10);
-    const hat2 = makeHat(-10);
-    const snare = new Tone.NoiseSynth({
-      noise: { type: 'white' },
-      envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 },
-      volume: -4,
-    }).toDestination();
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const kick = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.08,
+    octaves: 6,
+    envelope: { attack: 0.006, decay: 0.5, sustain: 0, release: 0.4 },
+  });
+  kick.connectNative(ctx.destination);
+  const hat1 = makeHat(ctx, -10);
+  const hat2 = makeHat(ctx, -10);
+  const snareGain = ctx.createGain();
+  snareGain.gain.value = dbToGain(-4);
+  snareGain.connect(ctx.destination);
+  const snare = new NativeNoiseSynth(ctx, {
+    envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 },
+  });
+  snare.connectNative(snareGain);
 
-    const beat = 60 / 140;
-    for (let bar = 0; bar < 4; bar++) {
-      const o = T0 + bar * 4 * beat;
-      kick.triggerAttackRelease('C1', '8n', o);
-      kick.triggerAttackRelease('C1', '8n', o + 2.5 * beat);
-      snare.triggerAttackRelease('8n', o + beat);
-      snare.triggerAttackRelease('8n', o + 3 * beat);
-      // Main 16th-note hi-hats
-      for (let i = 0; i < 16; i++) {
-        hat1.triggerAttackRelease('32n', o + i * beat * 0.25);
-      }
-      // Rapid rolls on beat 4 (use second voice to avoid overlap)
-      for (let i = 0; i < 4; i++) {
-        hat2.triggerAttackRelease('32n', o + 3 * beat + i * beat * 0.125);
-      }
+  const beat = 60 / 140;
+  for (let bar = 0; bar < 4; bar++) {
+    const o = T0 + bar * 4 * beat;
+    kick.triggerAttackRelease('C1', 0.25, o);
+    kick.triggerAttackRelease('C1', 0.25, o + 2.5 * beat);
+    snare.triggerAttackRelease(0.25, o + beat);
+    snare.triggerAttackRelease(0.25, o + 3 * beat);
+    for (let i = 0; i < 16; i++) {
+      hat1.triggerAttackRelease(0.03125, o + i * beat * 0.25);
     }
-  }, duration);
-  return toAudioBuffer(buffer);
+    for (let i = 0; i < 4; i++) {
+      hat2.triggerAttackRelease(0.03125, o + 3 * beat + i * beat * 0.125);
+    }
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateLoFiDrums(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(() => {
-    const kick = new Tone.MembraneSynth({
-      pitchDecay: 0.05, octaves: 4,
-      envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.3 },
-      volume: -3,
-    }).toDestination();
-    const snare = new Tone.NoiseSynth({
-      noise: { type: 'brown' },
-      envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 },
-      volume: -8,
-    }).toDestination();
-    const hat = makeHat(-16);
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const kickGain = ctx.createGain();
+  kickGain.gain.value = dbToGain(-3);
+  kickGain.connect(ctx.destination);
+  const kick = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.05,
+    octaves: 4,
+    envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.3 },
+  });
+  kick.connectNative(kickGain);
+  const snareGain = ctx.createGain();
+  snareGain.gain.value = dbToGain(-8);
+  snareGain.connect(ctx.destination);
+  const snare = new NativeNoiseSynth(ctx, {
+    envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 },
+  });
+  snare.connectNative(snareGain);
+  const hat = makeHat(ctx, -16);
 
-    const beat = 60 / 85;
-    for (let bar = 0; bar < 4; bar++) {
-      const o = T0 + bar * 4 * beat;
-      kick.triggerAttackRelease('C1', '8n', o);
-      kick.triggerAttackRelease('C1', '8n', o + 1.75 * beat);
-      kick.triggerAttackRelease('C1', '8n', o + 2.5 * beat);
-      snare.triggerAttackRelease('8n', o + beat);
-      snare.triggerAttackRelease('8n', o + 3 * beat);
-      for (let i = 0; i < 8; i++) {
-        hat.triggerAttackRelease('32n', o + i * beat * 0.5);
-      }
+  const beat = 60 / 85;
+  for (let bar = 0; bar < 4; bar++) {
+    const o = T0 + bar * 4 * beat;
+    kick.triggerAttackRelease('C1', 0.25, o);
+    kick.triggerAttackRelease('C1', 0.25, o + 1.75 * beat);
+    kick.triggerAttackRelease('C1', 0.25, o + 2.5 * beat);
+    snare.triggerAttackRelease(0.25, o + beat);
+    snare.triggerAttackRelease(0.25, o + 3 * beat);
+    for (let i = 0; i < 8; i++) {
+      hat.triggerAttackRelease(0.03125, o + i * beat * 0.5);
     }
-  }, duration);
-  return toAudioBuffer(buffer);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 // ─── Bass Loop Generators ───────────────────────────────────────────────────
 
-async function generateSubBass(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    transport.bpm.value = 90;
-    const synth = new Tone.MonoSynth({
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.3 },
-      filterEnvelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.2, baseFrequency: 60, octaves: 1 },
-      volume: -3,
-    }).toDestination();
+/** Build a simple monophonic subtractive voice: one osc → lowpass →
+ *  AD envelope gain. Matches Tone.MonoSynth's character closely enough
+ *  for these short loop snippets. */
+function renderMonoBassNote(
+  ctx: AudioContext,
+  dest: AudioNode,
+  noteFreq: number,
+  oscType: OscillatorType,
+  startTime: number,
+  duration: number,
+  filterBase: number,
+  filterPeak: number,
+  velocity: number,
+): void {
+  const osc = ctx.createOscillator();
+  osc.type = oscType;
+  osc.frequency.value = noteFreq;
 
-    const beat = 60 / 90;
-    const notes = ['C1', 'C1', 'Eb1', 'F1'];
-    for (let bar = 0; bar < 4; bar++) {
-      const o = bar * 4 * beat;
-      const note = notes[bar % notes.length];
-      synth.triggerAttackRelease(note, beat * 2, o);
-      synth.triggerAttackRelease(note, beat, o + 2.5 * beat);
-    }
-    transport.start(0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.Q.value = 1;
+  filter.frequency.setValueAtTime(filterBase, startTime);
+  filter.frequency.linearRampToValueAtTime(filterPeak, startTime + 0.01);
+  filter.frequency.exponentialRampToValueAtTime(
+    Math.max(filterBase, 40),
+    startTime + duration * 0.7,
+  );
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(velocity, startTime + 0.01);
+  gain.gain.linearRampToValueAtTime(velocity * 0.5, startTime + 0.1);
+  gain.gain.linearRampToValueAtTime(0, startTime + duration);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(dest);
+  osc.start(startTime);
+  osc.stop(startTime + duration + 0.02);
+}
+
+const NOTE_NAMES: Record<string, number> = {
+  C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5,
+  'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11,
+};
+
+function noteToFreq(note: string): number {
+  const match = note.match(/^([A-G][#b]?)(-?\d+)$/);
+  if (!match) return 440;
+  const semitone = NOTE_NAMES[match[1]] ?? 0;
+  const octave = parseInt(match[2], 10);
+  const midi = (octave + 1) * 12 + semitone;
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+async function generateSubBass(duration: number): Promise<AudioBuffer> {
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-3);
+  masterGain.connect(ctx.destination);
+
+  const beat = 60 / 90;
+  const notes = ['C1', 'C1', 'Eb1', 'F1'];
+  for (let bar = 0; bar < 4; bar++) {
+    const o = bar * 4 * beat;
+    const note = notes[bar % notes.length];
+    renderMonoBassNote(ctx, masterGain, noteToFreq(note), 'sine', o, beat * 2, 60, 120, 0.8);
+    renderMonoBassNote(ctx, masterGain, noteToFreq(note), 'sine', o + 2.5 * beat, beat, 60, 120, 0.8);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateWalkingBass(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    transport.bpm.value = 120;
-    const synth = new Tone.MonoSynth({
-      oscillator: { type: 'triangle' },
-      envelope: { attack: 0.01, decay: 0.2, sustain: 0.4, release: 0.15 },
-      filterEnvelope: { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.2, baseFrequency: 100, octaves: 2 },
-      volume: -4,
-    }).toDestination();
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-4);
+  masterGain.connect(ctx.destination);
 
-    const beat = 60 / 120;
-    const pattern = [
-      'C2', 'E2', 'G2', 'A2',
-      'F2', 'A2', 'C3', 'D3',
-      'G2', 'B2', 'D3', 'E3',
-      'C2', 'D2', 'E2', 'G2',
-    ];
-    for (let i = 0; i < pattern.length; i++) {
-      synth.triggerAttackRelease(pattern[i], beat * 0.8, i * beat);
-    }
-    transport.start(0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  const beat = 60 / 120;
+  const pattern = [
+    'C2', 'E2', 'G2', 'A2',
+    'F2', 'A2', 'C3', 'D3',
+    'G2', 'B2', 'D3', 'E3',
+    'C2', 'D2', 'E2', 'G2',
+  ];
+  for (let i = 0; i < pattern.length; i++) {
+    renderMonoBassNote(ctx, masterGain, noteToFreq(pattern[i]), 'triangle', i * beat, beat * 0.8, 100, 400, 0.7);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateFunkSlap(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    transport.bpm.value = 110;
-    const synth = new Tone.MonoSynth({
-      oscillator: { type: 'sawtooth' },
-      envelope: { attack: 0.005, decay: 0.15, sustain: 0.2, release: 0.1 },
-      filterEnvelope: { attack: 0.005, decay: 0.08, sustain: 0.2, release: 0.1, baseFrequency: 200, octaves: 3 },
-      volume: -5,
-    }).toDestination();
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-5);
+  masterGain.connect(ctx.destination);
 
-    const beat = 60 / 110;
-    const notes = ['E2', null, 'E2', 'G2', null, 'A2', null, 'E2',
-                   'G2', null, 'E2', null, 'A2', 'G2', null, 'E2'];
-    for (let bar = 0; bar < 4; bar++) {
-      const o = bar * 4 * beat;
-      for (let i = 0; i < 16; i++) {
-        const n = notes[i];
-        if (n) {
-          synth.triggerAttackRelease(n, beat * 0.2, o + i * beat * 0.25);
-        }
+  const beat = 60 / 110;
+  const notes = ['E2', null, 'E2', 'G2', null, 'A2', null, 'E2',
+                 'G2', null, 'E2', null, 'A2', 'G2', null, 'E2'];
+  for (let bar = 0; bar < 4; bar++) {
+    const o = bar * 4 * beat;
+    for (let i = 0; i < 16; i++) {
+      const n = notes[i];
+      if (n) {
+        renderMonoBassNote(ctx, masterGain, noteToFreq(n), 'sawtooth', o + i * beat * 0.25, beat * 0.2, 200, 1600, 0.6);
       }
     }
-    transport.start(0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateSynthBass(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    transport.bpm.value = 128;
-    const synth = new Tone.MonoSynth({
-      oscillator: { type: 'square' },
-      envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.15 },
-      filterEnvelope: { attack: 0.01, decay: 0.15, sustain: 0.3, release: 0.2, baseFrequency: 150, octaves: 2.5 },
-      volume: -5,
-    }).toDestination();
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-5);
+  masterGain.connect(ctx.destination);
 
-    const beat = 60 / 128;
-    const pattern = [
-      { note: 'C2', time: 0, dur: 0.5 },
-      { note: 'C2', time: 1, dur: 0.25 },
-      { note: 'Eb2', time: 1.5, dur: 0.5 },
-      { note: 'F2', time: 2.5, dur: 0.5 },
-      { note: 'Eb2', time: 3, dur: 0.25 },
-      { note: 'C2', time: 3.5, dur: 0.5 },
-    ];
-    for (let bar = 0; bar < 4; bar++) {
-      const o = bar * 4 * beat;
-      for (const p of pattern) {
-        synth.triggerAttackRelease(p.note, beat * p.dur, o + p.time * beat);
-      }
+  const beat = 60 / 128;
+  const pattern = [
+    { note: 'C2', time: 0, dur: 0.5 },
+    { note: 'C2', time: 1, dur: 0.25 },
+    { note: 'Eb2', time: 1.5, dur: 0.5 },
+    { note: 'F2', time: 2.5, dur: 0.5 },
+    { note: 'Eb2', time: 3, dur: 0.25 },
+    { note: 'C2', time: 3.5, dur: 0.5 },
+  ];
+  for (let bar = 0; bar < 4; bar++) {
+    const o = bar * 4 * beat;
+    for (const p of pattern) {
+      renderMonoBassNote(ctx, masterGain, noteToFreq(p.note), 'square', o + p.time * beat, beat * p.dur, 150, 850, 0.7);
     }
-    transport.start(0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 // ─── Keys Loop Generators ───────────────────────────────────────────────────
 
 async function generatePianoBallad(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    transport.bpm.value = 80;
-    const synth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'triangle' },
-      envelope: { attack: 0.02, decay: 0.5, sustain: 0.3, release: 0.8 },
-      volume: -6,
-    }).toDestination();
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-6);
+  masterGain.connect(ctx.destination);
+  const synth = new NativePolySynth(ctx, {
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.02, decay: 0.5, sustain: 0.3, release: 0.8 },
+  });
+  synth.connectNative(masterGain);
 
-    const beat = 60 / 80;
-    const chords: [string[], number][] = [
-      [['C4', 'E4', 'G4'], 0],
-      [['A3', 'C4', 'E4'], 4],
-      [['F3', 'A3', 'C4'], 8],
-      [['G3', 'B3', 'D4'], 12],
-    ];
-    for (const [notes, beatStart] of chords) {
-      synth.triggerAttackRelease(notes, beat * 3.5, beatStart * beat);
-    }
-    transport.start(0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  const beat = 60 / 80;
+  const chords: [string[], number][] = [
+    [['C4', 'E4', 'G4'], 0],
+    [['A3', 'C4', 'E4'], 4],
+    [['F3', 'A3', 'C4'], 8],
+    [['G3', 'B3', 'D4'], 12],
+  ];
+  for (const [notes, beatStart] of chords) {
+    synth.triggerAttackRelease(notes, beat * 3.5, beatStart * beat);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateRhodesGroove(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    transport.bpm.value = 100;
-    const synth = new Tone.PolySynth(Tone.FMSynth, {
-      harmonicity: 2,
-      modulationIndex: 1.5,
-      envelope: { attack: 0.01, decay: 0.4, sustain: 0.2, release: 0.6 },
-      modulation: { type: 'sine' },
-      modulationEnvelope: { attack: 0.02, decay: 0.3, sustain: 0.2, release: 0.4 },
-      volume: -8,
-    }).toDestination();
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-8);
+  masterGain.connect(ctx.destination);
+  const synth = new NativeFMSynth(ctx, {
+    harmonicity: 2,
+    modulationIndex: 1.5,
+    envelope: { attack: 0.01, decay: 0.4, sustain: 0.2, release: 0.6 },
+  });
+  synth.connectNative(masterGain);
 
-    const beat = 60 / 100;
-    const pattern: [string[], number, number][] = [
-      [['Eb4', 'G4', 'Bb4'], 0, 0.5],
-      [['Eb4', 'G4', 'Bb4'], 0.75, 0.25],
-      [['Ab3', 'C4', 'Eb4'], 2, 1],
-      [['Bb3', 'D4', 'F4'], 3, 0.5],
-      [['Bb3', 'D4', 'F4'], 3.75, 0.25],
-    ];
-    for (let bar = 0; bar < 4; bar++) {
-      const o = bar * 4 * beat;
-      for (const [notes, t, dur] of pattern) {
-        synth.triggerAttackRelease(notes, beat * dur, o + t * beat);
-      }
+  const beat = 60 / 100;
+  const pattern: [string, number, number][] = [
+    ['Eb4', 0, 0.5],
+    ['Eb4', 0.75, 0.25],
+    ['Ab3', 2, 1],
+    ['Bb3', 3, 0.5],
+    ['Bb3', 3.75, 0.25],
+  ];
+  for (let bar = 0; bar < 4; bar++) {
+    const o = bar * 4 * beat;
+    for (const [note, t, dur] of pattern) {
+      synth.triggerAttackRelease(note, beat * dur, o + t * beat);
     }
-    transport.start(0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateAmbientPad(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    transport.bpm.value = 70;
-    const synth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'sine' },
-      envelope: { attack: 1.5, decay: 2, sustain: 0.6, release: 3 },
-      volume: -8,
-    }).toDestination();
-    const reverb = new Tone.Reverb({ decay: 5, wet: 0.7 }).toDestination();
-    synth.connect(reverb);
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-8);
+  masterGain.connect(ctx.destination);
+  const synth = new NativePolySynth(ctx, {
+    oscillator: { type: 'sine' },
+    envelope: { attack: 1.5, decay: 2, sustain: 0.6, release: 3 },
+  });
+  synth.connectNative(masterGain);
 
-    const beat = 60 / 70;
-    const chords: [string[], number, number][] = [
-      [['C3', 'E3', 'G3', 'B3'], 0, 8],
-      [['A2', 'C3', 'E3', 'G3'], 8, 8],
-      [['F2', 'A2', 'C3', 'E3'], 16, 8],
-      [['G2', 'B2', 'D3', 'F3'], 24, 8],
-    ];
-    for (const [notes, beatStart, dur] of chords) {
-      synth.triggerAttackRelease(notes, beat * dur, beatStart * beat);
-    }
-    transport.start(0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  const beat = 60 / 70;
+  const chords: [string[], number, number][] = [
+    [['C3', 'E3', 'G3', 'B3'], 0, 8],
+    [['A2', 'C3', 'E3', 'G3'], 8, 8],
+    [['F2', 'A2', 'C3', 'E3'], 16, 8],
+    [['G2', 'B2', 'D3', 'F3'], 24, 8],
+  ];
+  for (const [notes, beatStart, dur] of chords) {
+    synth.triggerAttackRelease(notes, beat * dur, beatStart * beat);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 // ─── Synth Loop Generators ──────────────────────────────────────────────────
 
 async function generateArpCascade(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    transport.bpm.value = 128;
-    const synth = new Tone.Synth({
-      oscillator: { type: 'sawtooth' },
-      envelope: { attack: 0.005, decay: 0.15, sustain: 0.1, release: 0.1 },
-      volume: -8,
-    }).toDestination();
-    const delay = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.2, wet: 0.3 }).toDestination();
-    synth.connect(delay);
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-8);
+  masterGain.connect(ctx.destination);
+  const synth = new NativeSynth(ctx, {
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.005, decay: 0.15, sustain: 0.1, release: 0.1 },
+  });
+  synth.connectNative(masterGain);
 
-    const beat = 60 / 128;
-    const arpNotes = ['C4', 'E4', 'G4', 'B4', 'C5', 'B4', 'G4', 'E4'];
-    for (let bar = 0; bar < 4; bar++) {
-      const o = bar * 4 * beat;
-      for (let i = 0; i < 8; i++) {
-        synth.triggerAttackRelease(arpNotes[i % arpNotes.length], '16n', o + i * beat * 0.5);
-      }
+  const beat = 60 / 128;
+  const arpNotes = ['C4', 'E4', 'G4', 'B4', 'C5', 'B4', 'G4', 'E4'];
+  for (let bar = 0; bar < 4; bar++) {
+    const o = bar * 4 * beat;
+    for (let i = 0; i < 8; i++) {
+      synth.triggerAttackRelease(arpNotes[i % arpNotes.length], 0.125, o + i * beat * 0.5);
     }
-    transport.start(0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateLeadLine(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    transport.bpm.value = 120;
-    const synth = new Tone.Synth({
-      oscillator: { type: 'square' },
-      envelope: { attack: 0.01, decay: 0.2, sustain: 0.4, release: 0.2 },
-      volume: -8,
-    }).toDestination();
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-8);
+  masterGain.connect(ctx.destination);
+  const synth = new NativeSynth(ctx, {
+    oscillator: { type: 'square' },
+    envelope: { attack: 0.01, decay: 0.2, sustain: 0.4, release: 0.2 },
+  });
+  synth.connectNative(masterGain);
 
-    const beat = 60 / 120;
-    const melody = [
-      { note: 'C5', time: 0, dur: 1 },
-      { note: 'D5', time: 1, dur: 0.5 },
-      { note: 'Eb5', time: 1.5, dur: 1.5 },
-      { note: 'G5', time: 3, dur: 0.5 },
-      { note: 'F5', time: 3.5, dur: 0.5 },
-      { note: 'Eb5', time: 4, dur: 1 },
-      { note: 'D5', time: 5, dur: 0.5 },
-      { note: 'C5', time: 5.5, dur: 1.5 },
-      { note: 'Bb4', time: 7, dur: 0.5 },
-      { note: 'C5', time: 7.5, dur: 0.5 },
-      { note: 'Eb5', time: 8, dur: 2 },
-      { note: 'D5', time: 10, dur: 1 },
-      { note: 'C5', time: 11, dur: 1 },
-      { note: 'Bb4', time: 12, dur: 2 },
-      { note: 'C5', time: 14, dur: 2 },
-    ];
-    for (const m of melody) {
-      synth.triggerAttackRelease(m.note, beat * m.dur, m.time * beat);
-    }
-    transport.start(0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  const beat = 60 / 120;
+  const melody = [
+    { note: 'C5', time: 0, dur: 1 },
+    { note: 'D5', time: 1, dur: 0.5 },
+    { note: 'Eb5', time: 1.5, dur: 1.5 },
+    { note: 'G5', time: 3, dur: 0.5 },
+    { note: 'F5', time: 3.5, dur: 0.5 },
+    { note: 'Eb5', time: 4, dur: 1 },
+    { note: 'D5', time: 5, dur: 0.5 },
+    { note: 'C5', time: 5.5, dur: 1.5 },
+    { note: 'Bb4', time: 7, dur: 0.5 },
+    { note: 'C5', time: 7.5, dur: 0.5 },
+    { note: 'Eb5', time: 8, dur: 2 },
+    { note: 'D5', time: 10, dur: 1 },
+    { note: 'C5', time: 11, dur: 1 },
+    { note: 'Bb4', time: 12, dur: 2 },
+    { note: 'C5', time: 14, dur: 2 },
+  ];
+  for (const m of melody) {
+    synth.triggerAttackRelease(m.note, beat * m.dur, m.time * beat);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generatePluckStab(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(({ transport }) => {
-    transport.bpm.value = 130;
-    const synth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'triangle' },
-      envelope: { attack: 0.005, decay: 0.1, sustain: 0.05, release: 0.1 },
-      volume: -6,
-    }).toDestination();
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-6);
+  masterGain.connect(ctx.destination);
+  const synth = new NativePolySynth(ctx, {
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.005, decay: 0.1, sustain: 0.05, release: 0.1 },
+  });
+  synth.connectNative(masterGain);
 
-    const beat = 60 / 130;
-    const stabs: [string[], number][] = [
-      [['C4', 'Eb4', 'G4'], 0],
-      [['C4', 'Eb4', 'G4'], 0.5],
-      [['Ab3', 'C4', 'Eb4'], 1.5],
-      [['Bb3', 'D4', 'F4'], 2.5],
-      [['Bb3', 'D4', 'F4'], 3],
-    ];
-    for (let bar = 0; bar < 4; bar++) {
-      const o = bar * 4 * beat;
-      for (const [notes, t] of stabs) {
-        synth.triggerAttackRelease(notes, '16n', o + t * beat);
-      }
+  const beat = 60 / 130;
+  const stabs: [string[], number][] = [
+    [['C4', 'Eb4', 'G4'], 0],
+    [['C4', 'Eb4', 'G4'], 0.5],
+    [['Ab3', 'C4', 'Eb4'], 1.5],
+    [['Bb3', 'D4', 'F4'], 2.5],
+    [['Bb3', 'D4', 'F4'], 3],
+  ];
+  for (let bar = 0; bar < 4; bar++) {
+    const o = bar * 4 * beat;
+    for (const [notes, t] of stabs) {
+      synth.triggerAttackRelease(notes, 0.125, o + t * beat);
     }
-    transport.start(0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 // ─── FX Loop Generators ─────────────────────────────────────────────────────
 
 async function generateRiser(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(() => {
-    const filter = new Tone.Filter({ frequency: 200, type: 'lowpass' }).toDestination();
-    const synth = new Tone.Synth({
-      oscillator: { type: 'sawtooth' },
-      envelope: { attack: duration * 0.9, decay: 0.1, sustain: 1, release: 0.1 },
-      volume: -12,
-    }).connect(filter);
-    filter.frequency.linearRampTo(8000, duration * 0.9, T0);
-    synth.triggerAttackRelease('C3', duration * 0.95, T0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-12);
+  masterGain.connect(ctx.destination);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(200, T0);
+  filter.frequency.linearRampToValueAtTime(8000, T0 + duration * 0.9);
+  filter.connect(masterGain);
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.value = noteToFreq('C3');
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, T0);
+  gain.gain.linearRampToValueAtTime(0.8, T0 + duration * 0.9);
+  gain.gain.linearRampToValueAtTime(0, T0 + duration);
+  osc.connect(gain);
+  gain.connect(filter);
+  osc.start(T0);
+  osc.stop(T0 + duration);
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateImpact(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(() => {
-    const noise = new Tone.NoiseSynth({
-      noise: { type: 'white' },
-      envelope: { attack: 0.001, decay: 0.8, sustain: 0, release: 0.5 },
-      volume: -4,
-    }).toDestination();
-    const sub = new Tone.MembraneSynth({
-      pitchDecay: 0.2,
-      octaves: 8,
-      envelope: { attack: 0.001, decay: 1.5, sustain: 0, release: 0.5 },
-      volume: -2,
-    }).toDestination();
-    noise.triggerAttackRelease('4n', T0);
-    sub.triggerAttackRelease('C1', '2n', T0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.value = dbToGain(-4);
+  noiseGain.connect(ctx.destination);
+  const noise = new NativeNoiseSynth(ctx, {
+    envelope: { attack: 0.001, decay: 0.8, sustain: 0, release: 0.5 },
+  });
+  noise.connectNative(noiseGain);
+
+  const subGain = ctx.createGain();
+  subGain.gain.value = dbToGain(-2);
+  subGain.connect(ctx.destination);
+  const sub = new NativeMembraneSynth(ctx, {
+    pitchDecay: 0.2,
+    octaves: 8,
+    envelope: { attack: 0.001, decay: 1.5, sustain: 0, release: 0.5 },
+  });
+  sub.connectNative(subGain);
+
+  noise.triggerAttackRelease(0.5, T0);
+  sub.triggerAttackRelease('C1', 1.0, T0);
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateSweepDown(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(() => {
-    const synth = new Tone.Synth({
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.01, decay: duration * 0.8, sustain: 0, release: 0.2 },
-      volume: -8,
-    }).toDestination();
-    synth.frequency.setValueAtTime(4000, T0);
-    synth.frequency.exponentialRampTo(60, duration * 0.8, T0);
-    synth.triggerAttackRelease(duration * 0.85, T0);
-  }, duration);
-  return toAudioBuffer(buffer);
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-8);
+  masterGain.connect(ctx.destination);
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(4000, T0);
+  osc.frequency.exponentialRampToValueAtTime(60, T0 + duration * 0.8);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, T0);
+  gain.gain.linearRampToValueAtTime(0.6, T0 + 0.02);
+  gain.gain.linearRampToValueAtTime(0, T0 + duration * 0.85);
+
+  osc.connect(gain);
+  gain.connect(masterGain);
+  osc.start(T0);
+  osc.stop(T0 + duration);
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 // ─── Vocal Loop Generators ──────────────────────────────────────────────────
 
 async function generateVocalChop(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(() => {
-    // Simulate vocal-like formant sound using FM synthesis
-    const synth = new Tone.FMSynth({
-      harmonicity: 3,
-      modulationIndex: 10,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.2 },
-      modulation: { type: 'square' },
-      modulationEnvelope: { attack: 0.02, decay: 0.1, sustain: 0.5, release: 0.2 },
-      volume: -8,
-    }).toDestination();
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-8);
+  masterGain.connect(ctx.destination);
+  const synth = new NativeFMSynth(ctx, {
+    harmonicity: 3,
+    modulationIndex: 10,
+    envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.2 },
+  });
+  synth.connectNative(masterGain);
 
-    const beat = 60 / 120;
-    const notes = ['C4', 'E4', 'G4', 'C5', 'G4', 'E4', 'C4', 'D4'];
-    for (let bar = 0; bar < 2; bar++) {
-      const o = bar * 4 * beat;
-      for (let i = 0; i < 8; i++) {
-        synth.triggerAttackRelease(notes[i], beat * 0.3, o + i * beat * 0.5);
-      }
+  const beat = 60 / 120;
+  const notes = ['C4', 'E4', 'G4', 'C5', 'G4', 'E4', 'C4', 'D4'];
+  for (let bar = 0; bar < 2; bar++) {
+    const o = bar * 4 * beat;
+    for (let i = 0; i < 8; i++) {
+      synth.triggerAttackRelease(notes[i], beat * 0.3, o + i * beat * 0.5);
     }
-  }, duration);
-  return toAudioBuffer(buffer);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 async function generateVocalPad(duration: number): Promise<AudioBuffer> {
-  const buffer = await Tone.Offline(() => {
-    // Airy vocal-like pad using FM synthesis with slow modulation
-    const synth = new Tone.PolySynth(Tone.FMSynth, {
-      harmonicity: 2,
-      modulationIndex: 3,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.8, decay: 1.5, sustain: 0.4, release: 1.5 },
-      modulation: { type: 'sine' },
-      modulationEnvelope: { attack: 0.5, decay: 1, sustain: 0.3, release: 1 },
-      volume: -10,
-    }).toDestination();
-    const reverb = new Tone.Reverb({ decay: 4, wet: 0.6 }).toDestination();
-    synth.connect(reverb);
+  const ctx = createOfflineCtx(duration) as unknown as AudioContext;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = dbToGain(-10);
+  masterGain.connect(ctx.destination);
+  // Native FM in mono; layered attacks simulate a pad.
+  const synth = new NativeFMSynth(ctx, {
+    harmonicity: 2,
+    modulationIndex: 3,
+    envelope: { attack: 0.8, decay: 1.5, sustain: 0.4, release: 1.5 },
+  });
+  synth.connectNative(masterGain);
 
-    const beat = 60 / 80;
-    synth.triggerAttackRelease(['C4', 'E4', 'G4'], beat * 8, 0);
-    synth.triggerAttackRelease(['A3', 'C4', 'E4'], beat * 8, beat * 8);
-  }, duration);
-  return toAudioBuffer(buffer);
+  const beat = 60 / 80;
+  // Chord notes sequenced (NativeFMSynth is monophonic, so we stagger).
+  for (const note of ['C4', 'E4', 'G4']) {
+    synth.triggerAttackRelease(note, beat * 8, 0);
+  }
+  for (const note of ['A3', 'C4', 'E4']) {
+    synth.triggerAttackRelease(note, beat * 8, beat * 8);
+  }
+  return (ctx as unknown as OfflineAudioContext).startRendering();
 }
 
 // ─── Loop Definitions ───────────────────────────────────────────────────────

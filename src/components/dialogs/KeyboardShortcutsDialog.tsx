@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useShortcutsStore } from '../../store/shortcutsStore';
 import { SHORTCUT_ACTIONS, SHORTCUT_CATEGORIES } from '../../constants/shortcutDefaults';
 import { comboToDisplay } from '../../utils/shortcutUtils';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 function Key({ label }: { label: string }) {
   return (
@@ -16,6 +17,8 @@ export function KeyboardShortcutsDialog() {
   const show = useUIStore((s) => s.showKeyboardShortcutsDialog);
   const setShow = useUIStore((s) => s.setShowKeyboardShortcutsDialog);
   const getCombo = useShortcutsStore((s) => s.getCombo);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, show);
 
   const sections = useMemo(() => (
     SHORTCUT_CATEGORIES.map((category) => ({
@@ -30,14 +33,19 @@ export function KeyboardShortcutsDialog() {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onMouseDown={(event) => event.target === event.currentTarget && setShow(false)}
+      onKeyDown={(e) => { if (e.key === 'Escape') setShow(false); }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="keyboard-shortcuts-title"
         className="w-[680px] max-h-[85vh] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-daw-border">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-100">Keyboard Shortcuts</h2>
+            <h2 id="keyboard-shortcuts-title" className="text-sm font-semibold text-zinc-100">Keyboard Shortcuts</h2>
             <p className="text-[11px] text-zinc-400 mt-1">
               Core single-key shortcuts ignore focused text fields and contenteditable editors. R arms the focused track first, then toggles recording.
             </p>

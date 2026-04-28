@@ -31,14 +31,25 @@
   --fx-reverb: #8b6fc0;
   --fx-delay: #9478c4;
   --fx-convolver: #a07cc8;
+  --fx-algorithmic-reverb: #7a6fb8;
 
   /* ── Modulation family (teal/cyan) ── */
   --fx-filter: #4a9da8;
   --fx-chorus: #5aa8b4;
   --fx-flanger: #4dab94;
-  --fx-phaser: #c48a54;
+  --fx-phaser: #5db8a4;
 
   /* ── Distortion family (warm red/coral) ── */
   --fx-distortion: #c46454;
-  --fx-saturation: #c46454;
+  --fx-saturation: #b87858;
+
+  /* ── Utility family (neutral slate) ── */
+  --fx-stereo-imager: #7a8ab4;
+  --fx-noise-reduction: #8a8a8a;
+
+  /* ── Spectral family (electric indigo/magenta) ── */
+  --fx-spectral-freeze: #7c5cbf;
+  --fx-spectral-blur: #8b6fc8;
+  --fx-spectral-filter: #9a7ed4;
+  --fx-spectral-morph: #a88de0;
 }

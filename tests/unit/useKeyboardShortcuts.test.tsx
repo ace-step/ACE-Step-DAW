@@ -338,4 +338,29 @@ describe('useKeyboardShortcuts', () => {
 
     expect(transportSpies.play).toHaveBeenCalledTimes(1);
   });
+
+  it('does not have duplicate transport shortcut handlers (regression #1581)', async () => {
+    // Static analysis is used here because the duplicate handlers were dead code
+    // (the first handler returns before the duplicate executes), so behavioral
+    // tests cannot distinguish single vs duplicate handlers.
+    const [{ dirname, resolve }, { readFileSync }, { fileURLToPath }] = await Promise.all([
+      import('path'),
+      import('fs'),
+      import('url'),
+    ]);
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const filePath = resolve(testDir, '../../src/hooks/useKeyboardShortcuts.ts');
+    const source = readFileSync(filePath, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+    const transportActions = ['transport.stop', 'transport.loop', 'transport.metronome'];
+    for (const action of transportActions) {
+      const escaped = action.replace('.', '\\.');
+      const lines = source.split('\n').filter((line) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('//') || trimmed.startsWith('*')) return false;
+        return new RegExp(`matches\\(['"\`]${escaped}['"\`]\\)`).test(trimmed);
+      });
+      expect(lines.length, `"${action}" handler should appear exactly once`).toBe(1);
+    }
+  });
 });

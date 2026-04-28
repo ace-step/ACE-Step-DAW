@@ -1,0 +1,37 @@
+[package]
+name = "ace-step-daw"
+version = "0.1.0"
+description = "ACE-Step DAW — AI-native music production workstation"
+authors = ["ACE Studio <junmin@acestudio.ai>"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/ace-step/ACE-Step-DAW"
+
+[lib]
+name = "ace_step_daw_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ace-dsp-core = { path = "../crates/ace-dsp-core" }
+ace-plugin-host = { path = "../crates/ace-plugin-host" }
+cpal = "0.15"
+crossbeam-channel = "0.5"
+ringbuf = "0.4"
+thiserror = "1"
+# arc-swap: wait-free reader / amortized-O(1) writer atomic swap of
+# Arc<T>. Used to publish TempoMap / TimeSignatureMap from the main
+# thread to the audio thread without locking the audio callback.
+arc-swap = "1.7"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

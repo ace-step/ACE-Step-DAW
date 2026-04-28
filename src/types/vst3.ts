@@ -63,3 +63,22 @@ export interface VST3ScanProgress {
   total: number;
   currentPlugin: string;
 }
+
+/** Companion app installation/update status */
+export type CompanionAppStatus =
+  | 'unknown'      // Haven't checked yet
+  | 'not-installed' // Connection failed — likely not installed
+  | 'outdated'     // Connected but version is below minimum
+  | 'running'      // Connected and version is acceptable
+  | 'not-running'; // Was previously connected but now disconnected
+
+/** Download info for companion app per platform */
+export interface CompanionDownloadInfo {
+  platform: 'windows' | 'macos' | 'linux';
+  label: string;
+  url: string;
+  fileSize: string;
+}
+
+/** Minimum required companion version */
+export const MIN_COMPANION_VERSION = '1.0.0';

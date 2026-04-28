@@ -9,14 +9,14 @@ import { buildCommandPaletteCommands, type CommandPaletteContext } from '../../.
 describe('shortcutDefaults — clips.enhance', () => {
   it('registers Shift+E for clips.enhance', () => {
     const action = SHORTCUT_ACTIONS.find((a) => a.id === 'clips.enhance');
-    expect(action).toBeDefined();
+    expect(action).not.toBeUndefined();
     expect(action!.defaultCombo).toEqual({ code: 'KeyE', shift: true });
     expect(action!.category).toBe('clips');
   });
 
   it('does not conflict with clips.edit (plain E)', () => {
     const editAction = SHORTCUT_ACTIONS.find((a) => a.id === 'clips.edit');
-    expect(editAction).toBeDefined();
+    expect(editAction).not.toBeUndefined();
     expect(editAction!.defaultCombo.shift).toBeFalsy();
   });
 });
@@ -51,7 +51,7 @@ describe('ClipContextMenu — top-level Enhance entry', () => {
         isMidiClip={false}
       />,
     );
-    expect(screen.getByText('Enhance...')).toBeDefined();
+    screen.getByText('Enhance...'); // getBy* throws if not found
   });
 
   it('does not render Enhance... when onEnhance is undefined', () => {
@@ -92,7 +92,7 @@ describe('AIToolsSubmenu — no longer contains Enhance', () => {
       hasPrompt: true,
       isReady: true,
     };
-    expect(ctx).toBeDefined();
+    expect(ctx).not.toBeUndefined();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((ctx as any).onEnhance).toBeUndefined();
   });
@@ -194,7 +194,7 @@ describe('commandPalette — Enhance Selected Clip command', () => {
     const ctx = makeContext();
     const commands = buildCommandPaletteCommands(ctx);
     const enhanceCmd = commands.find((c) => c.id === 'clip:enhance-selected');
-    expect(enhanceCmd).toBeDefined();
+    expect(enhanceCmd).not.toBeUndefined();
     expect(enhanceCmd!.title).toBe('Enhance Selected Clip');
     expect(enhanceCmd!.shortcut).toEqual(['Shift', 'E']);
   });

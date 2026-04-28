@@ -75,13 +75,13 @@ describe('ModelStatusBadge', () => {
   it('displays model name text', () => {
     setupStore({ connected: true, activeModelId: 'test-model', modelLoadingState: 'idle' });
     render(<ModelStatusBadge modelName="test-model" onClick={onClick} />);
-    expect(screen.getByText('test-model')).toBeTruthy();
+    screen.getByText('test-model'); // getBy* throws if not found
   });
 
   it('displays "No model" when modelName is empty', () => {
     setupStore({ connected: true, activeModelId: null, modelLoadingState: 'idle' });
     render(<ModelStatusBadge modelName="" onClick={onClick} />);
-    expect(screen.getByText('No model')).toBeTruthy();
+    screen.getByText('No model'); // getBy* throws if not found
   });
 
   it('calls onClick when clicked', () => {
@@ -108,6 +108,6 @@ describe('ModelStatusBadge', () => {
     setupStore({ connected: true, activeModelId: null, modelLoadingState: 'idle' });
     render(<ModelStatusBadge modelName="" onClick={onClick} />);
     // If it renders without error using only the mocked store, there's no local polling
-    expect(screen.getByRole('button')).toBeTruthy();
+    screen.getByRole('button'); // getBy* throws if not found
   });
 });

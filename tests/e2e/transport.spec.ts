@@ -9,12 +9,13 @@
  * Left to other layers: detailed focus routing and human audible timing checks.
  */
 import { test, expect } from '@playwright/test';
+import { dismissWelcomeOverlay } from '../support/e2eStartup';
 
-test.describe('Transport Controls', () => {
+test.describe('Transport Controls @critical', () => {
   test.beforeEach(async ({ page }) => {
+    await dismissWelcomeOverlay(page);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
-    // Wait for the store to be exposed by the app
     await page.waitForFunction(() => typeof (window as any).__store !== 'undefined', null, { timeout: 10000 });
     // Create a project so the DAW UI is visible
     await page.evaluate(() => {

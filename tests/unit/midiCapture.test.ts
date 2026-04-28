@@ -153,12 +153,12 @@ describe('captureMidi store action', () => {
     captureService.noteOff(track.id, 64, 9.5);
 
     const clipId = store.captureMidi(track.id, 10, captureService, { bars: 2 });
-    expect(clipId).toBeDefined();
+    expect(clipId).not.toBeUndefined();
 
     const updatedTrack = useProjectStore.getState().getTrackById(track.id);
     const clip = updatedTrack?.clips.find((c) => c.id === clipId);
-    expect(clip).toBeDefined();
-    expect(clip!.midiData).toBeDefined();
+    expect(clip).not.toBeUndefined();
+    expect(clip!.midiData).not.toBeUndefined();
     expect(clip!.midiData!.notes.length).toBe(2);
   });
 
@@ -201,7 +201,7 @@ describe('captureMidi store action', () => {
     captureService.noteOff(track.id, 60, 8.55);
 
     const clipId = store.captureMidi(track.id, 10, captureService, { bars: 2, quantize: '1/4' });
-    expect(clipId).toBeDefined();
+    expect(clipId).not.toBeUndefined();
 
     const clip = useProjectStore.getState().getClipById(clipId!);
     expect(clip?.midiData?.notes[0].startBeat).toBe(4); // Quantized to nearest quarter note

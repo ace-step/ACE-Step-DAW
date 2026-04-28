@@ -60,6 +60,18 @@ describe('StatusBar auto-hide', () => {
     expect(bar.className).toContain('status-bar-collapsed');
   });
 
+  it('keeps the bar expanded while the pointer is inside the hover zone outside proximity', () => {
+    useUIStore.setState({ statusBarAutoHide: true });
+    render(<StatusBar />);
+    const hoverZone = screen.getByTestId('status-bar-hover-zone');
+    const bar = screen.getByTestId('status-bar');
+
+    fireEvent.mouseEnter(hoverZone);
+    fireEvent.pointerMove(window, { clientY: window.innerHeight - 48 });
+
+    expect(bar.className).not.toContain('status-bar-collapsed');
+  });
+
   it('shows dedicated collapsed row with connection dot', () => {
     useUIStore.setState({ statusBarAutoHide: true });
     render(<StatusBar />);
@@ -72,6 +84,16 @@ describe('StatusBar auto-hide', () => {
     render(<StatusBar saveStatus="saved" lastSavedAt={Date.now()} />);
     const saveDot = screen.getByTestId('collapsed-save-dot');
     expect(saveDot).toBeInTheDocument();
+  });
+
+  it('does not render hidden interactive controls while collapsed', () => {
+    useUIStore.setState({ statusBarAutoHide: true });
+    render(<StatusBar saveStatus="saved" lastSavedAt={Date.now()} />);
+
+    expect(screen.queryByTestId('status-bar-meta-row')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-shortcuts-trigger')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-zoom-slider')).not.toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-collapsed-row')).toBeInTheDocument();
   });
 
   it('does not render a proximity overlay that can intercept bottom-edge clicks', () => {

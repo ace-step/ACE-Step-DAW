@@ -30,8 +30,10 @@ interface StatusBarProps {
 export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
   const [connected, setConnected] = useState(lastKnownBackendConnection);
   const statusBarAutoHide = useUIStore((s) => s.statusBarAutoHide);
-  const [hovered, setHovered] = useState(false);
-  const isCollapsed = statusBarAutoHide && !hovered;
+  const [isMouseOverBar, setIsMouseOverBar] = useState(false);
+  const [isInProximity, setIsInProximity] = useState(false);
+  const isExpandedByPointer = isMouseOverBar || isInProximity;
+  const isCollapsed = statusBarAutoHide && !isExpandedByPointer;
   const jobs = useGenerationStore((s) => s.jobs);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
@@ -79,12 +81,13 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
 
   useEffect(() => {
     if (!statusBarAutoHide) {
-      setHovered(false);
+      setIsMouseOverBar(false);
+      setIsInProximity(false);
       return;
     }
 
     const handlePointerMove = (event: PointerEvent) => {
-      setHovered(window.innerHeight - event.clientY <= STATUS_BAR_PROXIMITY_PX);
+      setIsInProximity(window.innerHeight - event.clientY <= STATUS_BAR_PROXIMITY_PX);
     };
 
     window.addEventListener('pointermove', handlePointerMove);
@@ -115,8 +118,8 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
     <div
       className="relative"
       data-testid="status-bar-hover-zone"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => setIsMouseOverBar(true)}
+      onMouseLeave={() => setIsMouseOverBar(false)}
     >
       <div
         className={`status-bar border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted ${isCollapsed ? 'status-bar-collapsed overflow-hidden' : ''}`}
@@ -138,7 +141,7 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
             )}
           </div>
         )}
-        {hasActiveJobs && (
+        {!isCollapsed && hasActiveJobs && (
           <div className="flex h-6 items-center gap-3 px-3" data-testid="status-bar-job-row">
             <span className="text-daw-accent truncate tabular-nums">
               Generating: {primaryJob?.trackName ?? 'unknown'}
@@ -150,10 +153,11 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
           </div>
         )}
 
-        <div
-          className={`flex h-6 items-center gap-3 px-3 min-w-0 ${hasActiveJobs ? 'border-t border-white/4' : ''}`}
-          data-testid="status-bar-meta-row"
-        >
+        {!isCollapsed && (
+          <div
+            className={`flex h-6 items-center gap-3 px-3 min-w-0 ${hasActiveJobs ? 'border-t border-white/4' : ''}`}
+            data-testid="status-bar-meta-row"
+          >
           <span
             className="inline-flex items-center gap-1 text-daw-text-muted"
             data-testid="status-connection"
@@ -279,7 +283,8 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

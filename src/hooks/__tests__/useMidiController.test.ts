@@ -37,6 +37,7 @@ vi.mock('../../services/midiMappingEngine', () => ({
 
 function resetStores() {
   useMidiControllerStore.setState(useMidiControllerStore.getInitialState());
+  useProjectStore.setState(useProjectStore.getInitialState(), true);
 }
 
 describe('useMidiController', () => {
@@ -148,6 +149,78 @@ describe('useMidiController', () => {
       expect.objectContaining({ control: 7, value: 100 }),
       mapping,
     );
+  });
+
+  it('routes noteOff messages so note mappings can release toggle gates', () => {
+    const mapping = {
+      id: 'map-note',
+      deviceId: 'dev-1',
+      deviceName: 'Controller',
+      channel: 0,
+      controlType: 'note' as const,
+      controlNumber: 60,
+      targetParam: 'track:t1:mute',
+      targetLabel: 'Track 1 Mute',
+      min: 0,
+      max: 1,
+    };
+
+    useMidiControllerStore.setState({
+      enabled: true,
+      mappings: [mapping],
+    });
+
+    renderHook(() => useMidiController());
+
+    const messageHandler = mockOnMessage.mock.calls[0][0] as (msg: MidiMessage) => void;
+    const noteOff: MidiMessage = {
+      deviceId: 'dev-1',
+      channel: 0,
+      type: 'noteOff',
+      control: 60,
+      value: 0,
+      timestamp: 2100,
+    };
+
+    messageHandler(noteOff);
+
+    expect(mockProcessMessage).toHaveBeenCalledWith(noteOff, mapping);
+  });
+
+  it('edge-detects track mute and solo mappings instead of repeatedly toggling above threshold', () => {
+    useProjectStore.getState().createProject({ name: 'MIDI Test', bpm: 120 });
+    const track = useProjectStore.getState().addTrack('synth');
+    useMidiControllerStore.setState({ enabled: true });
+
+    renderHook(() => useMidiController());
+    const trackHandler = mockRegisterHandler.mock.calls.find(([scope]) => scope === 'track')?.[1] as
+      | ((target: { scope: string; trackId?: string; param: string }, value: number) => void)
+      | undefined;
+
+    trackHandler?.({ scope: 'track', trackId: track.id, param: 'mute' }, 0.75);
+    trackHandler?.({ scope: 'track', trackId: track.id, param: 'mute' }, 0.95);
+    expect(useProjectStore.getState().project?.tracks.find((t) => t.id === track.id)?.muted).toBe(true);
+
+    trackHandler?.({ scope: 'track', trackId: track.id, param: 'mute' }, 0.1);
+    trackHandler?.({ scope: 'track', trackId: track.id, param: 'mute' }, 0.8);
+    expect(useProjectStore.getState().project?.tracks.find((t) => t.id === track.id)?.muted).toBe(false);
+  });
+
+  it('only applies master volume mappings to masterVolume', () => {
+    useProjectStore.getState().createProject({ name: 'MIDI Test', bpm: 120 });
+    useProjectStore.getState().updateProject({ masterVolume: 0.8 });
+    useMidiControllerStore.setState({ enabled: true });
+
+    renderHook(() => useMidiController());
+    const masterHandler = mockRegisterHandler.mock.calls.find(([scope]) => scope === 'master')?.[1] as
+      | ((target: { scope: string; param: string }, value: number) => void)
+      | undefined;
+
+    masterHandler?.({ scope: 'master', param: 'pan' }, 0.2);
+    expect(useProjectStore.getState().project?.masterVolume).toBe(0.8);
+
+    masterHandler?.({ scope: 'master', param: 'volume' }, 0.2);
+    expect(useProjectStore.getState().project?.masterVolume).toBe(0.2);
   });
 
   it('ignores messages with no matching mapping', () => {

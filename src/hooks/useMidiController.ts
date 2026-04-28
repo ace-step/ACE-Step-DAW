@@ -17,6 +17,8 @@ import { getWebMidiService, WebMidiService } from '../services/webMidiService';
 import { getMidiMappingEngine, type ResolvedTarget } from '../services/midiMappingEngine';
 import type { MidiMessage } from '../types/midiController';
 
+const toggleGateState = new Map<string, boolean>();
+
 function handleTrackParam(target: ResolvedTarget, value: number): void {
   const { trackId, param } = target;
   if (!trackId) return;
@@ -33,22 +35,37 @@ function handleTrackParam(target: ResolvedTarget, value: number): void {
       store.updateTrack(trackId, { volume: Math.max(0, Math.min(1, value)) });
       break;
     case 'mute':
-      // Toggle on any value > 0.5
-      if (value > 0.5) {
+      toggleTrackBooleanParam(trackId, 'mute', value, () => {
         store.updateTrack(trackId, { muted: !track.muted });
-      }
+      });
       break;
     case 'solo':
-      if (value > 0.5) {
+      toggleTrackBooleanParam(trackId, 'solo', value, () => {
         store.updateTrack(trackId, { soloed: !track.soloed });
-      }
+      });
       break;
     default:
       break;
   }
 }
 
-function handleMasterParam(_target: ResolvedTarget, value: number): void {
+function toggleTrackBooleanParam(trackId: string, param: 'mute' | 'solo', value: number, applyToggle: () => void): void {
+  const key = `${trackId}:${param}`;
+  const gateActive = value > 0.5;
+  const wasActive = toggleGateState.get(key) ?? false;
+
+  if (!gateActive) {
+    toggleGateState.set(key, false);
+    return;
+  }
+
+  if (wasActive) return;
+  toggleGateState.set(key, true);
+  applyToggle();
+}
+
+function handleMasterParam(target: ResolvedTarget, value: number): void {
+  if (target.param !== 'volume') return;
   const store = useProjectStore.getState();
   store.updateProject({ masterVolume: Math.max(0, Math.min(1, value)) });
 }
@@ -68,6 +85,7 @@ export function useMidiController(): void {
 
     const service = getWebMidiService();
     const engine = getMidiMappingEngine();
+    toggleGateState.clear();
 
     // Register scope handlers
     engine.registerHandler('track', handleTrackParam);
@@ -110,7 +128,7 @@ export function useMidiController(): void {
       }
 
       // Route through mapping engine
-      if (msg.type === 'cc' || msg.type === 'noteOn' || msg.type === 'pitchBend') {
+      if (msg.type === 'cc' || msg.type === 'noteOn' || msg.type === 'noteOff' || msg.type === 'pitchBend') {
         const controlType = msg.type === 'pitchBend' ? 'pitchBend' : msg.type === 'cc' ? 'cc' : 'note';
         const mapping = store.findMapping(msg.deviceId, msg.channel, controlType, msg.control);
         if (mapping) {
@@ -125,6 +143,7 @@ export function useMidiController(): void {
       engine.removeHandler('track');
       engine.removeHandler('master');
       engine.removeHandler('transport');
+      toggleGateState.clear();
     };
   }, [enabled]);
 }

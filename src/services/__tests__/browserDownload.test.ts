@@ -56,8 +56,7 @@ describe('downloadBlob', () => {
 
     const blob = new Blob(['data']);
     expect(() => downloadBlob(blob, 'fail.wav')).toThrow('click failed');
-    expect(revokeObjectURLSpy).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1000);
+    expect(revokeObjectURLSpy).toHaveBeenCalledOnce();
     expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:mock-url');
   });
 });

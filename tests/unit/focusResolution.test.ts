@@ -9,6 +9,7 @@ vi.mock('../../src/services/projectStorage', () => ({
 
 describe('resolveFocusedTrackId', () => {
   beforeEach(() => {
+    localStorage.clear();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
   });
@@ -17,48 +18,82 @@ describe('resolveFocusedTrackId', () => {
     expect(resolveFocusedTrackId()).toBeNull();
   });
 
+  it('returns null when project has no tracks', () => {
+    useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
+    expect(resolveFocusedTrackId()).toBeNull();
+  });
+
   it('returns first track when no focus context is set', () => {
     useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
-    const store = useProjectStore.getState();
-    const track = store.addTrack('drums');
+    const track = useProjectStore.getState().addTrack('drums');
 
     expect(resolveFocusedTrackId()).toBe(track.id);
   });
 
   it('prioritizes keyboardContext.trackId over all others', () => {
     useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
-    const store = useProjectStore.getState();
-    const track1 = store.addTrack('drums');
-    const track2 = store.addTrack('bass');
+    const track1 = useProjectStore.getState().addTrack('drums');
+    const track2 = useProjectStore.getState().addTrack('bass');
 
-    // Set both keyboard context and expanded track
     useUIStore.getState().setKeyboardContext('timeline', track2.id);
     useUIStore.getState().setExpandedTrackId(track1.id);
 
     expect(resolveFocusedTrackId()).toBe(track2.id);
   });
 
-  it('falls back to openPianoRollTrackId when no keyboard context', () => {
+  it('ignores stale keyboardContext.trackId and falls back', () => {
     useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
-    const store = useProjectStore.getState();
-    store.addTrack('drums');
-    const track2 = store.addTrack('bass');
+    const track = useProjectStore.getState().addTrack('drums');
+
+    useUIStore.getState().setKeyboardContext('timeline', 'non-existent-track');
+
+    expect(resolveFocusedTrackId()).toBe(track.id);
+  });
+
+  it('falls back to openPianoRollTrackId when no keyboard context exists', () => {
+    useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
+    useProjectStore.getState().addTrack('drums');
+    const track2 = useProjectStore.getState().addTrack('bass');
 
     useUIStore.getState().setOpenPianoRoll(track2.id);
-    // Clear keyboardContext.trackId so the fallback to openPianoRollTrackId is exercised
     useUIStore.setState((state) => ({
-      ...state,
       keyboardContext: { ...state.keyboardContext, trackId: null },
     }));
 
     expect(resolveFocusedTrackId()).toBe(track2.id);
   });
 
-  it('falls back to expandedTrackId', () => {
+  it('falls back to openSequencerTrackId when piano roll is not open', () => {
     useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
-    const store = useProjectStore.getState();
-    const track1 = store.addTrack('drums');
-    const track2 = store.addTrack('bass');
+    useProjectStore.getState().addTrack('drums');
+    const track2 = useProjectStore.getState().addTrack('bass');
+
+    useUIStore.setState({
+      openPianoRollTrackId: null,
+      openSequencerTrackId: track2.id,
+    });
+
+    expect(resolveFocusedTrackId()).toBe(track2.id);
+  });
+
+  it('falls back to openDrumMachineTrackId when sequencer is not open', () => {
+    useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
+    useProjectStore.getState().addTrack('drums');
+    const track2 = useProjectStore.getState().addTrack('bass');
+
+    useUIStore.setState({
+      openPianoRollTrackId: null,
+      openSequencerTrackId: null,
+      openDrumMachineTrackId: track2.id,
+    });
+
+    expect(resolveFocusedTrackId()).toBe(track2.id);
+  });
+
+  it('falls back to expandedTrackId when no editor is open', () => {
+    useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
+    useProjectStore.getState().addTrack('drums');
+    const track2 = useProjectStore.getState().addTrack('bass');
 
     useUIStore.getState().setExpandedTrackId(track2.id);
 
@@ -67,9 +102,8 @@ describe('resolveFocusedTrackId', () => {
 
   it('falls back to track owning selected clip', () => {
     useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
-    const store = useProjectStore.getState();
-    const track = store.addTrack('drums');
-    const clip = store.addClip(track.id, {
+    const track = useProjectStore.getState().addTrack('drums');
+    const clip = useProjectStore.getState().addClip(track.id, {
       startTime: 0,
       duration: 2,
       prompt: 'test',
@@ -83,21 +117,21 @@ describe('resolveFocusedTrackId', () => {
     expect(resolveFocusedTrackId()).toBe(track.id);
   });
 
-  it('ignores stale trackId not in project', () => {
+  it('ignores stale editor trackIds not present in the project', () => {
     useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
-    const store = useProjectStore.getState();
-    const track = store.addTrack('drums');
+    const track = useProjectStore.getState().addTrack('drums');
 
-    // Set keyboard context to a non-existent track
-    useUIStore.getState().setKeyboardContext('timeline', 'non-existent-track');
+    useUIStore.setState({ openPianoRollTrackId: 'deleted-track-id' });
 
-    // Should skip the stale ID and fall back to the first real track
     expect(resolveFocusedTrackId()).toBe(track.id);
   });
 
-  it('returns null when project has no tracks', () => {
+  it('ignores selected clips that do not belong to any track', () => {
     useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
-    // Project exists but has no tracks
-    expect(resolveFocusedTrackId()).toBeNull();
+    const track = useProjectStore.getState().addTrack('drums');
+
+    useUIStore.getState().selectClips(['nonexistent-clip']);
+
+    expect(resolveFocusedTrackId()).toBe(track.id);
   });
 });

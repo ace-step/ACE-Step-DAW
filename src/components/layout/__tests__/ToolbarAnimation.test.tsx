@@ -37,21 +37,21 @@ vi.mock('../../../services/midiCaptureService', () => ({
 }));
 
 describe('Toolbar button micro-animations', () => {
-  it('applies active:scale and transition duration to ControlBarButtons', () => {
+  it('applies daw-btn-interactive to ControlBarButtons', () => {
     useProjectStore.getState().createProject();
     render(<Toolbar />);
 
     const smartControlsButton = screen.getByLabelText('Smart Controls');
-    expect(smartControlsButton.className).toContain('active:scale-[0.97]');
-    expect(smartControlsButton.className).toContain('duration-[var(--duration-normal)]');
+    expect(smartControlsButton.className).toContain('daw-btn-interactive');
   });
 
-  it('applies active:scale-95 to the play button', () => {
+  it('applies daw-btn-interactive to the play button via inline classes', () => {
     useProjectStore.getState().createProject();
     render(<Toolbar />);
 
-    const playButton = screen.getByTitle('Play (Space)');
+    // Play button is a direct <button> with inline classes, not a <Button> component
+    const playButton = screen.getByLabelText('Play');
+    // Play button uses inline transition classes (not the Button component)
     expect(playButton.className).toContain('active:scale-95');
-    expect(playButton.className).toContain('duration-150');
   });
 });

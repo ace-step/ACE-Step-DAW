@@ -17,9 +17,9 @@ describe('track height presets', () => {
 
   describe('TRACK_HEIGHT_PRESETS', () => {
     it('defines small, medium, large, and auto presets', () => {
-      expect(TRACK_HEIGHT_PRESETS.small).toBeDefined();
-      expect(TRACK_HEIGHT_PRESETS.medium).toBeDefined();
-      expect(TRACK_HEIGHT_PRESETS.large).toBeDefined();
+      expect(TRACK_HEIGHT_PRESETS.small).not.toBeUndefined();
+      expect(TRACK_HEIGHT_PRESETS.medium).not.toBeUndefined();
+      expect(TRACK_HEIGHT_PRESETS.large).not.toBeUndefined();
       expect(TRACK_HEIGHT_PRESETS.auto).toBeUndefined();
     });
 

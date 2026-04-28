@@ -59,7 +59,7 @@ describe('AddLayerPanel', () => {
   it('defaults target track to the first selected preset track in the select window', () => {
     useProjectStore.getState().addTrack('bass');
     const bassTrack = useProjectStore.getState().project!.tracks.find((track) => track.trackName === 'bass');
-    expect(bassTrack).toBeDefined();
+    expect(bassTrack).not.toBeUndefined();
 
     useUIStore.setState({
       selectWindow: { startTime: 3, endTime: 7, trackIds: [bassTrack!.id] },
@@ -88,7 +88,7 @@ describe('AddLayerPanel', () => {
     });
 
     const latestCall = vi.mocked(generateFromAddLayer).mock.calls.at(-1);
-    expect(latestCall).toBeDefined();
+    expect(latestCall).not.toBeUndefined();
     expect(latestCall![0].trackId).not.toBe(existingDrumsTrackId);
   });
 
@@ -114,7 +114,7 @@ describe('AddLayerPanel', () => {
     useProjectStore.getState().addTrack('bass');
     useProjectStore.getState().addTrack('guitar');
     const thirdTrack = useProjectStore.getState().project!.tracks[2];
-    expect(thirdTrack).toBeDefined();
+    expect(thirdTrack).not.toBeUndefined();
 
     useUIStore.setState({
       selectWindow: {

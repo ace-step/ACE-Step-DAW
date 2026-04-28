@@ -47,6 +47,7 @@ export const TRACK_TYPE_CATALOG: Record<TrackType, TrackTypeInfo> = {
   pianoRoll: { type: 'pianoRoll', label: 'Piano Roll', abbr: 'PNO', emoji: '🎵', color: '#a855f7', description: 'MIDI note editor with built-in synth presets' },
   drumMachine: { type: 'drumMachine', label: 'Drum Machine', abbr: 'DRM', emoji: '🥁', color: '#ef4444', description: 'MPC-style 16-pad sample trigger instrument' },
   strudel:     { type: 'strudel',     label: 'Strudel',      abbr: 'STR', emoji: '⌁',  color: '#e67e22', description: 'Live-code music patterns with Strudel' },
+  video:       { type: 'video',       label: 'Video',        abbr: 'VID', emoji: '🎬', color: '#64748b', description: 'Video track for scoring music to picture' },
 };
 
 export interface DrumKitSample {

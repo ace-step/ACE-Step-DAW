@@ -10,6 +10,7 @@ export interface ClipAIContext {
   onRegenerate?: () => void;
   onSeparateStems?: () => void;
   onGenerateAccompaniment?: () => void;
+  onGenerateVocals?: () => void;
   onAnalyze?: () => void;
   onConvertToMidi?: () => void;
   onCreateQuickSampler?: () => void;
@@ -188,6 +189,9 @@ export function AIToolsSubmenu({
                   )}
                   {clipContext.onGenerateAccompaniment && (
                     <ContextMenuItem label="Generate Accompaniment..." onClick={clipContext.onGenerateAccompaniment} color="#6ee7b7" />
+                  )}
+                  {clipContext.onGenerateVocals && (
+                    <ContextMenuItem label="Generate Vocals..." onClick={clipContext.onGenerateVocals} color="#c4b5fd" />
                   )}
                   {clipContext.onAnalyze && (
                     <ContextMenuItem label="Analyze Audio..." onClick={clipContext.onAnalyze} color="#67e8f9" />

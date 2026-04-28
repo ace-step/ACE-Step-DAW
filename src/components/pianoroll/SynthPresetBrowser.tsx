@@ -11,6 +11,7 @@ import {
 } from '../../data/instrumentPresets';
 // Keep backward compat imports for legacy callers
 import type { SynthPresetDefinition } from '../../data/synthPresets';
+import { usePresetPreview } from '../../hooks/usePresetPreview';
 
 const KIND_LABELS: Record<InstrumentKindFilter, string> = {
   all: 'All',
@@ -31,6 +32,8 @@ interface SynthPresetBrowserProps {
   /** Unified user presets (all instrument kinds). */
   userInstrumentPresets?: InstrumentPreset[];
   onDeleteUserPreset?: (presetId: string) => void;
+  /** Called to preview/audition a preset before applying it. */
+  onPreviewPreset?: (presetId: string) => void;
 }
 
 export function SynthPresetBrowser({
@@ -40,38 +43,55 @@ export function SynthPresetBrowser({
   userPresets: _legacyUserPresets,
   userInstrumentPresets = [],
   onDeleteUserPreset,
+  onPreviewPreset,
 }: SynthPresetBrowserProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<InstrumentPresetCategory | null>(null);
   const [kindFilter, setKindFilter] = useState<InstrumentKindFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const preview = usePresetPreview({ hoverDelay: 300 });
 
   const currentPreset = currentPresetId
     ? getPresetById(currentPresetId, userInstrumentPresets)
     : null;
 
-  // Close on outside click
+  // Close on outside click — also stop preview
   useEffect(() => {
     if (!isOpen) return;
     function handleClickOutside(e: MouseEvent) {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        preview.stop();
         setIsOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, preview]);
 
-  // Close on Escape
+  // Close on Escape — also stop preview
   useEffect(() => {
     if (!isOpen) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setIsOpen(false);
+      if (e.key === 'Escape') {
+        preview.stop();
+        setIsOpen(false);
+      }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
+  }, [isOpen, preview]);
+
+  // Stop preview when panel closes
+  useEffect(() => {
+    if (!isOpen) {
+      preview.stop();
+      setFocusedIndex(-1);
+    }
+  }, [isOpen, preview]);
 
   const handleToggle = useCallback(() => {
     setIsOpen((prev) => !prev);
@@ -81,10 +101,11 @@ export function SynthPresetBrowser({
 
   const handleSelectPreset = useCallback(
     (presetId: string) => {
+      preview.stop();
       onSelectPreset(presetId);
       setIsOpen(false);
     },
-    [onSelectPreset],
+    [onSelectPreset, preview],
   );
 
   const availableCategories = useMemo(
@@ -103,6 +124,51 @@ export function SynthPresetBrowser({
     }
     return null; // show categories
   }, [searchQuery, selectedCategory, kindFilter, userInstrumentPresets]);
+
+  // Keyboard navigation within preset list
+  const handleListKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!filteredPresets) return;
+      const len = filteredPresets.length;
+      if (len === 0) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev + 1) % len);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev <= 0 ? len - 1 : prev - 1));
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (focusedIndex >= 0 && focusedIndex < len) {
+          const preset = filteredPresets[focusedIndex];
+          handleSelectPreset(preset.id);
+        }
+      } else if (e.key === 'p' || e.key === 'P') {
+        // Preview with 'p' key
+        if (focusedIndex >= 0 && focusedIndex < len) {
+          const preset = filteredPresets[focusedIndex];
+          preview.handlePresetClick(preset.id, {
+            instrumentKind: preset.instrumentKind,
+            category: preset.category,
+          });
+        }
+      }
+    },
+    [filteredPresets, focusedIndex, handleSelectPreset, preview],
+  );
+
+  // Scroll focused item into view
+  useEffect(() => {
+    if (focusedIndex < 0 || !listRef.current) return;
+    const items = listRef.current.querySelectorAll('[data-preset-item]');
+    items[focusedIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [focusedIndex]);
+
+  // Reset focus when filtered presets change
+  useEffect(() => {
+    setFocusedIndex(-1);
+  }, [filteredPresets]);
 
   const kindBadge = (kind: string) => {
     const colors: Record<string, string> = {
@@ -166,12 +232,42 @@ export function SynthPresetBrowser({
                 setSearchQuery(e.target.value);
                 setSelectedCategory(null);
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown' && filteredPresets && filteredPresets.length > 0) {
+                  e.preventDefault();
+                  setFocusedIndex(0);
+                  listRef.current?.focus();
+                }
+              }}
               className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-[11px] text-zinc-300 placeholder:text-zinc-600 outline-none focus:border-[#555]"
               autoFocus
             />
           </div>
 
-          <div className="max-h-[300px] overflow-y-auto">
+          {/* Preview volume control */}
+          <div className="px-3 py-1.5 border-b border-[#333] flex items-center gap-2">
+            <span className="text-[9px] text-zinc-500 shrink-0">Preview</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={preview.volume}
+              onChange={(e) => preview.changeVolume(parseFloat(e.target.value))}
+              className="flex-1 h-1 accent-blue-400"
+              aria-label="Preview volume"
+            />
+            <span className="text-[9px] text-zinc-500 w-6 text-right">
+              {Math.round(preview.volume * 100)}
+            </span>
+          </div>
+
+          <div
+            className="max-h-[300px] overflow-y-auto"
+            ref={listRef}
+            onKeyDown={handleListKeyDown}
+            tabIndex={0}
+          >
             {filteredPresets === null ? (
               /* Category list */
               <div className="p-1">
@@ -204,15 +300,48 @@ export function SynthPresetBrowser({
                     &larr; All Categories
                   </button>
                 )}
-                {filteredPresets.map((preset) => (
+                {filteredPresets.map((preset, idx) => (
                   <div
                     key={preset.id}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded cursor-pointer text-[11px] ${
+                    data-preset-item
+                    onMouseEnter={() =>
+                      preview.handlePresetHoverStart(preset.id, {
+                        instrumentKind: preset.instrumentKind,
+                        category: preset.category,
+                      })
+                    }
+                    onMouseLeave={preview.handlePresetHoverEnd}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded cursor-pointer text-[11px] group ${
                       preset.id === currentPresetId
                         ? 'bg-blue-600/20 text-blue-300'
-                        : 'text-zinc-300 hover:bg-white/5'
+                        : focusedIndex === idx
+                          ? 'bg-white/10 text-zinc-200'
+                          : 'text-zinc-300 hover:bg-white/5'
                     }`}
                   >
+                    {/* Preview play button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        preview.handlePresetClick(preset.id, {
+                          instrumentKind: preset.instrumentKind,
+                          category: preset.category,
+                        });
+                      }}
+                      className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-sm transition-colors ${
+                        preview.isPlaying && preview.activePresetId === preset.id
+                          ? 'text-blue-400'
+                          : 'text-zinc-600 hover:text-zinc-300'
+                      }`}
+                      aria-label={`Preview ${preset.name}`}
+                    >
+                      {preview.isPlaying && preview.activePresetId === preset.id ? (
+                        <span className="text-[10px]">&#9632;</span>
+                      ) : (
+                        <span className="text-[10px]">&#9654;</span>
+                      )}
+                    </button>
+
                     <button
                       onClick={() => handleSelectPreset(preset.id)}
                       className="flex-1 text-left truncate"

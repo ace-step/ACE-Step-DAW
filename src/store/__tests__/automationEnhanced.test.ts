@@ -23,7 +23,7 @@ describe('automation curve types', () => {
     });
     const lanes = useProjectStore.getState().project!.automationLanes!;
     const lane = lanes.find((l) => l.trackId === trackId);
-    expect(lane).toBeDefined();
+    expect(lane).not.toBeUndefined();
     expect(lane!.points[0].curveType).toBe('exponential');
   });
 
@@ -140,7 +140,7 @@ describe('LFO automation generation', () => {
     const lane = useProjectStore.getState().project!.automationLanes!.find(
       (l) => l.trackId === trackId,
     )!;
-    expect(lane).toBeDefined();
+    expect(lane).not.toBeUndefined();
     expect(lane.points.length).toBeGreaterThan(4);
     // Sine starts at 0.5 (center), goes up to 1.0, back to 0.5, down to 0.0
     // First point should be at center
@@ -167,7 +167,7 @@ describe('LFO automation generation', () => {
     const lane = useProjectStore.getState().project!.automationLanes!.find(
       (l) => l.trackId === trackId,
     )!;
-    expect(lane).toBeDefined();
+    expect(lane).not.toBeUndefined();
     // Square wave should only have values at 0 and 1
     for (const pt of lane.points) {
       expect(pt.value === 0 || pt.value === 1).toBe(true);
@@ -189,7 +189,7 @@ describe('LFO automation generation', () => {
     const lane = useProjectStore.getState().project!.automationLanes!.find(
       (l) => l.trackId === trackId,
     )!;
-    expect(lane).toBeDefined();
+    expect(lane).not.toBeUndefined();
     expect(lane.points.length).toBeGreaterThan(4);
     for (const pt of lane.points) {
       expect(pt.value).toBeGreaterThanOrEqual(0);
@@ -212,7 +212,7 @@ describe('LFO automation generation', () => {
     const lane = useProjectStore.getState().project!.automationLanes!.find(
       (l) => l.trackId === trackId,
     )!;
-    expect(lane).toBeDefined();
+    expect(lane).not.toBeUndefined();
     expect(lane.points.length).toBeGreaterThan(4);
     for (const pt of lane.points) {
       expect(pt.value).toBeGreaterThanOrEqual(0);

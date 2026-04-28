@@ -10,7 +10,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: boolean;
   /** Active/pressed state styling (overrides variant) */
   active?: boolean;
-  /** Show a loading spinner and disable interaction */
+  /** Show loading spinner and disable interaction */
   loading?: boolean;
   children?: ReactNode;
 }
@@ -28,12 +28,12 @@ const ICON_SIZE_CLASSES: Record<ButtonSize, string> = {
   lg: 'w-8 h-8',
 };
 
-/* ── Variant tokens ── */
+/* ── Variant tokens (using daw-btn-interactive for hover/active depth) ── */
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   default:
     'bg-daw-surface-2 hover:bg-daw-hover text-zinc-300 font-medium hover:shadow-[var(--daw-shadow-sm)]',
   primary:
-    'bg-daw-accent hover:bg-daw-accent-hover text-white font-medium hover:shadow-[var(--daw-shadow-sm)]',
+    'bg-daw-accent hover:bg-daw-accent-hover text-white font-medium bg-gradient-to-b from-white/[0.08] to-transparent',
   ghost:
     'bg-transparent hover:bg-daw-hover-subtle text-zinc-400 hover:text-zinc-100 hover:border hover:border-white/10',
   danger:
@@ -43,7 +43,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
 const ACTIVE_CLASSES = 'bg-daw-accent text-white';
 
 const BASE_CLASSES =
-  'inline-flex items-center justify-center gap-1.5 rounded-md border border-transparent transition-[color,background-color,transform,box-shadow,border-color,opacity] duration-[var(--duration-normal)] ease-[var(--ease-out)] active:scale-[0.97] active:shadow-[var(--daw-shadow-inset)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 select-none';
+  'inline-flex items-center justify-center rounded-md daw-btn-interactive disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none select-none gap-1.5';
 
 /**
  * Build the full className string for button styling.
@@ -69,19 +69,20 @@ export function getButtonClasses(opts: {
 
   const sizeClasses = icon ? `${ICON_SIZE_CLASSES[size]} rounded-full` : SIZE_CLASSES[size];
   const variantClasses = active ? ACTIVE_CLASSES : VARIANT_CLASSES[variant];
-  const loadingClasses = loading ? 'pointer-events-none' : '';
+  const loadingClasses = loading ? 'cursor-wait' : '';
 
   return [BASE_CLASSES, sizeClasses, variantClasses, loadingClasses, className]
     .filter(Boolean)
     .join(' ');
 }
 
-/* ── Loading spinner ── */
 function Spinner({ size }: { size: ButtonSize }) {
-  const dim = size === 'sm' ? 'w-3 h-3' : size === 'lg' ? 'w-4 h-4' : 'w-3.5 h-3.5';
+  const dim = size === 'sm' ? 12 : size === 'md' ? 14 : 16;
   return (
     <svg
-      className={`${dim} animate-spin`}
+      className="animate-spin"
+      width={dim}
+      height={dim}
       viewBox="0 0 16 16"
       fill="none"
       aria-hidden="true"
@@ -95,7 +96,7 @@ function Spinner({ size }: { size: ButtonSize }) {
         strokeWidth="2"
       />
       <path
-        d="M14 8a6 6 0 00-6-6"
+        d="M14 8a6 6 0 0 0-6-6"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
@@ -110,7 +111,7 @@ function Spinner({ size }: { size: ButtonSize }) {
  * @example
  * <Button variant="primary" size="md" onClick={save}>Save</Button>
  * <Button variant="ghost" size="sm" icon title="Settings"><GearIcon /></Button>
- * <Button variant="primary" loading>Saving...</Button>
+ * <Button loading>Saving...</Button>
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
@@ -129,20 +130,27 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   return (
     <button
       ref={ref}
-      className={getButtonClasses({ size, variant, icon, active, loading, className })}
+      className={getButtonClasses({ size, variant, icon, active, loading, className: `${className} relative` })}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       {...rest}
     >
-      {loading && <Spinner size={size} />}
-      {children}
+      <span className={loading ? 'opacity-0' : undefined}>{children}</span>
+      {loading && (
+        <span
+          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+          aria-hidden="true"
+        >
+          <Spinner size={size} />
+        </span>
+      )}
     </button>
   );
 });
 
-/* ── ButtonGroup: connected row of buttons ── */
+/* ── ButtonGroup: connected buttons with shared border ── */
 
-interface ButtonGroupProps {
+export interface ButtonGroupProps {
   children: ReactNode;
   className?: string;
 }
@@ -150,7 +158,7 @@ interface ButtonGroupProps {
 export function ButtonGroup({ children, className = '' }: ButtonGroupProps) {
   return (
     <div
-      className={`inline-flex items-center [&>button]:rounded-none [&>button:first-child]:rounded-l-md [&>button:last-child]:rounded-r-md [&>button+button]:border-l [&>button+button]:border-l-white/10 ${className}`}
+      className={`inline-flex items-center rounded-md overflow-hidden border border-daw-border [&>button]:rounded-none [&>button]:border-0 [&>button+button]:border-l [&>button+button]:border-daw-border ${className}`}
       role="group"
     >
       {children}

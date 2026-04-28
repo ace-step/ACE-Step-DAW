@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { generateFromAddLayer, generateSingleClip } from '../../services/generationPipeline';
+import { toastError } from '../../hooks/useToast';
 import type { ContextWindow } from '../../services/contextAudioExtractor';
 import { extractContextAudioLazy } from '../../services/lazyContextAudioExtractor';
 import { DualRangeSlider } from '../ui/DualRangeSlider';
@@ -196,36 +197,40 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
     }
     onClose();
 
-    if (isEditMode && clipId) {
-      updateClip(clipId, {
-        prompt: localCaption,
-        globalCaption,
-        lyrics: isVocal ? lyrics : '',
-        startTime: Math.max(0, selStart),
-        duration: Math.max(0.5, selEnd - selStart),
-        sampleMode,
-        autoExpandPrompt,
-        generationParams: {
-          type: 'lego',
+    try {
+      if (isEditMode && clipId) {
+        updateClip(clipId, {
           prompt: localCaption,
-          lyrics: isVocal ? lyrics : '',
           globalCaption,
+          lyrics: isVocal ? lyrics : '',
+          startTime: Math.max(0, selStart),
+          duration: Math.max(0.5, selEnd - selStart),
           sampleMode,
           autoExpandPrompt,
-        },
-      });
-      await generateSingleClip(clipId, parsedSeed !== undefined ? { sharedSeed: parsedSeed } : undefined);
-    } else {
-      await generateFromAddLayer({
-        trackId,
-        startTime: selStart,
-        duration: selEnd - selStart,
-        localDescription: localCaption,
-        globalCaption,
-        lyrics: isVocal ? lyrics : '',
-        contextWindow,
-        chunkMaskMode,
-      });
+          generationParams: {
+            type: 'lego',
+            prompt: localCaption,
+            lyrics: isVocal ? lyrics : '',
+            globalCaption,
+            sampleMode,
+            autoExpandPrompt,
+          },
+        });
+        await generateSingleClip(clipId, parsedSeed !== undefined ? { sharedSeed: parsedSeed } : undefined);
+      } else {
+        await generateFromAddLayer({
+          trackId,
+          startTime: selStart,
+          duration: selEnd - selStart,
+          localDescription: localCaption,
+          globalCaption,
+          lyrics: isVocal ? lyrics : '',
+          contextWindow,
+          chunkMaskMode,
+        });
+      }
+    } catch {
+      toastError('Generation failed — please try again');
     }
   };
 

@@ -13,7 +13,7 @@ import {
   type ProjectSummary,
 } from '../../services/projectStorage';
 import { deleteAllProjectAudio } from '../../services/audioFileManager';
-import { toastSuccess } from '../../hooks/useToast';
+import { toastSuccess, toastError } from '../../hooks/useToast';
 
 export function ProjectListDialog() {
   const show = useUIStore((s) => s.showProjectListDialog);
@@ -31,8 +31,12 @@ export function ProjectListDialog() {
   useEffect(() => {
     if (show) {
       setLoading(true);
+      setProjects([]);
       listProjects().then((list) => {
         setProjects(list);
+      }).catch(() => {
+        toastError('Failed to load projects');
+      }).finally(() => {
         setLoading(false);
       });
     }
@@ -41,27 +45,35 @@ export function ProjectListDialog() {
   if (!show) return null;
 
   const handleOpen = async (id: string) => {
-    // Save current project first
-    if (currentProject) {
-      await saveProject(currentProject);
-    }
-    const project = await loadProject(id);
-    if (project) {
-      setProject(project);
-      toastSuccess('Project loaded');
-      setShow(false);
+    try {
+      // Save current project first
+      if (currentProject) {
+        await saveProject(currentProject);
+      }
+      const project = await loadProject(id);
+      if (project) {
+        setProject(project);
+        toastSuccess('Project loaded');
+        setShow(false);
+      }
+    } catch {
+      toastError('Failed to load project');
     }
   };
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
-    await deleteProject(id);
-    await deleteAllProjectAudio(id);
-    setProjects((prev) => prev.filter((p) => p.id !== id));
-    // If deleting the current project, clear workspace
-    if (id === currentProject?.id) {
-      setProject(null as unknown as Project);
-      setShow(false);
+    try {
+      await deleteProject(id);
+      await deleteAllProjectAudio(id);
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      // If deleting the current project, clear workspace
+      if (id === currentProject?.id) {
+        setProject(null as unknown as Project);
+        setShow(false);
+      }
+    } catch {
+      toastError('Failed to delete project');
     }
   };
 
@@ -70,6 +82,8 @@ export function ProjectListDialog() {
     setExporting(true);
     try {
       await exportProjectArchive(currentProject);
+    } catch {
+      toastError('Failed to export project');
     } finally {
       setExporting(false);
     }
@@ -77,22 +91,30 @@ export function ProjectListDialog() {
 
   const handleSaveAsTemplate = async () => {
     if (!currentProject || !templateName.trim()) return;
-    const template = saveProjectAsTemplate(templateName);
-    await saveTemplate(template);
-    toastSuccess(`Template "${template.name}" saved`);
-    setShowTemplateName(false);
-    setTemplateName('');
+    try {
+      const template = saveProjectAsTemplate(templateName);
+      await saveTemplate(template);
+      toastSuccess(`Template "${template.name}" saved`);
+      setShowTemplateName(false);
+      setTemplateName('');
+    } catch {
+      toastError('Failed to save template');
+    }
   };
 
   const handleImport = async () => {
-    const project = await importProjectArchive();
-    if (project) {
-      if (currentProject) {
-        await saveProject(currentProject);
+    try {
+      const project = await importProjectArchive();
+      if (project) {
+        if (currentProject) {
+          await saveProject(currentProject);
+        }
+        setProject(project);
+        toastSuccess('Project loaded');
+        setShow(false);
       }
-      setProject(project);
-      toastSuccess('Project loaded');
-      setShow(false);
+    } catch {
+      toastError('Failed to import project');
     }
   };
 

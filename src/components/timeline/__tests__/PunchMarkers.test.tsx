@@ -36,8 +36,8 @@ describe('PunchMarkers', () => {
 
     const punchIn = screen.getByTestId('punch-in-marker');
     const punchOut = screen.getByTestId('punch-out-marker');
-    expect(punchIn).toBeDefined();
-    expect(punchOut).toBeDefined();
+    expect(punchIn).not.toBeUndefined();
+    expect(punchOut).not.toBeUndefined();
   });
 
   it('renders the punch region overlay between markers', () => {
@@ -48,7 +48,7 @@ describe('PunchMarkers', () => {
     });
     render(<PunchMarkers />);
     const region = screen.getByTestId('punch-region');
-    expect(region).toBeDefined();
+    expect(region).not.toBeUndefined();
   });
 
   it('positions markers based on pixelsPerSecond', () => {

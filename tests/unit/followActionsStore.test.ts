@@ -36,7 +36,7 @@ describe('follow actions store', () => {
       const { track } = addTrackWithClips(2);
       const session = useProjectStore.getState().project!.session!;
       const slot = session.slots.find((s) => s.trackId === track.id && s.clipId !== null);
-      expect(slot).toBeDefined();
+      expect(slot).not.toBeUndefined();
 
       useProjectStore.getState().setSessionSlotFollowAction(slot!.id, { actionA: 'next' });
       const updatedSession = useProjectStore.getState().project!.session!;
@@ -189,6 +189,145 @@ describe('follow actions store', () => {
       const nextSession = useProjectStore.getState().project!.session!;
       expect(nextSession.pendingLaunches).toHaveLength(0);
       expect(nextSession.activeClipIdsByTrackId[track.id]).toBe(clips[1].id);
+    });
+  });
+
+  describe('scene tempo/timeSig overrides', () => {
+    it('applies scene tempo override when scene is launched immediately', () => {
+      addTrackWithClips(2);
+      const session = useProjectStore.getState().project!.session!;
+      const scene0 = session.scenes[0];
+
+      // Set scene tempo override
+      useProjectStore.getState().updateSessionSceneProperties(scene0.id, { tempo: 140 });
+
+      // Launch scene (transport not playing = immediate)
+      useProjectStore.getState().launchSessionScene(scene0.id);
+
+      expect(useProjectStore.getState().project!.bpm).toBe(140);
+    });
+
+    it('applies scene time signature override when scene is launched', () => {
+      addTrackWithClips(2);
+      const session = useProjectStore.getState().project!.session!;
+      const scene0 = session.scenes[0];
+
+      useProjectStore.getState().updateSessionSceneProperties(scene0.id, {
+        timeSignature: [3, 4],
+      });
+
+      useProjectStore.getState().launchSessionScene(scene0.id);
+
+      expect(useProjectStore.getState().project!.timeSignature).toBe(3);
+      expect(useProjectStore.getState().project!.timeSignatureDenominator).toBe(4);
+    });
+
+    it('does not change BPM when scene has no tempo override', () => {
+      addTrackWithClips(2);
+      const originalBpm = useProjectStore.getState().project!.bpm;
+      const session = useProjectStore.getState().project!.session!;
+      const scene0 = session.scenes[0];
+
+      useProjectStore.getState().launchSessionScene(scene0.id);
+
+      expect(useProjectStore.getState().project!.bpm).toBe(originalBpm);
+    });
+  });
+
+  describe('scheduleSceneFollowAction', () => {
+    it('queues a scene-follow-action pending launch when scene has follow action "next"', () => {
+      addTrackWithClips(2);
+      const session = useProjectStore.getState().project!.session!;
+      const scene0 = session.scenes[0];
+
+      // Set scene follow action to "next" with 2 bars
+      useProjectStore.getState().setSessionSceneFollowAction(scene0.id, 'next', 2);
+
+      useProjectStore.getState().scheduleSceneFollowAction(scene0.id, 0);
+
+      const pending = useProjectStore.getState().project!.session!.pendingLaunches;
+      expect(pending).toHaveLength(1);
+      expect(pending[0].type).toBe('scene-follow-action');
+      expect(pending[0].sceneId).toBe(session.scenes[1].id);
+      // 2 bars × 4 beats × (60/120) sec/beat = 4 seconds
+      expect(pending[0].executeAt).toBeCloseTo(4, 5);
+    });
+
+    it('does not schedule when scene follow action is "none"', () => {
+      addTrackWithClips(2);
+      const session = useProjectStore.getState().project!.session!;
+      const scene0 = session.scenes[0];
+
+      // Default is no follow action
+      useProjectStore.getState().scheduleSceneFollowAction(scene0.id, 0);
+
+      const pending = useProjectStore.getState().project!.session!.pendingLaunches;
+      expect(pending).toHaveLength(0);
+    });
+
+    it('does not schedule when global follow actions are disabled', () => {
+      addTrackWithClips(2);
+      const session = useProjectStore.getState().project!.session!;
+      const scene0 = session.scenes[0];
+
+      useProjectStore.getState().setSessionSceneFollowAction(scene0.id, 'next', 1);
+      useProjectStore.getState().setSessionFollowActionsEnabled(false);
+
+      useProjectStore.getState().scheduleSceneFollowAction(scene0.id, 0);
+
+      const pending = useProjectStore.getState().project!.session!.pendingLaunches;
+      expect(pending).toHaveLength(0);
+    });
+
+    it('queues scene-follow-action when scene follow action is "stop"', () => {
+      addTrackWithClips(2);
+      const session = useProjectStore.getState().project!.session!;
+      const scene0 = session.scenes[0];
+
+      useProjectStore.getState().setSessionSceneFollowAction(scene0.id, 'stop', 1);
+      useProjectStore.getState().scheduleSceneFollowAction(scene0.id, 0);
+
+      const pending = useProjectStore.getState().project!.session!.pendingLaunches;
+      expect(pending).toHaveLength(1);
+      expect(pending[0].type).toBe('scene-follow-action');
+    });
+
+    it('queues scene-follow-action wrapping to first when "next" on last scene', () => {
+      addTrackWithClips(2);
+      const session = useProjectStore.getState().project!.session!;
+      const lastScene = session.scenes[session.scenes.length - 1];
+
+      useProjectStore.getState().setSessionSceneFollowAction(lastScene.id, 'next', 1);
+      useProjectStore.getState().scheduleSceneFollowAction(lastScene.id, 0);
+
+      const pending = useProjectStore.getState().project!.session!.pendingLaunches;
+      expect(pending).toHaveLength(1);
+      expect(pending[0].type).toBe('scene-follow-action');
+    });
+
+    it('commitPendingSessionLaunches processes scene-follow-action and chains to next scene', () => {
+      const { track, clips } = addTrackWithClips(3);
+      const session = useProjectStore.getState().project!.session!;
+      const scene0 = session.scenes[0];
+
+      // Set scene 0 follow action to "next" with 1 bar
+      useProjectStore.getState().setSessionSceneFollowAction(scene0.id, 'next', 1);
+
+      // Launch scene 0 immediately (transport not playing)
+      useProjectStore.getState().launchSessionScene(scene0.id);
+
+      // Verify scene 0 clip is active and a follow action is pending
+      let state = useProjectStore.getState().project!.session!;
+      expect(state.activeClipIdsByTrackId[track.id]).toBe(clips[0].id);
+      expect(state.pendingLaunches).toHaveLength(1);
+      expect(state.pendingLaunches[0].type).toBe('scene-follow-action');
+
+      // Commit the scene follow action at the scheduled time (1 bar = 4 beats = 2s at 120bpm)
+      useProjectStore.getState().commitPendingSessionLaunches(2);
+
+      state = useProjectStore.getState().project!.session!;
+      // Scene 1 clip should now be active
+      expect(state.activeClipIdsByTrackId[track.id]).toBe(clips[1].id);
     });
   });
 });

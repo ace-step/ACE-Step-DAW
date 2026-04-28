@@ -82,6 +82,19 @@ describe('promptLibrarySlice', () => {
 
       expect(result.tags).toEqual(['rock', 'guitar']);
     });
+
+    it('trims prompt text before saving', () => {
+      const result = slice.savePrompt({
+        prompt: '  airy synth pad  ',
+        title: '',
+        tags: [],
+        category: '',
+        metadata: {},
+      });
+
+      expect(result.prompt).toBe('airy synth pad');
+      expect(result.title).toBe('airy synth pad');
+    });
   });
 
   describe('updatePrompt', () => {
@@ -103,6 +116,24 @@ describe('promptLibrarySlice', () => {
       expect(updated!.title).toBe('Updated Title');
       expect(updated!.tags).toEqual(['updated']);
       expect(updated!.prompt).toBe('original');
+    });
+
+    it('trims updated prompt text', () => {
+      const saved = slice.savePrompt({
+        prompt: 'original',
+        title: 'Original',
+        tags: [],
+        category: '',
+        metadata: {},
+      });
+
+      const updated = slice.updatePrompt(saved.id, {
+        prompt: '  updated prompt  ',
+        title: '',
+      });
+
+      expect(updated!.prompt).toBe('updated prompt');
+      expect(updated!.title).toBe('updated prompt');
     });
 
     it('returns null for non-existent prompt', () => {
@@ -349,6 +380,47 @@ describe('promptLibrarySlice', () => {
       const count = slice.importLibrary(exportData);
       expect(count).toBe(1);
       expect(slice.getAll()).toHaveLength(2);
+    });
+
+    it('normalizes imported prompts and skips duplicate payload entries', () => {
+      const exportData: PromptLibraryExport = {
+        version: 1,
+        exportedAt: Date.now(),
+        prompts: [
+          makeSavedPrompt({
+            prompt: '  Imported Prompt  ',
+            title: '  Imported  ',
+            tags: ['Rock', 'rock', 'GUITAR '],
+            category: '  hooks  ',
+          }),
+          makeSavedPrompt({ prompt: 'imported prompt', title: 'Duplicate casing' }),
+        ],
+      };
+
+      const count = slice.importLibrary(exportData);
+      const imported = slice.getAll()[0];
+      expect(count).toBe(1);
+      expect(imported.prompt).toBe('Imported Prompt');
+      expect(imported.title).toBe('Imported');
+      expect(imported.tags).toEqual(['rock', 'guitar']);
+      expect(imported.category).toBe('hooks');
+    });
+
+    it('adds empty metadata for imported prompts that omit metadata', () => {
+      const exportData: PromptLibraryExport = {
+        version: 1,
+        exportedAt: Date.now(),
+        prompts: [
+          {
+            ...makeSavedPrompt({ prompt: 'metadata-free import', title: 'No Metadata' }),
+            metadata: undefined,
+          } as unknown as SavedPrompt,
+        ],
+      };
+
+      const count = slice.importLibrary(exportData);
+      expect(count).toBe(1);
+      expect(slice.getAll()[0].metadata).toEqual({});
     });
   });
 

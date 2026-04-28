@@ -51,6 +51,10 @@ function normalizeTags(tags: string[]): string[] {
   return result;
 }
 
+function normalizePromptKey(prompt: string): string {
+  return prompt.trim().toLowerCase();
+}
+
 function autoTitle(prompt: string): string {
   const maxLen = 50;
   if (prompt.length <= maxLen) return prompt;
@@ -205,16 +209,25 @@ export function createPromptLibrarySlice(): PromptLibrarySlice {
     },
 
     importLibrary(data) {
-      const existingPrompts = new Set(library.map((p) => p.prompt.trim().toLowerCase()));
-      const newPrompts = data.prompts.filter((p) => !existingPrompts.has(p.prompt.trim().toLowerCase()));
-      library = [...library, ...newPrompts.map((p) => ({
-        ...p,
-        id: generateId(),
-        prompt: p.prompt.trim(),
-        title: (p.title ?? '').trim() || autoTitle(p.prompt.trim()),
-        tags: normalizeTags(p.tags ?? []),
-        category: (p.category ?? '').trim(),
-      }))];
+      const existingPrompts = new Set(library.map((p) => normalizePromptKey(p.prompt)));
+      const newPrompts: SavedPrompt[] = [];
+      for (const prompt of data.prompts) {
+        const trimmedPrompt = prompt.prompt.trim();
+        const key = normalizePromptKey(trimmedPrompt);
+        if (!key || existingPrompts.has(key)) continue;
+        const metadata = prompt.metadata ?? {};
+        existingPrompts.add(key);
+        newPrompts.push({
+          ...prompt,
+          id: generateId(),
+          prompt: trimmedPrompt,
+          title: (prompt.title ?? '').trim() || autoTitle(trimmedPrompt),
+          tags: normalizeTags(prompt.tags ?? []),
+          category: (prompt.category ?? '').trim(),
+          metadata: { ...metadata },
+        });
+      }
+      library = [...library, ...newPrompts];
       return newPrompts.length;
     },
 

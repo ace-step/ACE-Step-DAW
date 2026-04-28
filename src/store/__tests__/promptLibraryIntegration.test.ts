@@ -78,6 +78,30 @@ describe('generationStore prompt library integration', () => {
     expect(updated?.useCount).toBe(1);
   });
 
+  it('normalizes prompt metadata before applying it to the generation form', () => {
+    const saved = useGenerationStore.getState().saveToPromptLibrary({
+      prompt: 'Apply imported prompt',
+      title: 'Imported',
+      tags: ['test'],
+      category: '',
+      metadata: {
+        bpm: 999,
+        keyScale: '  D minor  ',
+        styleTags: ['Rock', 'rock', 'GUITAR', 'ambient', 'lo-fi', 'warm', 'extra'],
+        lengthSeconds: 9999,
+      },
+    });
+
+    const applied = useGenerationStore.getState().applyPromptFromLibrary(saved.id);
+    expect(applied).toBe(true);
+
+    const form = useGenerationStore.getState().generationForm;
+    expect(form.bpm).toBe(300);
+    expect(form.keyScale).toBe('D minor');
+    expect(form.styleTags).toEqual(['Rock', 'GUITAR', 'ambient', 'lo-fi', 'warm', 'extra']);
+    expect(form.lengthSeconds).toBe(600);
+  });
+
   it('applyPromptFromLibrary returns false for non-existent id', () => {
     const result = useGenerationStore.getState().applyPromptFromLibrary('does-not-exist');
     expect(result).toBe(false);

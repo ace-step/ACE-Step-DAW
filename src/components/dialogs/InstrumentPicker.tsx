@@ -1,10 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { TRACK_NAMES, TRACK_CATALOG, TRACK_TYPE_CATALOG } from '../../constants/tracks';
 import type { TrackName, TrackType } from '../../types/project';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { getFirstSelectedEmptyTrackSlotIndex } from '../arrangement/trackSlotLayout';
+import { toastError } from '../../hooks/useToast';
 
 type PickerStep = 'type' | 'instrument';
 
@@ -21,6 +23,8 @@ export function InstrumentPicker() {
   const project = useProjectStore((s) => s.project);
   const { openFilePicker, openQuickSamplerFilePicker } = useAudioImport();
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, show);
   const [step, setStep] = useState<PickerStep>('type');
   const [selectedType, setSelectedType] = useState<TrackType>('stems');
   const selectedEmptySlotIndex = getFirstSelectedEmptyTrackSlotIndex(selectedTrackIds);
@@ -55,15 +59,34 @@ export function InstrumentPicker() {
   };
 
   const handlePresetSelect = (presetId: string) => {
-    applyTrackPreset(presetId);
+    const insertOptions = selectedEmptySlotIndex !== null
+      ? { order: selectedEmptySlotIndex + 1 }
+      : undefined;
+    const track = insertOptions
+      ? applyTrackPreset(presetId, insertOptions)
+      : applyTrackPreset(presetId);
+    if (!track) {
+      toastError('Track presets cannot be applied in viewer mode.');
+      return;
+    }
     close();
   };
 
   const typeOrder: TrackType[] = ['stems', 'sample', 'sequencer', 'drumMachine', 'pianoRoll'];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div className="w-[480px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={(e) => { if (e.target === e.currentTarget) close(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') close(); }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="instrument-picker-title"
+        className="w-[480px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl"
+      >
         <div className="flex items-center justify-between px-4 py-3 border-b border-daw-border">
           <div className="flex items-center gap-2">
             {step === 'instrument' && (
@@ -74,7 +97,7 @@ export function InstrumentPicker() {
                 ←
               </button>
             )}
-            <h2 className="text-sm font-medium">
+            <h2 id="instrument-picker-title" className="text-sm font-medium">
               {step === 'type' ? 'Add Track' : `Add ${TRACK_TYPE_CATALOG[selectedType].label} Track`}
             </h2>
           </div>

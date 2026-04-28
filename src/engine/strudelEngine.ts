@@ -21,6 +21,8 @@
  * └─────────────────────────────────────────────┘
  */
 
+import { strudelEventLog } from './strudelStructuredLog';
+
 // ─── Types ──────────────────────────────────────────────────
 
 /** A single event from a Strudel pattern query. */
@@ -186,9 +188,11 @@ export async function evaluateStrudelCode(
     entry.lastCode = code;
     entry.isPlaying = true;
     entry.lastError = null;
+    strudelEventLog.emit('evaluate', { trackId, codeLength: stripped.length, success: true });
     return pattern;
   } catch (err) {
     entry.lastError = err instanceof Error ? err.message : String(err);
+    strudelEventLog.emit('error', { trackId, error: entry.lastError, phase: 'evaluate' }, 'error');
     throw err;
   }
 }
@@ -260,6 +264,7 @@ export function stopStrudelTrack(trackId: string): void {
   if (entry) {
     entry.repl.stop();
     entry.isPlaying = false;
+    strudelEventLog.emit('stop', { trackId });
   }
 }
 
@@ -271,6 +276,7 @@ export async function startStrudelTrack(trackId: string): Promise<void> {
   if (entry && entry.lastCode) {
     entry.repl.start();
     entry.isPlaying = true;
+    strudelEventLog.emit('play', { trackId });
   }
 }
 
@@ -293,6 +299,7 @@ export function setAllStrudelBpm(bpm: number, beatsPerCycle: number = 4): void {
   for (const entry of trackRepls.values()) {
     entry.repl.setCps(cps);
   }
+  strudelEventLog.emit('bpm-sync', { bpm, cps, trackCount: trackRepls.size }, 'debug');
 }
 
 /**

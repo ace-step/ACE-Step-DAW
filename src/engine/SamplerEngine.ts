@@ -1,22 +1,38 @@
-import * as Tone from 'tone';
+/**
+ * SamplerEngine — chromatic sample playback per track.
+ *
+ * Phase 5H migration: removed Tone.js dependency. Tone was being used
+ * purely as a thin wrapper over native Web Audio nodes —
+ * `Tone.Gain`/`Tone.Panner`/`Tone.BufferSource`/`Tone.ToneAudioBuffer`
+ * all map 1:1 onto native `GainNode`/`StereoPannerNode`/`AudioBufferSourceNode`/
+ * `AudioBuffer`, so this is a mechanical swap rather than a DSP rewrite.
+ */
 import type { SamplerConfig, Track } from '../types/project';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
+import { resolveZonePlayback, type ZonePlaybackInfo } from './samplerZoneResolver';
 
 interface SamplerVoice {
-  gain: Tone.Gain;
+  gain: GainNode;
+  panner: StereoPannerNode | null;
   pitch: number;
   releaseTimeoutId: ReturnType<typeof setTimeout> | null;
-  source: Tone.ToneBufferSource;
+  source: AudioBufferSourceNode;
+  /** Cached because AudioBufferSourceNode.playbackRate is an AudioParam,
+   *  but downstream timing math only needs the scalar. */
+  playbackRate: number;
+  /** Disposal timer — cleared in `_disposeVoice` so we don't drop nodes twice. */
+  disposeTimeoutId: ReturnType<typeof setTimeout> | null;
 }
 
 interface SamplerInstance {
   audioBuffer: AudioBuffer;
   audioKey: string;
-  buffer: Tone.ToneAudioBuffer;
   config: SamplerConfig;
-  output: Tone.Gain;
+  output: GainNode;
   voices: Map<number, SamplerVoice[]>;
+  /** Cached zone buffers keyed by zone audioKey. */
+  zoneBuffers: Map<string, AudioBuffer>;
 }
 
 /** Default ADSR values for new sampler configs. */
@@ -87,8 +103,9 @@ class SamplerEngine {
   private readonly bufferCache = new Map<string, AudioBuffer>();
 
   async ensureStarted() {
-    if (Tone.getContext().state !== 'running') {
-      await Tone.start();
+    const engine = getAudioEngine();
+    if (engine.ctx.state !== 'running') {
+      await engine.resume();
     }
   }
 
@@ -96,15 +113,18 @@ class SamplerEngine {
     trackId: string,
     config: SamplerConfig,
     audioBuffer: AudioBuffer,
-    connectTo?: Tone.InputNode,
+    connectTo?: AudioNode,
   ) {
     const nextConfig = buildPlaybackConfig(config, audioBuffer.duration);
     const existing = this.samplers.get(trackId);
     if (existing && existing.audioKey === config.audioKey) {
       existing.audioBuffer = audioBuffer;
-      existing.buffer = new Tone.ToneAudioBuffer(audioBuffer);
       existing.config = nextConfig;
       this.bufferCache.set(config.audioKey, audioBuffer);
+      this._pruneZoneBuffers(existing, nextConfig);
+      if (nextConfig.zones && nextConfig.zones.length > 0) {
+        void this._loadZoneBuffers(trackId, nextConfig);
+      }
       return;
     }
 
@@ -112,22 +132,71 @@ class SamplerEngine {
       this._disposeInstance(existing);
     }
 
-    const output = new Tone.Gain(0.55);
+    const ctx = getAudioEngine().ctx;
+    const output = ctx.createGain();
+    output.gain.value = 0.55;
     if (connectTo) {
       output.connect(connectTo);
     } else {
-      output.toDestination();
+      output.connect(ctx.destination);
     }
 
     this.samplers.set(trackId, {
       audioBuffer,
       audioKey: config.audioKey,
-      buffer: new Tone.ToneAudioBuffer(audioBuffer),
       config: nextConfig,
       output,
       voices: new Map(),
+      zoneBuffers: new Map(),
     });
     this.bufferCache.set(config.audioKey, audioBuffer);
+
+    if (nextConfig.zones && nextConfig.zones.length > 0) {
+      void this._loadZoneBuffers(trackId, nextConfig);
+    }
+  }
+
+  /** Remove zone buffer entries that no longer correspond to any zone in the config. */
+  private _pruneZoneBuffers(instance: SamplerInstance, config: SamplerConfig): void {
+    const activeKeys = new Set((config.zones ?? []).map((z) => z.audioKey));
+    for (const key of instance.zoneBuffers.keys()) {
+      if (!activeKeys.has(key)) {
+        instance.zoneBuffers.delete(key);
+      }
+    }
+  }
+
+  /** Load audio buffers for all zones in a config. */
+  private async _loadZoneBuffers(trackId: string, config: SamplerConfig): Promise<void> {
+    const zones = config.zones;
+    if (!zones) return;
+
+    const instance = this.samplers.get(trackId);
+    if (!instance) return;
+
+    const engine = getAudioEngine();
+    await engine.resume();
+
+    for (const zone of zones) {
+      if (!zone.audioKey) continue;
+      if (instance.zoneBuffers.has(zone.audioKey)) continue;
+
+      const cached = this.bufferCache.get(zone.audioKey);
+      if (cached) {
+        instance.zoneBuffers.set(zone.audioKey, cached);
+        continue;
+      }
+
+      const blob = await loadAudioBlobByKey(zone.audioKey);
+      if (!blob) continue;
+
+      const buffer = await engine.decodeAudioData(blob);
+      this.bufferCache.set(zone.audioKey, buffer);
+      const current = this.samplers.get(trackId);
+      if (current) {
+        current.zoneBuffers.set(zone.audioKey, buffer);
+      }
+    }
   }
 
   async getTrackBuffer(track: Track): Promise<AudioBuffer | null> {
@@ -167,18 +236,38 @@ class SamplerEngine {
     this.previewVoices = [];
 
     const previewConfig = buildPlaybackConfig(config, buffer.duration);
-    const voice = this._createVoice(new Tone.ToneAudioBuffer(buffer), previewConfig, pitch, velocity / 127);
-    voice.gain.connect(Tone.getDestination());
-    this.previewVoices.push(voice);
-    this._startVoice(voice, previewConfig, duration);
+    const vel01 = velocity / 127;
+    const zoneInfos = resolveZonePlayback(previewConfig, pitch, velocity);
+    const ctx = getAudioEngine().ctx;
+
+    for (const info of zoneInfos) {
+      const voice = this._createVoice(buffer, previewConfig, pitch, vel01, info);
+      voice.gain.connect(ctx.destination);
+      this.previewVoices.push(voice);
+      this._startVoice(voice, previewConfig, duration);
+      break; // Preview plays first matching zone only
+    }
   }
 
   triggerAttackRelease(trackId: string, pitch: number, duration: number, velocity = 1) {
     const instance = this.samplers.get(trackId);
     if (!instance) return;
-    const voice = this._createVoice(instance.buffer, instance.config, pitch, velocity);
-    this._registerVoice(instance, voice);
-    this._startVoice(voice, instance.config, duration);
+
+    const zoneInfos = resolveZonePlayback(instance.config, pitch, Math.round(velocity * 127));
+    let played = false;
+    for (const info of zoneInfos) {
+      const buffer = this._getZoneBuffer(instance, info.audioKey);
+      if (!buffer) continue;
+      const voice = this._createVoice(buffer, instance.config, pitch, velocity, info);
+      this._registerVoice(instance, voice);
+      this._startVoice(voice, instance.config, duration);
+      played = true;
+    }
+    if (!played) {
+      const voice = this._createVoice(instance.audioBuffer, instance.config, pitch, velocity);
+      this._registerVoice(instance, voice);
+      this._startVoice(voice, instance.config, duration);
+    }
   }
 
   /** Trigger note on for a track sampler (for live playing / recording). */
@@ -191,9 +280,22 @@ class SamplerEngine {
       return;
     }
 
-    const voice = this._createVoice(instance.buffer, instance.config, pitch, velocity / 127);
-    this._registerVoice(instance, voice);
-    this._startVoice(voice, instance.config, Number.POSITIVE_INFINITY);
+    const vel01 = velocity / 127;
+    const zoneInfos = resolveZonePlayback(instance.config, pitch, velocity);
+    let played = false;
+    for (const info of zoneInfos) {
+      const buffer = this._getZoneBuffer(instance, info.audioKey);
+      if (!buffer) continue;
+      const voice = this._createVoice(buffer, instance.config, pitch, vel01, info);
+      this._registerVoice(instance, voice);
+      this._startVoice(voice, instance.config, Number.POSITIVE_INFINITY);
+      played = true;
+    }
+    if (!played) {
+      const voice = this._createVoice(instance.audioBuffer, instance.config, pitch, vel01);
+      this._registerVoice(instance, voice);
+      this._startVoice(voice, instance.config, Number.POSITIVE_INFINITY);
+    }
   }
 
   /** Trigger note off for a track sampler. */
@@ -256,36 +358,61 @@ class SamplerEngine {
     this.previewVoices = [];
   }
 
+  /** Get the buffer for a zone audioKey, falling back to primary. */
+  private _getZoneBuffer(instance: SamplerInstance, audioKey: string): AudioBuffer | null {
+    if (audioKey === instance.audioKey) return instance.audioBuffer;
+    return instance.zoneBuffers.get(audioKey) ?? null;
+  }
+
   private _createVoice(
-    buffer: Tone.ToneAudioBuffer,
+    buffer: AudioBuffer,
     config: SamplerConfig,
     pitch: number,
     velocity: number,
+    zoneInfo?: ZonePlaybackInfo,
   ): SamplerVoice {
-    const trimmedDuration = Math.max(0.01, config.trimEnd - config.trimStart);
-    const playbackRate = Math.pow(2, (pitch - config.rootNote) / 12);
-    const source = new Tone.BufferSource({
-      url: buffer,
-      loop: config.playbackMode === 'loop',
-      loopStart: config.loopStart,
-      loopEnd: config.loopEnd,
-      playbackRate,
-    });
-    const gain = new Tone.Gain(0);
-    source.connect(gain);
+    const ctx = getAudioEngine().ctx;
+    const rootNote = zoneInfo?.rootNote ?? config.rootNote;
+    const tuneOffsetSemitones = (zoneInfo?.tuneOffsetCents ?? 0) / 100;
+    const playbackRate = Math.pow(2, (pitch - rootNote + tuneOffsetSemitones) / 12);
+    const zoneGain = zoneInfo?.gain ?? 1;
+    const zonePan = zoneInfo?.pan ?? 0;
 
-    const now = Tone.now();
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = config.playbackMode === 'loop';
+    source.loopStart = config.loopStart;
+    source.loopEnd = config.loopEnd;
+    source.playbackRate.value = playbackRate;
+
+    const gain = ctx.createGain();
+    let panner: StereoPannerNode | null = null;
+
+    if (zonePan !== 0) {
+      panner = ctx.createStereoPanner();
+      panner.pan.value = zonePan;
+      source.connect(panner);
+      panner.connect(gain);
+    } else {
+      source.connect(gain);
+    }
+
+    const now = ctx.currentTime;
     const attackEnd = now + Math.max(0.001, config.attack);
-    const sustainLevel = clamp(velocity * config.sustain, 0, 1);
+    const peakLevel = clamp(velocity * zoneGain, 0, 1);
+    const sustainLevel = clamp(peakLevel * config.sustain, 0, 1);
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(Math.max(0.0001, velocity), attackEnd);
+    gain.gain.linearRampToValueAtTime(Math.max(0.0001, peakLevel), attackEnd);
     gain.gain.linearRampToValueAtTime(Math.max(0.0001, sustainLevel), attackEnd + Math.max(0, config.decay));
 
     return {
       gain,
+      panner,
       pitch,
       releaseTimeoutId: null,
       source,
+      playbackRate,
+      disposeTimeoutId: null,
     };
   }
 
@@ -296,9 +423,10 @@ class SamplerEngine {
   }
 
   private _startVoice(voice: SamplerVoice, config: SamplerConfig, requestedDuration: number) {
-    const startTime = Tone.now();
+    const ctx = getAudioEngine().ctx;
+    const startTime = ctx.currentTime;
     const trimmedDuration = Math.max(0.01, config.trimEnd - config.trimStart);
-    const playbackRate = Math.max(0.001, voice.source.playbackRate.value);
+    const playbackRate = Math.max(0.001, voice.playbackRate);
     const naturalDuration = trimmedDuration / playbackRate;
 
     if (config.playbackMode === 'loop') {
@@ -332,25 +460,43 @@ class SamplerEngine {
       voice.releaseTimeoutId = null;
     }
 
-    const now = Tone.now();
+    const ctx = getAudioEngine().ctx;
+    const now = ctx.currentTime;
     const releaseEnd = now + Math.max(0.01, release);
+    const currentGain = voice.gain.gain.value;
     voice.gain.gain.cancelScheduledValues(now);
-    voice.gain.gain.setValueAtTime(Math.max(0.0001, voice.gain.gain.value), now);
+    voice.gain.gain.setValueAtTime(Math.max(0.0001, currentGain), now);
     voice.gain.gain.linearRampToValueAtTime(0.0001, releaseEnd);
-    voice.source.stop(releaseEnd + 0.005);
-    globalThis.setTimeout(() => {
-      voice.source.dispose();
-      voice.gain.dispose();
+    try { voice.source.stop(releaseEnd + 0.005); } catch { /* already stopped */ }
+
+    if (voice.disposeTimeoutId !== null) {
+      globalThis.clearTimeout(voice.disposeTimeoutId);
+    }
+    voice.disposeTimeoutId = globalThis.setTimeout(() => {
+      this._disposeVoice(voice);
     }, Math.max(20, Math.ceil((release + 0.05) * 1000)));
+  }
+
+  private _disposeVoice(voice: SamplerVoice): void {
+    if (voice.releaseTimeoutId !== null) {
+      globalThis.clearTimeout(voice.releaseTimeoutId);
+      voice.releaseTimeoutId = null;
+    }
+    if (voice.disposeTimeoutId !== null) {
+      globalThis.clearTimeout(voice.disposeTimeoutId);
+      voice.disposeTimeoutId = null;
+    }
+    try { voice.source.stop(); } catch { /* already stopped */ }
+    try { voice.source.disconnect(); } catch { /* already disconnected */ }
+    try { voice.gain.disconnect(); } catch { /* already disconnected */ }
+    if (voice.panner) {
+      try { voice.panner.disconnect(); } catch { /* already disconnected */ }
+    }
   }
 
   private _disposeVoices(voices: SamplerVoice[]) {
     for (const voice of voices) {
-      if (voice.releaseTimeoutId !== null) {
-        globalThis.clearTimeout(voice.releaseTimeoutId);
-      }
-      voice.source.dispose();
-      voice.gain.dispose();
+      this._disposeVoice(voice);
     }
   }
 
@@ -359,7 +505,8 @@ class SamplerEngine {
       this._disposeVoices(voices);
     }
     instance.voices.clear();
-    instance.output.dispose();
+    instance.zoneBuffers.clear();
+    try { instance.output.disconnect(); } catch { /* already disconnected */ }
   }
 }
 

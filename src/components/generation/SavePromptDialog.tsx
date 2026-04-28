@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGenerationStore } from '../../store/generationStore';
 import { Button } from '../ui/Button';
 import { toastSuccess } from '../../hooks/useToast';
@@ -9,6 +9,10 @@ const COMMON_TAGS = [
   'vocals', 'instrumental', 'bass', 'drums', 'guitar', 'piano',
   'synth', 'strings', 'upbeat', 'chill', 'dark', 'energetic',
 ];
+
+function normalizeTags(tags: string[]): string[] {
+  return [...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))];
+}
 
 interface SavePromptDialogProps {
   open: boolean;
@@ -34,17 +38,19 @@ export function SavePromptDialog({
   const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState(initialPrompt);
   const [tagInput, setTagInput] = useState('');
-  const [tags, setTags] = useState<string[]>(initialMetadata.styleTags ?? []);
+  const [tags, setTags] = useState<string[]>(normalizeTags(initialMetadata.styleTags ?? []));
   const [category, setCategory] = useState('');
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpenRef.current) {
       setPrompt(initialPrompt);
       setTitle('');
       setTagInput('');
-      setTags([...new Set((initialMetadata.styleTags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean))]);
+      setTags(normalizeTags(initialMetadata.styleTags ?? []));
       setCategory('');
     }
+    wasOpenRef.current = open;
   }, [open, initialPrompt, initialMetadata.styleTags]);
 
   // Escape key to close
@@ -90,7 +96,7 @@ export function SavePromptDialog({
       metadata: {
         bpm: initialMetadata.bpm,
         keyScale: initialMetadata.keyScale,
-        styleTags: initialMetadata.styleTags,
+        styleTags: tags,
         lengthSeconds: initialMetadata.lengthSeconds,
       },
     });

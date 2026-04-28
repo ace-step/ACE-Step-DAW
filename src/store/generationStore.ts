@@ -5,6 +5,7 @@ import type { GenerationPreset } from '../constants/generationPresets';
 import { useProjectStore } from './projectStore';
 import { classifyGenerationError, type GenerationErrorCategory } from '../services/generationErrorClassifier';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
+import { abortJob as abortPipelineJob } from '../services/generationAbortRegistry';
 import {
   applyPromptAutocompleteSuggestion as applyPromptAutocompleteSuggestionToPrompt,
   getPromptAutocompleteSuggestions as getPromptAutocompleteSuggestionsForPrompt,
@@ -27,7 +28,7 @@ export interface GenerationJob {
   id: string;
   clipId: string;
   trackName: string;
-  status: 'queued' | 'generating' | 'processing' | 'done' | 'error';
+  status: 'queued' | 'generating' | 'processing' | 'done' | 'error' | 'cancelled';
   progress: string;
   stage?: string | null;
   progressPercent?: number | null;
@@ -40,6 +41,8 @@ export interface GenerationJob {
   errorCategory?: GenerationErrorCategory;
   error?: string;
   taskId?: string;
+  /** Stored generation parameters for retry. */
+  retryParams?: Record<string, unknown>;
 }
 
 export interface GenerationJobProgressInput {
@@ -77,6 +80,8 @@ function inferStageLabel(status: GenerationJob['status'], progress: string): str
       return 'Complete';
     case 'error':
       return 'Generation failed';
+    case 'cancelled':
+      return 'Cancelled';
     default:
       return null;
   }
@@ -143,15 +148,20 @@ export function deriveGenerationJobProgress(
     etaConfidence = 'none';
   }
 
+  if (input.status === 'cancelled') {
+    etaSeconds = null;
+    etaConfidence = 'none';
+  }
+
   return {
     progress: input.progress,
     stage,
-    progressPercent: input.status === 'done' ? 100 : monotonicPercent,
+    progressPercent: input.status === 'cancelled' ? null : (input.status === 'done' ? 100 : monotonicPercent),
     etaSeconds,
     etaConfidence,
     startedAt,
     lastUpdatedAt: now,
-    completedAt: input.status === 'done' ? now : previous?.completedAt,
+    completedAt: input.status === 'done' || input.status === 'cancelled' ? now : previous?.completedAt,
     ...buildClassifiedError(input.status, input.error),
     error: input.error,
   };
@@ -284,6 +294,7 @@ const MAX_STYLE_TAGS = 6;
 
 export interface GenerationFormState {
   prompt: string;
+  negativePrompt: string;
   styleTags: string[];
   bpm: number;
   keyScale: string;
@@ -386,6 +397,7 @@ function normalizeVariationSessionParams(
 export function createDefaultGenerationFormState(): GenerationFormState {
   return {
     prompt: '',
+    negativePrompt: '',
     styleTags: [],
     bpm: DEFAULT_BPM,
     keyScale: DEFAULT_KEY_SCALE,
@@ -467,6 +479,10 @@ export interface GenerationState {
   updateJob: (jobId: string, updates: Partial<GenerationJob>) => void;
   removeJob: (jobId: string) => void;
   clearCompletedJobs: () => void;
+  /** Cancel an active or queued generation job. */
+  cancelJob: (jobId: string) => void;
+  /** Cancel all active and queued generation jobs. */
+  cancelAllJobs: () => void;
   setIsGenerating: (v: boolean) => void;
   /** Atomically acquire the generation lock. Returns true if acquired, false if already held. */
   tryAcquireGenerationLock: () => boolean;
@@ -480,6 +496,7 @@ export interface GenerationState {
   hydrateGenerationForm: (updates: Partial<GenerationFormState>) => void;
   resetGenerationForm: () => void;
   setGenerationPrompt: (prompt: string) => void;
+  setGenerationNegativePrompt: (negativePrompt: string) => void;
   setGenerationStyleTags: (tags: string[]) => void;
   toggleGenerationStyleTag: (tag: string) => void;
   setGenerationBpm: (bpm: number) => void;
@@ -632,8 +649,46 @@ export const useGenerationStore = create<GenerationState>()(
 
       clearCompletedJobs: () =>
         set((s) => ({
-          jobs: s.jobs.filter((j) => j.status !== 'done' && j.status !== 'error'),
+          jobs: s.jobs.filter((j) => j.status !== 'done' && j.status !== 'error' && j.status !== 'cancelled'),
         })),
+
+      cancelJob: (jobId) => {
+        const s = get();
+        const job = s.jobs.find((j) => j.id === jobId);
+        if (!job || job.status === 'done' || job.status === 'error' || job.status === 'cancelled') return;
+
+        // Only mark cancelled when an underlying controller was actually aborted.
+        if (!abortPipelineJob(jobId)) return;
+
+        set((state) => ({
+          jobs: state.jobs.map((j) =>
+            j.id === jobId
+              ? { ...j, status: 'cancelled' as const, progress: 'Cancelled', stage: 'Cancelled', progressPercent: null, etaSeconds: null, etaConfidence: 'none' as const, completedAt: Date.now(), lastUpdatedAt: Date.now() }
+              : j,
+          ),
+        }));
+      },
+
+      cancelAllJobs: () => {
+        const s = get();
+        // Abort all in-flight API requests that have registered controllers.
+        const abortedJobIds = new Set<string>();
+        for (const job of s.jobs) {
+          if (job.status === 'queued' || job.status === 'generating' || job.status === 'processing') {
+            if (abortPipelineJob(job.id)) abortedJobIds.add(job.id);
+          }
+        }
+
+        if (abortedJobIds.size === 0) return;
+
+        set((state) => ({
+          jobs: state.jobs.map((j) =>
+            abortedJobIds.has(j.id)
+              ? { ...j, status: 'cancelled' as const, progress: 'Cancelled', stage: 'Cancelled', progressPercent: null, etaSeconds: null, etaConfidence: 'none' as const, completedAt: Date.now(), lastUpdatedAt: Date.now() }
+              : j,
+          ),
+        }));
+      },
 
       setIsGenerating: (v) => set({ isGenerating: v }),
       tryAcquireGenerationLock: () => {
@@ -788,6 +843,14 @@ export const useGenerationStore = create<GenerationState>()(
           ...s.generationForm,
           prompt,
           requestError: s.generationForm.requestError ? null : s.generationForm.requestError,
+        },
+      })),
+
+      setGenerationNegativePrompt: (negativePrompt) => set((s) => ({
+        generationForm: {
+          ...s.generationForm,
+          negativePrompt,
+          requestError: null,
         },
       })),
 
@@ -1108,6 +1171,7 @@ export const useGenerationStore = create<GenerationState>()(
 
         for (const variation of s.variationSession.variations) {
           if (!variation.clipId) continue;
+          if (!projState.getClipById(variation.clipId)) continue;
           const shouldMute = variation.index !== clamped;
           projState.updateClip(variation.clipId, { muted: shouldMute });
         }
@@ -1185,16 +1249,24 @@ export const useGenerationStore = create<GenerationState>()(
       applyPromptFromLibrary: (id) => {
         const prompt = promptLibrary.getById(id);
         if (!prompt) return false;
+        const metadataBpm = prompt.metadata.bpm;
+        const metadataLengthSeconds = prompt.metadata.lengthSeconds;
+        const metadataKeyScale = typeof prompt.metadata.keyScale === 'string'
+          ? prompt.metadata.keyScale.trim()
+          : '';
+        const metadataStyleTags = normalizeStyleTags(prompt.metadata.styleTags ?? []);
         promptLibrary.recordUse(id);
         set((s) => ({
           promptLibrary: promptLibrary.getState(),
           generationForm: {
             ...s.generationForm,
             prompt: prompt.prompt,
-            ...(prompt.metadata.bpm ? { bpm: prompt.metadata.bpm } : {}),
-            ...(prompt.metadata.keyScale ? { keyScale: prompt.metadata.keyScale } : {}),
-            ...(prompt.metadata.styleTags ? { styleTags: prompt.metadata.styleTags } : {}),
-            ...(prompt.metadata.lengthSeconds ? { lengthSeconds: prompt.metadata.lengthSeconds } : {}),
+            ...(typeof metadataBpm === 'number' && Number.isFinite(metadataBpm) ? { bpm: clampBpm(metadataBpm) } : {}),
+            ...(metadataKeyScale ? { keyScale: metadataKeyScale } : {}),
+            ...(metadataStyleTags.length > 0 ? { styleTags: metadataStyleTags } : {}),
+            ...(typeof metadataLengthSeconds === 'number' && Number.isFinite(metadataLengthSeconds)
+              ? { lengthSeconds: clampLengthSeconds(metadataLengthSeconds) }
+              : {}),
           },
         }));
         return true;

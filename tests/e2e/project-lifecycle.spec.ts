@@ -11,13 +11,13 @@
  * Left to other layers: user-visible dialog affordances and manual feel checks.
  */
 import { test, expect } from '@playwright/test';
+import { dismissWelcomeOverlay } from '../support/e2eStartup';
 
-test.describe('Project Lifecycle', () => {
+test.describe('Project Lifecycle @critical', () => {
   test.beforeEach(async ({ page }) => {
+    await dismissWelcomeOverlay(page);
     await page.goto('/');
-    // Wait for the app to fully load
     await page.waitForLoadState('domcontentloaded');
-    // Wait for the store to be exposed by the app
     await page.waitForFunction(() => typeof (window as any).__store !== 'undefined', null, { timeout: 10000 });
   });
 

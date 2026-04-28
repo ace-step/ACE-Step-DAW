@@ -16,7 +16,7 @@ describe('classifyGenerationError', () => {
     ])('classifies "%s" as network', (message) => {
       const result = classifyGenerationError(message);
       expect(result.category).toBe('network' satisfies GenerationErrorCategory);
-      expect(result.suggestion).toBeTruthy();
+      expect(result.suggestion.length).toBeGreaterThan(0);
       expect(result.retryable).toBe(true);
     });
   });

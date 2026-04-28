@@ -68,7 +68,7 @@ describe('SavePromptDialog', () => {
       <SavePromptDialog open={true} onClose={mockOnClose} initialPrompt="" />,
     );
 
-    const saveButton = screen.getByText('Save');
+    const saveButton = screen.getByRole('button', { name: 'Save' });
     expect(saveButton).toBeDisabled();
   });
 
@@ -113,6 +113,78 @@ describe('SavePromptDialog', () => {
 
     // Tag should now be in the tag list
     expect(screen.getByText('rock')).toBeInTheDocument();
+  });
+
+  it('normalizes initial style tags before rendering and saving', () => {
+    render(
+      <SavePromptDialog
+        open={true}
+        onClose={mockOnClose}
+        initialPrompt="Layered guitar hook"
+        initialMetadata={{ styleTags: ['Rock', ' rock ', 'GUITAR'] }}
+      />,
+    );
+
+    expect(screen.getByText('rock')).toBeInTheDocument();
+    expect(screen.getByText('guitar')).toBeInTheDocument();
+    expect(screen.queryByText('Rock')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Save'));
+    const saved = useGenerationStore.getState().promptLibrary[0];
+    expect(saved.tags).toEqual(['rock', 'guitar']);
+    expect(saved.metadata.styleTags).toEqual(['rock', 'guitar']);
+  });
+
+  it('persists edited tags as reusable style metadata', () => {
+    render(
+      <SavePromptDialog
+        open={true}
+        onClose={mockOnClose}
+        initialPrompt="Layered guitar hook"
+        initialMetadata={{ styleTags: ['rock'] }}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Remove tag rock'));
+    const tagInput = screen.getByPlaceholderText('Type and press Enter to add tags');
+    fireEvent.change(tagInput, { target: { value: 'ambient' } });
+    fireEvent.keyDown(tagInput, { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const saved = useGenerationStore.getState().promptLibrary[0];
+    expect(saved.tags).toEqual(['ambient']);
+    expect(saved.metadata.styleTags).toEqual(['ambient']);
+  });
+
+  it('does not reset draft fields when metadata props change while open', () => {
+    const { rerender } = render(
+      <SavePromptDialog
+        open={true}
+        onClose={mockOnClose}
+        initialPrompt="Layered guitar hook"
+        initialMetadata={{ styleTags: ['rock'] }}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Auto-generated from prompt if empty'), {
+      target: { value: 'Draft title' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Type and press Enter to add tags'), {
+      target: { value: 'ambient' },
+    });
+
+    rerender(
+      <SavePromptDialog
+        open={true}
+        onClose={mockOnClose}
+        initialPrompt="Layered guitar hook"
+        initialMetadata={{ styleTags: ['rock', 'guitar'] }}
+      />,
+    );
+
+    expect(screen.getByPlaceholderText('Auto-generated from prompt if empty')).toHaveValue('Draft title');
+    expect(screen.getByPlaceholderText('Type and press Enter to add tags')).toHaveValue('ambient');
+    expect(screen.queryByText('guitar')).not.toBeInTheDocument();
   });
 
   it('shows metadata summary when provided', () => {

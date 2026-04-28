@@ -12,6 +12,7 @@ import { useVoiceStore } from '../store/voiceStore';
 import { useUIStore } from '../store/uiStore';
 import type { LegoTaskParams, Text2MusicTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
 import type { Clip, ClipGenerationStatus, InferredMetas } from '../types/project';
+import { DEFAULT_STYLE_INFLUENCE, clampInfluence, type VoiceProfile } from '../types/voice';
 import * as api from './aceStepApi';
 import { generateSilenceWav } from './silenceGenerator';
 import { saveAudioBlob, loadAudioBlobByKey } from './audioFileManager';
@@ -76,6 +77,27 @@ function extractProgressMetadata(entry: TaskResultEntry): { stage: string | null
   }
 
   return { stage, progressPercent };
+}
+
+interface VoiceInfluenceTaskParams {
+  audio_cover_strength?: number;
+  guidance_scale: number;
+}
+
+function applyVoiceInfluenceParams(
+  params: VoiceInfluenceTaskParams,
+  voiceProfile: VoiceProfile,
+  overrides: { audioInfluence?: number; styleInfluence?: number } = {},
+) {
+  const audioInfluence = overrides.audioInfluence ?? voiceProfile.defaultAudioInfluence;
+  const styleInfluence = overrides.styleInfluence ?? voiceProfile.defaultStyleInfluence;
+
+  params.audio_cover_strength = clampInfluence(audioInfluence) / 100;
+
+  const styleFactor = clampInfluence(styleInfluence) / DEFAULT_STYLE_INFLUENCE;
+  if (Number.isFinite(params.guidance_scale) && Number.isFinite(styleFactor)) {
+    params.guidance_scale = Math.max(0, Math.min(20, Number((params.guidance_scale * styleFactor).toFixed(1))));
+  }
 }
 
 export interface GenerationOutcome {
@@ -317,14 +339,18 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
 
     // Voice cloning: load voice blob from IDB and upload it as ACE-Step reference audio.
     let referenceAudioBlob: Blob | undefined;
-    const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
-    if (selectedVoiceId) {
-      const voiceProfile = useVoiceStore.getState().getVoiceById(selectedVoiceId);
+    const voiceStore = useVoiceStore.getState();
+    const voiceProfileId = params.voiceProfileId ?? voiceStore.selectedVoiceId;
+    if (voiceProfileId) {
+      const voiceProfile = voiceStore.getVoiceById(voiceProfileId);
       if (voiceProfile) {
         const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
         if (blob) {
           referenceAudioBlob = blob;
-          taskParams.audio_cover_strength = voiceProfile.defaultAudioInfluence / 100;
+          applyVoiceInfluenceParams(taskParams, voiceProfile, {
+            audioInfluence: params.audioInfluence,
+            styleInfluence: params.styleInfluence,
+          });
         }
       }
     }
@@ -892,7 +918,7 @@ async function generateClipInternal(
         const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
         if (blob) {
           referenceAudioBlob = blob;
-          params.audio_cover_strength = voiceProfile.defaultAudioInfluence / 100;
+          applyVoiceInfluenceParams(params, voiceProfile);
         }
       }
     }
@@ -3026,6 +3052,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     throw new Error('Failed to create mix clip');
   }
   const clipId = clip.id;
+  const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
+  const selectedVoiceProfile = selectedVoiceId
+    ? useVoiceStore.getState().getVoiceById(selectedVoiceId)
+    : undefined;
 
   // Persist generation params for edit/regenerate
   store.updateClip(clipId, {
@@ -3048,6 +3078,9 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       shift: request.shift,
       negativePrompt: request.negativePrompt,
       styleTags: request.styleTags,
+      voiceProfileId: selectedVoiceProfile?.id,
+      audioInfluence: selectedVoiceProfile?.defaultAudioInfluence,
+      styleInfluence: selectedVoiceProfile?.defaultStyleInfluence,
     },
   });
 
@@ -3126,17 +3159,13 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     // Voice cloning: load selected voice blob from IDB and upload it as ACE-Step reference audio.
     let referenceAudioBlob: Blob | undefined;
-    const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
-    if (selectedVoiceId) {
-      const voiceProfile = useVoiceStore.getState().getVoiceById(selectedVoiceId);
-      if (voiceProfile) {
-        throwIfAborted(abortController.signal);
-        const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
-        throwIfAborted(abortController.signal);
-        if (blob) {
-          referenceAudioBlob = blob;
-          params.audio_cover_strength = voiceProfile.defaultAudioInfluence / 100;
-        }
+    if (selectedVoiceProfile) {
+      throwIfAborted(abortController.signal);
+      const blob = await loadAudioBlobByKey(selectedVoiceProfile.audioKey);
+      throwIfAborted(abortController.signal);
+      if (blob) {
+        referenceAudioBlob = blob;
+        applyVoiceInfluenceParams(params, selectedVoiceProfile);
       }
     }
 

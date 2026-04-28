@@ -4,12 +4,14 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useModelStore } from '../../store/modelStore';
 import { useUIStore } from '../../store/uiStore';
+import { useVoiceStore } from '../../store/voiceStore';
 import { MAX_DURATION, MIN_DURATION } from '../../constants/defaults';
 import { VOCAL_LANGUAGES, DEFAULT_VOCAL_LANGUAGE } from '../../constants/languages';
 import { generateText2Music, regenerateClip } from '../../services/generationPipeline';
 import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
+import { VoiceInfluenceControls } from './VoiceInfluenceControls';
 import { VoiceLibraryPanel } from '../voice/VoiceLibraryPanel';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
 import { NegativePromptSection } from './NegativePromptSection';
@@ -188,9 +190,16 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     editingClipId ? s.project?.tracks.flatMap((t) => t.clips).find((c) => c.id === editingClipId) : undefined,
   );
   const hydratedClipIdRef = useRef<string | null>(null);
+  const hydratedVoiceDefaultsRef = useRef<{
+    clipId: string;
+    voiceProfileId: string;
+    audioInfluence: number;
+    styleInfluence: number;
+  } | null>(null);
   useEffect(() => {
     if (!editingClipId || !editingClip || hydratedClipIdRef.current === editingClipId) return;
     hydratedClipIdRef.current = editingClipId;
+    hydratedVoiceDefaultsRef.current = null;
     const p = editingClip.generationParams;
     if (p) {
       setPrompt(p.prompt);
@@ -239,6 +248,23 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       }
       // Hydrate style tags from clip to avoid double-prepend
       useGenerationStore.getState().setGenerationStyleTags(p.styleTags ?? []);
+      if (p.voiceProfileId) {
+        const voiceStore = useVoiceStore.getState();
+        const savedVoice = voiceStore.getVoiceById(p.voiceProfileId);
+        if (savedVoice) {
+          hydratedVoiceDefaultsRef.current = {
+            clipId: editingClipId,
+            voiceProfileId: savedVoice.id,
+            audioInfluence: savedVoice.defaultAudioInfluence,
+            styleInfluence: savedVoice.defaultStyleInfluence,
+          };
+          voiceStore.selectVoice(savedVoice.id);
+        } else {
+          voiceStore.deselectVoice();
+        }
+      } else {
+        useVoiceStore.getState().deselectVoice();
+      }
     } else {
       // Backward compatibility: hydrate from basic clip fields
       setPrompt(editingClip.prompt || '');
@@ -256,6 +282,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   useEffect(() => {
     if (!editingClipId) {
       hydratedClipIdRef.current = null;
+      hydratedVoiceDefaultsRef.current = null;
       setLegacyGuidanceScale(null);
     }
   }, [editingClipId]);
@@ -283,6 +310,39 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     // Edit mode: update stored params on existing clip, then regenerate
     if (editingClipId) {
       const store = useProjectStore.getState();
+      const previousParams = editingClip?.generationParams?.type === 'text2music'
+        ? editingClip.generationParams
+        : undefined;
+      const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
+      const selectedVoiceProfile = selectedVoiceId
+        ? useVoiceStore.getState().getVoiceById(selectedVoiceId)
+        : undefined;
+      const voiceProfileId = selectedVoiceProfile?.id ?? previousParams?.voiceProfileId;
+      const selectedVoiceWasHydrated = Boolean(
+        selectedVoiceProfile &&
+        previousParams?.voiceProfileId === selectedVoiceProfile.id &&
+        hydratedVoiceDefaultsRef.current?.clipId === editingClipId &&
+        hydratedVoiceDefaultsRef.current.voiceProfileId === selectedVoiceProfile.id,
+      );
+      const selectedVoiceChangedSinceHydration = Boolean(
+        selectedVoiceProfile &&
+        selectedVoiceWasHydrated &&
+        hydratedVoiceDefaultsRef.current &&
+        (
+          hydratedVoiceDefaultsRef.current.audioInfluence !== selectedVoiceProfile.defaultAudioInfluence ||
+          hydratedVoiceDefaultsRef.current.styleInfluence !== selectedVoiceProfile.defaultStyleInfluence
+        ),
+      );
+      const audioInfluence = selectedVoiceProfile
+        ? (selectedVoiceWasHydrated && !selectedVoiceChangedSinceHydration
+          ? (previousParams?.audioInfluence ?? selectedVoiceProfile.defaultAudioInfluence)
+          : selectedVoiceProfile.defaultAudioInfluence)
+        : previousParams?.audioInfluence;
+      const styleInfluence = selectedVoiceProfile
+        ? (selectedVoiceWasHydrated && !selectedVoiceChangedSinceHydration
+          ? (previousParams?.styleInfluence ?? selectedVoiceProfile.defaultStyleInfluence)
+          : selectedVoiceProfile.defaultStyleInfluence)
+        : previousParams?.styleInfluence;
       store.updateClip(editingClipId, {
         generationParams: {
           type: 'text2music',
@@ -302,6 +362,9 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           temperature: legacyGuidanceScale === null ? temperature : undefined,
           shift: project?.generationDefaults?.shift,
           styleTags: styleTags.length > 0 ? [...styleTags] : undefined,
+          voiceProfileId,
+          audioInfluence,
+          styleInfluence,
         },
       });
       useUIStore.getState().setEditingText2MusicClipId(null);
@@ -687,6 +750,9 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         </div>
 
       </section>
+
+      {/* Voice influence for the selected library voice */}
+      <VoiceInfluenceControls />
 
       {/* Voice Library section */}
       <section className="border-t border-daw-border -mx-3 mt-2">

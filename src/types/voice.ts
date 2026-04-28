@@ -31,3 +31,30 @@ export interface VoiceProfile {
   /** Precomputed single-channel waveform peaks for thumbnail display. */
   waveformPeaks?: number[];
 }
+
+/** Named preset for Audio/Style Influence slider combinations. */
+export interface VoiceInfluencePreset {
+  /** Machine-readable key. */
+  id: string;
+  /** Human-readable label. */
+  label: string;
+  /** Audio Influence value (0-100). */
+  audioInfluence: number;
+  /** Style Influence value (0-100). */
+  styleInfluence: number;
+}
+
+/** Built-in influence presets for voice-conditioned generation. */
+export const VOICE_INFLUENCE_PRESETS: readonly VoiceInfluencePreset[] = [
+  { id: 'natural', label: 'Natural', audioInfluence: 40, styleInfluence: 60 },
+  { id: 'ai-enhanced', label: 'AI Enhanced', audioInfluence: 20, styleInfluence: 80 },
+  { id: 'voice-forward', label: 'Voice Forward', audioInfluence: 70, styleInfluence: 30 },
+] as const;
+
+/** Default influence values for new voice profiles. */
+export const DEFAULT_AUDIO_INFLUENCE = 50;
+export const DEFAULT_STYLE_INFLUENCE = 50;
+
+export function clampInfluence(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}

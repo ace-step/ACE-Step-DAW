@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval';
-import type { VoiceProfile, VoiceSkillLevel, VoiceSource } from '../types/voice';
+import {
+  DEFAULT_AUDIO_INFLUENCE,
+  DEFAULT_STYLE_INFLUENCE,
+  type VoiceProfile,
+  type VoiceSkillLevel,
+  type VoiceSource,
+} from '../types/voice';
 
 export interface AddVoiceInput {
   name: string;
@@ -59,8 +65,8 @@ export const useVoiceStore = create<VoiceState>()(
           skillLevel: input.skillLevel,
           tags: input.tags,
           language: input.language,
-          defaultAudioInfluence: 50,
-          defaultStyleInfluence: 50,
+          defaultAudioInfluence: DEFAULT_AUDIO_INFLUENCE,
+          defaultStyleInfluence: DEFAULT_STYLE_INFLUENCE,
           source: input.source,
           waveformPeaks: input.waveformPeaks,
         };

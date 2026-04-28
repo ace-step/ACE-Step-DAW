@@ -1011,6 +1011,12 @@ export interface ClipGenerationParams {
   } | null;
   /** Chunk mask mode persisted for regeneration. */
   chunkMaskMode?: 'explicit' | 'auto';
+  /** Voice profile ID used for voice-conditioned generation. */
+  voiceProfileId?: string;
+  /** Audio Influence (0–100) — how much reference voice is preserved. */
+  audioInfluence?: number;
+  /** Style Influence (0–100) — how much AI's trained style is applied. */
+  styleInfluence?: number;
 }
 
 export interface Clip {

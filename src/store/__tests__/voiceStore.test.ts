@@ -98,6 +98,27 @@ describe('voiceStore', () => {
       expect(id1).not.toBe(id2);
       expect(useVoiceStore.getState().voices).toHaveLength(2);
     });
+
+    it('removes the profile and clears selection when audio storage fails', async () => {
+      const blob = new Blob(['audio'], { type: 'audio/wav' });
+      mockedSet.mockRejectedValue(new Error('quota exceeded'));
+
+      const id = useVoiceStore.getState().addVoice({
+        name: 'Broken Voice',
+        durationSeconds: 30,
+        skillLevel: 'intermediate',
+        source: 'upload',
+        tags: [],
+      }, blob);
+
+      useVoiceStore.getState().selectVoice(id);
+      expect(useVoiceStore.getState().voices).toHaveLength(1);
+
+      await Promise.resolve();
+
+      expect(useVoiceStore.getState().voices).toHaveLength(0);
+      expect(useVoiceStore.getState().selectedVoiceId).toBeNull();
+    });
   });
 
   describe('updateVoice', () => {

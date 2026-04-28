@@ -61,6 +61,8 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
+      - name: Create placeholder frontend dist
+        run: mkdir -p dist
       - name: Run Tauri Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 

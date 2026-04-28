@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, type ReactNode, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, type ReactNode, type KeyboardEvent } from 'react';
 
 /* ─── Shared context-menu design tokens ──────────────────────────────────── */
 export const CONTEXT_MENU = {
@@ -16,6 +16,29 @@ export const CONTEXT_MENU = {
   shadow: '0 0 0 0.5px rgba(255,255,255,0.08), 0 8px 24px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3)',
   backdropFilter: 'blur(16px) saturate(1.2)',
 } as const;
+
+/* ─── Entrance/exit animation helper ─────────────────────────────────────── */
+
+function useMenuAnimation(ref: React.RefObject<HTMLDivElement | null>) {
+  // Set initial state synchronously to avoid 1-frame flash
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.opacity = '0';
+    el.style.transform = 'scale(0.95)';
+    el.style.transition = 'opacity 150ms ease-out, transform 150ms ease-out';
+  }, [ref]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Trigger entrance on next frame
+    requestAnimationFrame(() => {
+      el.style.opacity = '1';
+      el.style.transform = 'scale(1)';
+    });
+  }, [ref]);
+}
 
 /* ─── Overlay + positioned wrapper ───────────────────────────────────────── */
 
@@ -41,15 +64,11 @@ export function ContextMenuWrapper({
   minWidth = CONTEXT_MENU.minWidth,
   testId,
 }: ContextMenuWrapperProps) {
-  const [entered, setEntered] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const clampedX = Math.min(x, window.innerWidth - (minWidth + 20));
   const clampedY = Math.min(y, window.innerHeight - 100);
 
-  // Entrance animation
-  useEffect(() => {
-    requestAnimationFrame(() => setEntered(true));
-  }, []);
+  useMenuAnimation(menuRef);
 
   // Focus the menu for keyboard navigation
   useEffect(() => {
@@ -114,7 +133,7 @@ export function ContextMenuWrapper({
       />
       <div
         ref={menuRef}
-        className="fixed z-50 outline-none"
+        className="fixed z-50 daw-glass outline-none"
         data-testid={testId}
         role="menu"
         tabIndex={-1}
@@ -122,18 +141,11 @@ export function ContextMenuWrapper({
         style={{
           left: clampedX,
           top: clampedY,
-          background: CONTEXT_MENU.bg,
-          border: `1px solid ${CONTEXT_MENU.border}`,
           borderRadius: CONTEXT_MENU.borderRadius,
           boxShadow: CONTEXT_MENU.shadow,
-          backdropFilter: CONTEXT_MENU.backdropFilter,
-          WebkitBackdropFilter: CONTEXT_MENU.backdropFilter,
           padding: '4px 0',
           minWidth,
           transformOrigin: 'top left',
-          opacity: entered ? 1 : 0,
-          transform: entered ? 'scale(1)' : 'scale(0.95)',
-          transition: 'opacity 150ms cubic-bezier(0.16, 1, 0.3, 1), transform 150ms cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
         {children}
@@ -153,7 +165,7 @@ interface ContextMenuItemProps {
   shortcut?: string;
   /** Override text color for accent items */
   color?: string;
-  /** Optional icon (16x16) shown left of label */
+  /** Optional icon element (16x16 recommended) rendered left of label */
   icon?: ReactNode;
   className?: string;
 }
@@ -178,7 +190,7 @@ export function ContextMenuItem({
       role="menuitem"
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
-      className={`w-full text-left flex items-center gap-2 transition-[background-color,color] duration-[100ms] ease-out ${
+      className={`w-full text-left flex items-center gap-2 transition-colors ${
         disabled
           ? 'cursor-not-allowed opacity-40'
           : 'cursor-pointer'
@@ -188,18 +200,18 @@ export function ContextMenuItem({
         fontSize: CONTEXT_MENU.fontSize,
         border: 'none',
         background: 'transparent',
-        color: disabled ? '#555' : textColor,
+        color: disabled ? CONTEXT_MENU.textDim : textColor,
       }}
       onMouseEnter={(e) => {
         if (disabled) return;
         e.currentTarget.style.background = danger
           ? CONTEXT_MENU.dangerHoverBg
           : CONTEXT_MENU.hoverBg;
-        if (!color) e.currentTarget.style.color = '#fff';
+        if (!danger && !color) e.currentTarget.style.color = '#fff';
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = 'transparent';
-        e.currentTarget.style.color = disabled ? '#555' : textColor;
+        e.currentTarget.style.color = disabled ? CONTEXT_MENU.textDim : textColor;
       }}
       onFocus={(e) => {
         if (disabled) return;
@@ -214,15 +226,15 @@ export function ContextMenuItem({
       }}
     >
       {icon && (
-        <span className="shrink-0 w-4 h-4 flex items-center justify-center opacity-70">
+        <span className="flex-shrink-0 w-4 h-4 flex items-center justify-center" aria-hidden="true">
           {icon}
         </span>
       )}
-      <span className="flex-1 truncate">{label}</span>
+      <span className="flex-1">{label}</span>
       {shortcut && (
-        <span className="ml-3 shrink-0" style={{ fontSize: 10, color: '#666' }}>
+        <kbd className="ml-3 font-mono text-[10px] text-zinc-500">
           {shortcut}
-        </span>
+        </kbd>
       )}
     </button>
   );
@@ -233,11 +245,11 @@ export function ContextMenuItem({
 export function ContextMenuSeparator() {
   return (
     <div
+      className="mx-2 my-1"
       role="separator"
       style={{
-        margin: '4px 8px',
         height: 1,
-        background: CONTEXT_MENU.separatorColor,
+        background: `linear-gradient(to right, transparent, ${CONTEXT_MENU.separatorColor} 20%, ${CONTEXT_MENU.separatorColor} 80%, transparent)`,
       }}
     />
   );
@@ -254,29 +266,20 @@ interface ContextMenuSubmenuProps {
  * Does NOT include positioning logic — the parent decides left/top.
  */
 export function ContextMenuSubmenu({ children }: ContextMenuSubmenuProps) {
-  const [entered, setEntered] = useState(false);
-
-  useEffect(() => {
-    requestAnimationFrame(() => setEntered(true));
-  }, []);
+  const ref = useRef<HTMLDivElement>(null);
+  useMenuAnimation(ref);
 
   return (
     <div
+      ref={ref}
+      className="z-50 daw-glass"
       role="menu"
       style={{
-        background: CONTEXT_MENU.bg,
-        border: `1px solid ${CONTEXT_MENU.border}`,
         borderRadius: CONTEXT_MENU.borderRadius,
         boxShadow: CONTEXT_MENU.shadow,
-        backdropFilter: CONTEXT_MENU.backdropFilter,
-        WebkitBackdropFilter: CONTEXT_MENU.backdropFilter,
         padding: '4px 0',
         minWidth: 130,
-        opacity: entered ? 1 : 0,
-        transform: entered ? 'translateX(0)' : 'translateX(-8px)',
-        transition: 'opacity 200ms cubic-bezier(0.16, 1, 0.3, 1), transform 200ms cubic-bezier(0.16, 1, 0.3, 1)',
       }}
-      className="z-50"
     >
       {children}
     </div>

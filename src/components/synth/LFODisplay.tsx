@@ -95,6 +95,8 @@ export function LFODisplay({ lfo, onChange }: LFODisplayProps) {
       <div className="text-[10px] text-zinc-400 uppercase tracking-widest font-medium">LFO</div>
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label="LFO waveform display"
         className="w-full h-16 rounded bg-[#1a1a1a] border border-[#333]"
       />
       <div className="flex items-center gap-2">

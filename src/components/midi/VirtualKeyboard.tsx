@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import * as Tone from 'tone';
 import { synthEngine } from '../../engine/SynthEngine';
 import { wavetableEngine } from '../../engine/WavetableEngine';
 import { getMidiCaptureService } from '../../services/midiCaptureService';
@@ -8,6 +7,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 import type { Track } from '../../types/project';
+import { midiToFrequency } from '../../utils/pitch';
 
 /** Start a note on the appropriate engine based on the track's instrument kind. */
 function instrumentNoteOn(track: Track, pitch: number, velocity: number): void {
@@ -16,7 +16,7 @@ function instrumentNoteOn(track: Track, pitch: number, velocity: number): void {
     synthEngine.ensureFmSynth(track.id, instrument.settings);
     const fmSynth = synthEngine.getFmSynth(track.id);
     if (fmSynth) {
-      const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+      const freq = midiToFrequency(pitch);
       fmSynth.triggerAttack(freq, undefined, velocity / 127);
     }
   } else if (instrument?.kind === 'wavetable') {
@@ -34,7 +34,7 @@ function instrumentNoteOff(track: Track | undefined, trackId: string, pitch: num
   if (instrument?.kind === 'fm') {
     const fmSynth = synthEngine.getFmSynth(trackId);
     if (fmSynth) {
-      const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+      const freq = midiToFrequency(pitch);
       fmSynth.triggerRelease(freq);
     }
   } else if (instrument?.kind === 'wavetable') {

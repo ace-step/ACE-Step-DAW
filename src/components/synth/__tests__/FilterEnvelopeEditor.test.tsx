@@ -16,18 +16,18 @@ describe('FilterEnvelopeEditor', () => {
   it('renders all six knobs (ATK, DEC, SUS, REL, FREQ, OCT)', () => {
     const onChange = vi.fn();
     render(<FilterEnvelopeEditor envelope={DEFAULT_ENVELOPE} onChange={onChange} />);
-    expect(screen.getByText('ATK')).toBeDefined();
-    expect(screen.getByText('DEC')).toBeDefined();
-    expect(screen.getByText('SUS')).toBeDefined();
-    expect(screen.getByText('REL')).toBeDefined();
-    expect(screen.getByText('FREQ')).toBeDefined();
-    expect(screen.getByText('OCT')).toBeDefined();
+    screen.getByText('ATK'); // getBy* throws if not found
+    screen.getByText('DEC');
+    screen.getByText('SUS');
+    screen.getByText('REL');
+    screen.getByText('FREQ');
+    screen.getByText('OCT');
   });
 
   it('renders the label "Filter Envelope"', () => {
     const onChange = vi.fn();
     render(<FilterEnvelopeEditor envelope={DEFAULT_ENVELOPE} onChange={onChange} />);
-    expect(screen.getByText('Filter Envelope')).toBeDefined();
+    screen.getByText('Filter Envelope'); // getBy* throws if not found
   });
 
   it('renders a canvas element for the envelope visualization', () => {

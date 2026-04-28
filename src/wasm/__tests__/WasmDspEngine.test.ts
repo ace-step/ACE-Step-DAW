@@ -123,8 +123,8 @@ describe('WasmDspEngine', () => {
       await engine.initialize(ctx);
 
       const node = engine.createProcessor(ctx, 'track-1');
-      expect(node).toBeDefined();
-      expect(node.audioNode).toBeDefined();
+      expect(node).not.toBeUndefined();
+      expect(node.audioNode).not.toBeUndefined();
       expect(mockWorkletNodes.length).toBe(1);
     });
 

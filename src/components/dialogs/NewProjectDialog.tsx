@@ -22,9 +22,11 @@ import {
   type TemplateSummary,
 } from '../../services/projectStorage';
 import { ONBOARDING_STARTERS, getStarterTemplate, instantiateDemoProject } from '../../data/onboardingCatalog';
-import { toastSuccess } from '../../hooks/useToast';
+import { toastSuccess, toastError } from '../../hooks/useToast';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import type { ClipLayoutItem } from '../../utils/clipLayout';
+import { SoundDesignTemplateBrowser } from './SoundDesignTemplateBrowser';
+import { toProjectTemplate, type SoundDesignTemplate } from '../../data/templates/soundDesignTemplates';
 
 function ProjectThumbnail({
   trackCount,
@@ -110,8 +112,10 @@ export function NewProjectDialog() {
       setBpmText(String(DEFAULT_BPM));
       setKeyScale(DEFAULT_KEY_SCALE);
       setTimeSignature(DEFAULT_TIME_SIGNATURE);
-      listProjects().then((list) => setRecentProjects(list));
-      listTemplates().then((list) => setTemplates(list));
+      setRecentProjects([]);
+      setTemplates([]);
+      listProjects().then((list) => setRecentProjects(list)).catch(() => { /* storage unavailable — show empty list */ });
+      listTemplates().then((list) => setTemplates(list)).catch(() => { /* storage unavailable — show empty list */ });
     }
   }, [show]);
 
@@ -123,32 +127,57 @@ export function NewProjectDialog() {
   };
 
   const handleOpenRecent = async (id: string) => {
-    const project = await loadProject(id);
-    if (project) {
-      setProject(project);
-      toastSuccess('Project loaded');
-      setShow(false);
+    try {
+      const project = await loadProject(id);
+      if (project) {
+        setProject(project);
+        toastSuccess('Project loaded');
+        setShow(false);
+      }
+    } catch {
+      toastError('Failed to load project');
     }
   };
 
   const handleDeleteRecent = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    await deleteProject(id);
-    setRecentProjects((prev) => prev.filter((p) => p.id !== id));
+    try {
+      await deleteProject(id);
+      setRecentProjects((prev) => prev.filter((p) => p.id !== id));
+    } catch {
+      toastError('Failed to delete project');
+    }
   };
 
   const handleUseTemplate = async (templateId: string) => {
-    const template = await loadTemplate(templateId);
-    if (template) {
-      createProjectFromTemplate(template);
-      toastSuccess(`Project created from template "${template.name}"`);
-      setShow(false);
+    try {
+      const template = await loadTemplate(templateId);
+      if (template) {
+        createProjectFromTemplate(template);
+        toastSuccess(`Project created from template "${template.name}"`);
+        setShow(false);
+      }
+    } catch {
+      toastError('Failed to load template');
     }
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
-    await deleteTemplate(templateId);
-    setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+    try {
+      await deleteTemplate(templateId);
+      setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+    } catch {
+      toastError('Failed to delete template');
+    }
+  };
+
+  const handleSoundDesignTemplate = (template: SoundDesignTemplate) => {
+    const projectTemplate = toProjectTemplate(template, { bpm, keyScale, timeSignature });
+    createProjectFromTemplate(projectTemplate, name !== DEFAULT_PROJECT_NAME ? name : undefined);
+    // Set the globalCaption from the template's generation defaults
+    useProjectStore.getState().updateProject({ globalCaption: template.generationDefaults.globalCaption });
+    toastSuccess(`Created "${template.name}" project`);
+    setShow(false);
   };
 
   return (
@@ -242,6 +271,12 @@ export function NewProjectDialog() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* ── Sound Design Templates (Genre Presets) ── */}
+          <div className="p-4 border-b border-daw-border">
+            <h3 className="text-xs font-medium text-zinc-400 mb-3">Sound Design Templates</h3>
+            <SoundDesignTemplateBrowser onSelect={handleSoundDesignTemplate} />
           </div>
 
           {/* ── Templates ── */}

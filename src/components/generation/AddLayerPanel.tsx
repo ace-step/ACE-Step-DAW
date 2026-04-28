@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore } from '../../store/uiStore';
 import { generateFromAddLayer, resolveContextWindow } from '../../services/generationPipeline';
+import { toastError } from '../../hooks/useToast';
 import { extractContextAudioLazy } from '../../services/lazyContextAudioExtractor';
 import type { TrackName } from '../../types/project';
 import { TRACK_CATALOG, TRACK_NAMES } from '../../constants/tracks';
@@ -10,6 +11,7 @@ import {
   getFirstSelectedEmptyTrackSlotIndex,
   parseArrangementEmptyTrackSlotIndex,
 } from '../arrangement/trackSlotLayout';
+import { TimbrePresetPicker } from './TimbrePresetPicker';
 
 const VOCAL_TRACK_NAMES = new Set<string>(['vocals', 'backing_vocals']);
 const TARGET_TRACK_OPTIONS = TRACK_NAMES.map((trackName) => TRACK_CATALOG[trackName]);
@@ -637,17 +639,21 @@ export function AddLayerPanel() {
     setSavedSelectionBeforeWholeSong(null);
     handleClose();
 
-    await generateFromAddLayer({
-      trackId,
-      startTime,
-      duration,
-      localDescription: style,
-      globalCaption,
-      lyrics: showLyrics ? lyrics : '',
-      contextWindow: hasContext ? contextWindow : null,
-      chunkMaskMode,
-      clipId: isEditMode ? editingClipId ?? undefined : undefined,
-    });
+    try {
+      await generateFromAddLayer({
+        trackId,
+        startTime,
+        duration,
+        localDescription: style,
+        globalCaption,
+        lyrics: showLyrics ? lyrics : '',
+        contextWindow: hasContext ? contextWindow : null,
+        chunkMaskMode,
+        clipId: isEditMode ? editingClipId ?? undefined : undefined,
+      });
+    } catch {
+      toastError('Generation failed — please try again');
+    }
   };
 
   const handleHeaderMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -746,6 +752,8 @@ export function AddLayerPanel() {
                   <div className="relative flex-1" style={{ minWidth: 0 }} onClick={handleWaveformClick}>
                     <canvas
                       ref={waveformCanvasRef}
+                      role="img"
+                      aria-label="Layer selection visualization"
                       className="w-full h-8 cursor-pointer rounded"
                     />
                     {/* Draggable selection mask overlay */}
@@ -842,9 +850,12 @@ export function AddLayerPanel() {
 
         {/* Stem Description */}
         <div>
-          <label className="text-[10px] uppercase tracking-wide text-zinc-500 block mb-1">
-            Stem Description
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[10px] uppercase tracking-wide text-zinc-500">
+              Stem Description
+            </label>
+          </div>
+          <TimbrePresetPicker onSelect={(preset) => setStyle(preset.promptTemplate)} />
           <textarea
             value={style}
             onChange={(e) => setStyle(e.target.value)}

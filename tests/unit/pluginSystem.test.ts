@@ -180,8 +180,8 @@ describe('Plugin type interfaces', () => {
 
   it('instrument plugins support noteOn/noteOff', () => {
     const plugin = createMockInstrument() as MockInstrumentPlugin;
-    expect(plugin.noteOn).toBeDefined();
-    expect(plugin.noteOff).toBeDefined();
+    expect(typeof plugin.noteOn).toBe('function');
+    expect(typeof plugin.noteOff).toBe('function');
     plugin.noteOn(60, 0.8);
     plugin.noteOff(60);
     expect(plugin.noteOnCalls).toEqual([{ note: 60, velocity: 0.8 }]);
@@ -225,7 +225,7 @@ describe('PluginRegistry', () => {
   it('gets manifest by ID', () => {
     registry.registerPlugin('test-effect', createMockEffect);
     const manifest = registry.getManifest('test-effect');
-    expect(manifest).toBeDefined();
+    expect(manifest).not.toBeUndefined();
     expect(manifest?.name).toBe('Mock Effect');
     expect(registry.getManifest('nonexistent')).toBeUndefined();
   });
@@ -238,7 +238,7 @@ describe('PluginRegistry', () => {
     expect(instance.enabled).toBe(true);
     expect(instance.params.gain).toBe(0.5);
     expect(instance.params.mix).toBe(1.0);
-    expect(plugin).toBeDefined();
+    expect(plugin).not.toBeUndefined();
   });
 
   it('throws when creating instance of unregistered plugin', () => {
@@ -249,7 +249,7 @@ describe('PluginRegistry', () => {
     registry.registerPlugin('test-effect', createMockEffect);
     const { instance } = registry.createInstance('test-effect', mockCtx);
 
-    expect(registry.getInstance(instance.id)).toBeDefined();
+    expect(registry.getInstance(instance.id)).not.toBeUndefined();
     registry.disposeInstance(instance.id);
     expect(registry.getInstance(instance.id)).toBeUndefined();
   });
@@ -275,8 +275,8 @@ describe('PluginEngine', () => {
     const plugin = createMockEffect();
     const audioNode = engine.addPlugin('track-1', 'inst-1', plugin, mockCtx);
 
-    expect(audioNode.inputNode).toBeDefined();
-    expect(audioNode.outputNode).toBeDefined();
+    expect(audioNode.inputNode).not.toBeNull();
+    expect(audioNode.outputNode).not.toBeNull();
     expect(engine.getInputNode('track-1')).toBe(audioNode.inputNode);
     expect(engine.getOutputNode('track-1')).toBe(audioNode.outputNode);
   });
@@ -378,7 +378,7 @@ describe('BitCrusher plugin', () => {
 
     const audioNode = plugin.createAudioNode(mockCtx);
     expect(audioNode.inputNode).not.toBeNull();
-    expect(audioNode.outputNode).toBeDefined();
+    expect(audioNode.outputNode).not.toBeNull();
 
     plugin.dispose();
   });
@@ -411,7 +411,7 @@ describe('FM Synth plugin', () => {
 
     const audioNode = plugin.createAudioNode(mockCtx);
     expect(audioNode.inputNode).toBeNull();
-    expect(audioNode.outputNode).toBeDefined();
+    expect(audioNode.outputNode).not.toBeNull();
 
     plugin.dispose();
   });
@@ -421,8 +421,8 @@ describe('FM Synth plugin', () => {
     const plugin = createFMSynthPlugin();
     plugin.createAudioNode(mockCtx);
 
-    expect(plugin.noteOn).toBeDefined();
-    expect(plugin.noteOff).toBeDefined();
+    expect(typeof plugin.noteOn).toBe('function');
+    expect(typeof plugin.noteOff).toBe('function');
     // Should not throw — uses mock ctx
     plugin.noteOn!(60, 0.8);
     plugin.noteOff!(60);

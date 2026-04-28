@@ -5,7 +5,6 @@ import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
 import { useGenerationStore } from '../store/generationStore';
 import { useShortcutsStore } from '../store/shortcutsStore';
-import { generateSingleClip } from '../services/generationPipeline';
 import { useRecording } from './useRecording';
 import { getMidiCaptureService } from '../services/midiCaptureService';
 import {
@@ -306,8 +305,10 @@ export function useKeyboardShortcuts() {
           const trackIds = [...new Set(selectedClips.map((clip) => clip.trackId))];
           if (trackIds.length === 1) {
             void (async () => {
-              const consolidatedClip = await project.consolidateClips(trackIds[0], selectedIds);
-              if (consolidatedClip) ui.selectClip(consolidatedClip.id, false);
+              try {
+                const consolidatedClip = await project.consolidateClips(trackIds[0], selectedIds);
+                if (consolidatedClip) ui.selectClip(consolidatedClip.id, false);
+              } catch { /* consolidation errors handled by the store */ }
             })();
           }
         }
@@ -318,7 +319,7 @@ export function useKeyboardShortcuts() {
         event.preventDefault();
         if (!anyModalOpen && !generation.isGenerating) {
           const [clipId] = ui.selectedClipIds;
-          if (clipId) generateSingleClip(clipId);
+          if (clipId) void import('../services/generationPipeline').then(m => m.generateSingleClip(clipId)).catch(err => console.error('Failed to generate clip', err));
         }
         return;
       }
@@ -555,19 +556,13 @@ export function useKeyboardShortcuts() {
         void executeCoreKeyboardAction('transport.record', { play, pause, toggleRecord, toggleArmTrack });
         return;
       }
-      if (matches('transport.stop')) { event.preventDefault(); stop(); return; }
-      if (matches('transport.loop')) {
-        event.preventDefault();
-        void executeCoreKeyboardAction('transport.loop', { play, pause, toggleRecord, toggleArmTrack });
-        return;
-      }
-      if (matches('transport.metronome')) { event.preventDefault(); transport.toggleMetronome(); return; }
       if (matches('transport.home')) { event.preventDefault(); seek(0); return; }
       if (matches('transport.end')) {
         event.preventDefault();
         if (project.project) seek(project.project.totalDuration);
         return;
       }
+      if (matches('transport.punchToggle')) { event.preventDefault(); transport.togglePunch(); return; }
       if (matches('transport.punchIn')) { event.preventDefault(); transport.setPunchIn(transport.currentTime); return; }
       if (matches('transport.punchOut')) { event.preventDefault(); transport.setPunchOut(transport.currentTime); return; }
       if (matches('transport.captureMidi')) {
@@ -575,7 +570,7 @@ export function useKeyboardShortcuts() {
         const captureService = getMidiCaptureService();
         const targetTrackId = transport.armedTrackIds[0];
         if (targetTrackId) {
-          project.captureMidi(targetTrackId, transport.currentTime, captureService);
+          project.captureMidi(targetTrackId, transport.currentTime, captureService, { bars: 8, quantize: '1/16' });
         }
         return;
       }
@@ -584,7 +579,11 @@ export function useKeyboardShortcuts() {
         event.preventDefault();
         const vr = ui.videoRecording;
         if (vr.status === 'recording') ui.stopVideoRecording();
-        else if (vr.status === 'idle' || vr.status === 'done' || vr.status === 'error') void ui.startVideoRecording();
+        else if (vr.status === 'idle' || vr.status === 'done' || vr.status === 'error') {
+          void ui.startVideoRecording().catch((error) => {
+            console.error('Failed to start video recording via keyboard shortcut.', error);
+          });
+        }
         return;
       }
 
@@ -599,6 +598,7 @@ export function useKeyboardShortcuts() {
       if (matches('panels.generation')) { event.preventDefault(); ui.toggleGenerationPanel(); return; }
       if (matches('panels.generationHistory')) { event.preventDefault(); ui.toggleGenerationHistoryPanel(); return; }
       if (matches('panels.modelLibrary')) { event.preventDefault(); ui.toggleModelLibrary(); return; }
+      if (matches('panels.clipInspector')) { event.preventDefault(); ui.toggleClipInspector(); return; }
       if (matches('view.autoScroll')) { event.preventDefault(); ui.toggleAutoScroll(); return; }
 
       if (matches('tracks.mute')) {
@@ -729,6 +729,42 @@ export function useKeyboardShortcuts() {
         if (selected.length === 1) {
           event.preventDefault();
           project.splitClipAtZeroCrossing(selected[0], transport.currentTime);
+        }
+        return;
+      }
+
+      if (matches('clips.splitAll')) {
+        event.preventDefault();
+        project.splitAllAtPlayhead(transport.currentTime);
+        return;
+      }
+
+      if (matches('clips.insertTime')) {
+        event.preventDefault();
+        const sw = ui.selectWindow;
+        if (sw) {
+          project.insertTime(sw.startTime, sw.endTime - sw.startTime);
+          ui.setSelectWindow(null);
+        }
+        return;
+      }
+
+      if (matches('clips.deleteTime')) {
+        event.preventDefault();
+        const sw = ui.selectWindow;
+        if (sw) {
+          project.deleteTimeRange(sw.startTime, sw.endTime);
+          ui.setSelectWindow(null);
+        }
+        return;
+      }
+
+      if (matches('clips.duplicateSection')) {
+        event.preventDefault();
+        const sw = ui.selectWindow;
+        if (sw) {
+          project.duplicateTimeRange(sw.startTime, sw.endTime);
+          ui.setSelectWindow(null);
         }
         return;
       }

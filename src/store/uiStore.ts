@@ -78,10 +78,14 @@ export interface UIState {
   commandPaletteQuery: string;
   recentCommandIds: string[];
   showUndoHistoryPanel: boolean;
+  showMidiControllerPanel: boolean;
+  showTrackPresetManager: boolean;
+  grooveStrength: number;
   historyFocusScope: HistoryScope;
   historyFocusTrackId: string | null;
   historyFocusClipId: string | null;
   showMixer: boolean;
+  showClipInspector: boolean;
   mixerHeight: number;
   showAssetsPanel: boolean;
   assetsPanelWidth: number;
@@ -125,12 +129,17 @@ export interface UIState {
   drumMachineEditorHeight: number;
   sequencerEditorHeight: number;
   pianoRollHeight: number;
+  /** Active expression lane type in piano roll (MPE). */
+  pianoRollExpressionType: 'pitchBend' | 'timbre' | 'pressure';
   effectChainHeight: number;
   virtualKeyboardOctave: number;
   virtualKeyboardVelocity: number;
   virtualKeyboardPressedPitches: number[];
   showSmartControls: boolean;
   showLibrary: boolean;
+
+  // Status bar
+  statusBarAutoHide: boolean;
   /** Which bottom editor is visible: null = none, 'smart' = smart controls, 'editor' = region editor */
   activeBottomPanel: 'smart' | 'editor' | 'pianoRoll' | 'effects' | 'drumMachine' | 'strudel' | null;
 
@@ -172,6 +181,12 @@ export interface UIState {
   stemSeparationClipId: string | null;
   audioToMidiClipId: string | null;
 
+  // Vocal Replacement modal
+  vocalReplacementClipId: string | null;
+
+  // Hum-to-Song modal
+  showHumToSongModal: boolean;
+
   // Spectrum analyzer & loudness metering
   showSpectrumAnalyzer: boolean;
 
@@ -192,6 +207,9 @@ export interface UIState {
 
   // Model Library Panel
   showModelLibrary: boolean;
+
+  // Custom Models Panel (Fine-Tuning)
+  showCustomModels: boolean;
 
   // Generation Side Panel
   showGenerationPanel: boolean;
@@ -214,6 +232,18 @@ export interface UIState {
   // DSP backend preference
   dspBackend: 'auto' | 'wasm' | 'tonejs';
   setDspBackend: (mode: 'auto' | 'wasm' | 'tonejs') => void;
+
+  // Accessibility
+  reducedMotion: boolean;
+  /** True when user explicitly toggled reduced motion in Settings (vs OS default). */
+  reducedMotionOverride: boolean;
+  highContrastMode: boolean;
+  colorBlindMode: boolean;
+  setReducedMotion: (v: boolean) => void;
+  /** Set reduced motion AND mark it as a user override. */
+  setReducedMotionManual: (v: boolean) => void;
+  setHighContrastMode: (v: boolean) => void;
+  setColorBlindMode: (v: boolean) => void;
 
   // Theme
   theme: ThemeId;
@@ -293,8 +323,13 @@ export interface UIState {
   searchCommandPalette: (query?: string) => CommandPaletteSearchResult[];
   executeCommandPaletteCommand: (commandId: string) => Promise<boolean>;
   setShowUndoHistoryPanel: (v: boolean) => void;
+  setShowMidiControllerPanel: (v: boolean) => void;
+  setShowTrackPresetManager: (v: boolean) => void;
+  setGrooveStrength: (v: number) => void;
   setHistoryFocusScope: (scope: HistoryScope, target?: HistoryTarget) => void;
   setShowMixer: (v: boolean) => void;
+  setShowClipInspector: (v: boolean) => void;
+  toggleClipInspector: () => void;
   setMixerHeight: (v: number) => void;
   setShowAssetsPanel: (v: boolean) => void;
   setAssetsPanelWidth: (v: number) => void;
@@ -339,6 +374,7 @@ export interface UIState {
   releaseVirtualKeyboardPitch: (pitch: number) => void;
   clearVirtualKeyboardPressedPitches: () => void;
   setShowSmartControls: (v: boolean) => void;
+  setStatusBarAutoHide: (v: boolean) => void;
   setShowLibrary: (v: boolean) => void;
   setActiveBottomPanel: (v: 'smart' | 'editor' | 'pianoRoll' | 'effects' | 'drumMachine' | null) => void;
 
@@ -381,6 +417,12 @@ export interface UIState {
   setStemSeparationModal: (clipId: string | null) => void;
   setAudioToMidiModal: (clipId: string | null) => void;
 
+  // Vocal Replacement modal
+  setVocalReplacementModal: (clipId: string | null) => void;
+
+  // Hum-to-Song modal
+  setShowHumToSongModal: (show: boolean) => void;
+
   // Spectrum analyzer & loudness metering
   setShowSpectrumAnalyzer: (v: boolean) => void;
   toggleSpectrumAnalyzer: () => void;
@@ -403,6 +445,10 @@ export interface UIState {
   // Model Library Panel
   toggleModelLibrary: () => void;
   setShowModelLibrary: (v: boolean) => void;
+
+  // Custom Models Panel (Fine-Tuning)
+  toggleCustomModels: () => void;
+  setShowCustomModels: (v: boolean) => void;
 
   // Generation Side Panel
   toggleGenerationPanel: () => void;
@@ -489,6 +535,7 @@ function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
       return {
         workspaceComplexity: tier,
         showMixer: false,
+        showClipInspector: false,
         showLibrary: false,
         loopBrowserOpen: false,
         showSmartControls: true,
@@ -502,6 +549,7 @@ function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
       return {
         workspaceComplexity: tier,
         showMixer: true,
+        showClipInspector: false,
         showLibrary: true,
         loopBrowserOpen: true,
         showSmartControls: false,
@@ -516,6 +564,7 @@ function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
       return {
         workspaceComplexity: tier,
         showMixer: false,
+        showClipInspector: false,
         showLibrary: false,
         loopBrowserOpen: false,
         showSmartControls: false,
@@ -535,6 +584,7 @@ const ALL_RIGHT_PANELS_CLOSED = {
   showGenerationPanel: false,
   showGenerationHistoryPanel: false,
   showModelLibrary: false,
+  showCustomModels: false,
   showAIAssistant: false,
   showVST3Panel: false,
 } as const;
@@ -616,10 +666,14 @@ export const useUIStore = create<UIState>()(
   commandPaletteQuery: '',
   recentCommandIds: [],
   showUndoHistoryPanel: false,
+  showMidiControllerPanel: false,
+  showTrackPresetManager: false,
+  grooveStrength: 100,
   historyFocusScope: 'arrangement',
   historyFocusTrackId: null,
   historyFocusClipId: null,
   showMixer: false,
+  showClipInspector: false,
   mixerHeight: 420,
   showAssetsPanel: false,
   assetsPanelWidth: 240,
@@ -646,12 +700,14 @@ export const useUIStore = create<UIState>()(
   drumMachineEditorHeight: 400,
   sequencerEditorHeight: 320,
   pianoRollHeight: 360,
+  pianoRollExpressionType: 'pitchBend' as const,
   effectChainHeight: 320,
   virtualKeyboardOctave: 4,
   virtualKeyboardVelocity: 96,
   virtualKeyboardPressedPitches: [],
   showSmartControls: false,
   showLibrary: false,
+  statusBarAutoHide: false,
   activeBottomPanel: null,
 
   showTempoLane: false,
@@ -677,6 +733,10 @@ export const useUIStore = create<UIState>()(
   stemSeparationClipId: null,
   audioToMidiClipId: null,
 
+  vocalReplacementClipId: null,
+
+  showHumToSongModal: false,
+
   showSpectrumAnalyzer: false,
 
   showQuantizeDialog: false,
@@ -690,6 +750,7 @@ export const useUIStore = create<UIState>()(
   editingLegoClipId: null,
 
   showModelLibrary: false,
+  showCustomModels: false,
 
   showGenerationPanel: false,
   showGenerationHistoryPanel: false,
@@ -704,6 +765,11 @@ export const useUIStore = create<UIState>()(
   sliceMarkersByClip: {},
 
   dspBackend: 'auto',
+
+  reducedMotion: typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  reducedMotionOverride: false,
+  highContrastMode: false,
+  colorBlindMode: false,
 
   theme: 'ableton',
 
@@ -851,6 +917,10 @@ export const useUIStore = create<UIState>()(
   setShowExportDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showExportDialog: true } : { showExportDialog: false }),
   setShowSettingsDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showSettingsDialog: true } : { showSettingsDialog: false }),
   setDspBackend: (mode) => set({ dspBackend: mode }),
+  setReducedMotion: (v) => set({ reducedMotion: v }),
+  setReducedMotionManual: (v) => set({ reducedMotion: v, reducedMotionOverride: true }),
+  setHighContrastMode: (v) => set({ highContrastMode: v }),
+  setColorBlindMode: (v) => set({ colorBlindMode: v }),
   setTheme: (theme) => set({ theme }),
   setShowProjectListDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showProjectListDialog: true } : { showProjectListDialog: false }),
   openBounceInPlaceDialog: (trackId) => set({ bounceInPlaceTrackId: trackId }),
@@ -931,6 +1001,11 @@ export const useUIStore = create<UIState>()(
     return true;
   },
   setShowUndoHistoryPanel: (v) => set({ showUndoHistoryPanel: v }),
+  setShowMidiControllerPanel: (v) => set({ showMidiControllerPanel: v }),
+  setShowTrackPresetManager: (v) => set({ showTrackPresetManager: v }),
+  setGrooveStrength: (v) => set((state) => ({
+    grooveStrength: Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : state.grooveStrength,
+  })),
   setHistoryFocusScope: (scope, target) => set((state) => {
     const resolvedTrackId =
       target?.trackId
@@ -948,6 +1023,8 @@ export const useUIStore = create<UIState>()(
     };
   }),
   setShowMixer: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showMixer: true } : { showMixer: false }),
+  setShowClipInspector: (v) => set({ showClipInspector: v }),
+  toggleClipInspector: () => set((s) => ({ showClipInspector: !s.showClipInspector })),
   setMixerHeight: (v) => set({ mixerHeight: Math.min(500, Math.max(160, v)) }),
   setShowAssetsPanel: (v) => set({ showAssetsPanel: v }),
   setAssetsPanelWidth: (v) => set({ assetsPanelWidth: Math.min(500, Math.max(160, v)) }),
@@ -1098,6 +1175,7 @@ export const useUIStore = create<UIState>()(
   })),
   clearVirtualKeyboardPressedPitches: () => set({ virtualKeyboardPressedPitches: [] }),
   setShowSmartControls: (v) => set({ showSmartControls: v }),
+  setStatusBarAutoHide: (v) => set({ statusBarAutoHide: v }),
   setShowLibrary: (v) => set({ showLibrary: v }),
   setActiveBottomPanel: (v) => set({ activeBottomPanel: v }),
 
@@ -1210,6 +1288,10 @@ export const useUIStore = create<UIState>()(
   setStemSeparationModal: (clipId) => set({ stemSeparationClipId: clipId }),
   setAudioToMidiModal: (clipId) => set({ audioToMidiClipId: clipId }),
 
+  setVocalReplacementModal: (clipId) => set({ vocalReplacementClipId: clipId }),
+
+  setShowHumToSongModal: (show) => set({ showHumToSongModal: show }),
+
   setShowSpectrumAnalyzer: (v) => set({ showSpectrumAnalyzer: v }),
   toggleSpectrumAnalyzer: () => set((s) => ({ showSpectrumAnalyzer: !s.showSpectrumAnalyzer })),
 
@@ -1227,6 +1309,9 @@ export const useUIStore = create<UIState>()(
 
   toggleModelLibrary: () => set((s) => s.showModelLibrary ? { showModelLibrary: false } : { ...ALL_RIGHT_PANELS_CLOSED, showModelLibrary: true }),
   setShowModelLibrary: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showModelLibrary: true } : { showModelLibrary: false }),
+
+  toggleCustomModels: () => set((s) => s.showCustomModels ? { showCustomModels: false } : { ...ALL_RIGHT_PANELS_CLOSED, showCustomModels: true }),
+  setShowCustomModels: (v: boolean) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showCustomModels: true } : { showCustomModels: false }),
 
   toggleGenerationPanel: () => set((s) => s.showGenerationPanel ? { showGenerationPanel: false } : { ...ALL_RIGHT_PANELS_CLOSED, showGenerationPanel: true }),
   setShowGenerationPanel: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showGenerationPanel: true } : { showGenerationPanel: false }),
@@ -1359,10 +1444,13 @@ export const useUIStore = create<UIState>()(
       partialize: (state) => ({
         // Panel open/close states
         showMixer: state.showMixer,
+        showClipInspector: state.showClipInspector,
         showLibrary: state.showLibrary,
         loopBrowserOpen: state.loopBrowserOpen,
         showVirtualKeyboard: state.showVirtualKeyboard,
+        showMidiControllerPanel: state.showMidiControllerPanel,
         showSmartControls: state.showSmartControls,
+        statusBarAutoHide: state.statusBarAutoHide,
         keyboardContext: state.keyboardContext,
         activePianoRollTool: state.activePianoRollTool,
         showGhostNotes: state.showGhostNotes,
@@ -1373,6 +1461,7 @@ export const useUIStore = create<UIState>()(
         drumMachineEditorHeight: state.drumMachineEditorHeight,
         sequencerEditorHeight: state.sequencerEditorHeight,
         pianoRollHeight: state.pianoRollHeight,
+        pianoRollExpressionType: state.pianoRollExpressionType,
         effectChainHeight: state.effectChainHeight,
         virtualKeyboardOctave: state.virtualKeyboardOctave,
         virtualKeyboardVelocity: state.virtualKeyboardVelocity,
@@ -1393,6 +1482,8 @@ export const useUIStore = create<UIState>()(
         recentlyUsedLoopIds: state.recentlyUsedLoopIds,
         // Model Library panel
         showModelLibrary: state.showModelLibrary,
+        // Custom Models panel
+        showCustomModels: state.showCustomModels,
         // Generation panel
         showGenerationPanel: state.showGenerationPanel,
         showGenerationHistoryPanel: state.showGenerationHistoryPanel,
@@ -1407,6 +1498,11 @@ export const useUIStore = create<UIState>()(
         recentCommandIds: state.recentCommandIds,
         // DSP backend
         dspBackend: state.dspBackend,
+        // Accessibility
+        reducedMotion: state.reducedMotion,
+        reducedMotionOverride: state.reducedMotionOverride,
+        highContrastMode: state.highContrastMode,
+        colorBlindMode: state.colorBlindMode,
         // Theme
         theme: state.theme,
         // Synth presets
@@ -1414,6 +1510,8 @@ export const useUIStore = create<UIState>()(
         userInstrumentPresets: state.userInstrumentPresets,
         // Video recording settings
         videoRecordingSettings: state.videoRecordingSettings,
+        // Groove pool
+        grooveStrength: state.grooveStrength,
       }),
     },
   ),
@@ -1440,6 +1538,7 @@ function buildCommandPaletteContext(state: UIState) {
     showTempoLane: state.showTempoLane,
     loopEnabled: transportStore.loopEnabled,
     metronomeEnabled: transportStore.metronomeEnabled,
+    punchEnabled: transportStore.punchEnabled,
     expandedTrackId: state.expandedTrackId,
     openPianoRollTrackId: state.openPianoRollTrackId,
     openSequencerTrackId: state.openSequencerTrackId,
@@ -1450,6 +1549,7 @@ function buildCommandPaletteContext(state: UIState) {
       stop: runtime?.stop ?? transportStore.stop,
       toggleLoop: transportStore.toggleLoop,
       toggleMetronome: transportStore.toggleMetronome,
+      togglePunch: transportStore.togglePunch,
       setShowNewProjectDialog: state.setShowNewProjectDialog,
       setShowProjectListDialog: state.setShowProjectListDialog,
       openGenerationSettings: () => state.openGenerationPanelView('settings'),
@@ -1476,6 +1576,9 @@ function buildCommandPaletteContext(state: UIState) {
       splitClip: projectStore.splitClip,
       splitClipAtZeroCrossing: projectStore.splitClipAtZeroCrossing,
       removeClip: projectStore.removeClip,
+      reverseClip: projectStore.reverseClip,
+      normalizeClip: projectStore.normalizeClip,
+      adjustClipGain: projectStore.adjustClipGain,
       setEditingClip: state.setEditingClip,
       deselectAll: state.deselectAll,
       openEnhancer: state.openEnhancer,
@@ -1498,6 +1601,9 @@ export function getBottomPanelHeight(state: UIState): number {
   if (state.showMixer) {
     // Mixer renders at Math.max(mixerHeight, 360) — use the same floor
     height += Math.max(state.mixerHeight, 360);
+  }
+  if (state.showClipInspector) {
+    height += 280; // matches ClipInspectorPanel maxHeight
   }
   return height;
 }

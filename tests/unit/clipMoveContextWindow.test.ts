@@ -145,12 +145,12 @@ describe('clip move — contextWindow migration', () => {
       useProjectStore.getState().updateClip('clip-1', { startTime: 10 });
 
       const movedClip = useProjectStore.getState().getClipById('clip-1');
-      expect(movedClip).toBeDefined();
+      expect(movedClip).not.toBeUndefined();
       expect(movedClip!.startTime).toBe(10);
 
       // contextWindow should now be relative offsets
       const ctx = movedClip!.generationParams?.contextWindow;
-      expect(ctx).toBeDefined();
+      expect(ctx).not.toBeUndefined();
       expect(ctx).toHaveProperty('offsetStart');
       expect(ctx).toHaveProperty('offsetEnd');
       expect(ctx).toHaveProperty('trackIds');
@@ -206,7 +206,7 @@ describe('clip move — contextWindow migration', () => {
       useProjectStore.getState().moveClipToTrack('clip-1', 'track-2', 10);
 
       const movedClip = useProjectStore.getState().getClipById('clip-1');
-      expect(movedClip).toBeDefined();
+      expect(movedClip).not.toBeUndefined();
       expect(movedClip!.startTime).toBe(10);
 
       const ctx = movedClip!.generationParams?.contextWindow as { offsetStart: number; offsetEnd: number; trackIds: string[] };
@@ -226,7 +226,7 @@ describe('clip move — contextWindow migration', () => {
       useProjectStore.getState().batchMoveClips(['clip-1'], 4.5);
 
       const movedClip = useProjectStore.getState().getClipById('clip-1');
-      expect(movedClip).toBeDefined();
+      expect(movedClip).not.toBeUndefined();
       expect(movedClip!.startTime).toBe(10);
 
       const ctx = movedClip!.generationParams?.contextWindow as { offsetStart: number; offsetEnd: number; trackIds: string[] };
@@ -290,7 +290,7 @@ describe('clip move — contextWindow migration', () => {
 
       const newClip = useProjectStore.getState().duplicateClip('clip-1');
 
-      expect(newClip).toBeDefined();
+      expect(newClip).not.toBeUndefined();
       // Duplicate placed at sourceClip.startTime + sourceClip.duration = 5.5 + 9 = 14.5
       expect(newClip!.startTime).toBe(14.5);
 
@@ -309,7 +309,7 @@ describe('clip move — contextWindow migration', () => {
 
       const newClip = useProjectStore.getState().duplicateClipToTrack('clip-1', 'track-2', 20);
 
-      expect(newClip).toBeDefined();
+      expect(newClip).not.toBeUndefined();
       expect(newClip!.startTime).toBe(20);
 
       const ctx = newClip!.generationParams?.contextWindow as { offsetStart: number; offsetEnd: number; trackIds: string[] };
@@ -334,7 +334,7 @@ describe('clip move — contextWindow migration', () => {
       expect(track1Clips).toHaveLength(2);
 
       const dupClip = track1Clips.find((c) => c.id !== 'clip-1');
-      expect(dupClip).toBeDefined();
+      expect(dupClip).not.toBeUndefined();
       expect(dupClip!.startTime).toBe(15.5); // 5.5 + 10
 
       const ctx = dupClip!.generationParams?.contextWindow as { offsetStart: number; offsetEnd: number; trackIds: string[] };

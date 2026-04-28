@@ -4,7 +4,7 @@ export type TrackName =
   | 'backing_vocals' | 'vocals'
   | 'custom';
 
-export type TrackType = 'stems' | 'mix' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine' | 'strudel';
+export type TrackType = 'stems' | 'mix' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine' | 'strudel' | 'video';
 export type InputMonitoringMode = 'off' | 'auto' | 'on';
 export type SynthPreset = 'piano' | 'strings' | 'pad' | 'lead' | 'bass' | 'organ' | 'sampler';
 
@@ -73,8 +73,17 @@ export interface UnisonSettings {
 
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
 export type SamplerPlaybackMode = 'classic' | 'oneShot' | 'loop';
-/** Time-stretch algorithm mode. 'repitch' uses playbackRate (changes pitch), 'slice' uses warp markers. */
-export type StretchMode = 'repitch' | 'slice';
+/**
+ * Time-stretch algorithm mode.
+ * - 'repitch': uses playbackRate (changes pitch)
+ * - 'slice': uses warp markers
+ * - 'beats': transient-preserving slice for rhythmic material
+ * - 'tones': WSOLA for monophonic sources
+ * - 'complex': spectral/phase-vocoder-style stretching for general material
+ * - 'complexPro': enhanced spectral stretching for mixed or full-range material
+ * - 'texture': granular synthesis for ambient/pad material
+ */
+export type StretchMode = 'repitch' | 'slice' | 'beats' | 'tones' | 'complex' | 'complexPro' | 'texture';
 export type PianoRollGrid = '1/4' | '1/8' | '1/16' | '1/32';
 export type StrudelMidiNotationType = 'absolute' | 'relative';
 export type StrudelMidiTimingStyle = 'subdivision' | 'absoluteDuration';
@@ -144,6 +153,8 @@ export interface SamplerConfig {
   release: number;
   /** Optional velocity layers for multi-sample velocity switching and crossfading. */
   velocityLayers?: VelocityLayer[];
+  /** Multi-sample zones mapped across key and velocity ranges. */
+  zones?: SampleZone[];
 }
 
 /** A single velocity layer in a sampler instrument zone. */
@@ -158,8 +169,36 @@ export interface VelocityLayer {
   gain: number;
 }
 
+/** A key/velocity zone in a multi-sample instrument. */
+export interface SampleZone {
+  /** Unique zone identifier. */
+  id: string;
+  /** IndexedDB audio key for this zone's sample. */
+  audioKey: string;
+  /** Display name for this zone's sample. */
+  sampleName?: string;
+  /** MIDI note the sample was recorded at (pitch reference). */
+  rootNote: number;
+  /** Lowest MIDI note this zone responds to (0–127). */
+  lowKey: number;
+  /** Highest MIDI note this zone responds to (0–127). */
+  highKey: number;
+  /** Lowest velocity this zone responds to (0–127). */
+  lowVelocity: number;
+  /** Highest velocity this zone responds to (0–127). */
+  highVelocity: number;
+  /** Per-zone volume multiplier (0–1, default 1). */
+  volume: number;
+  /** Per-zone stereo pan (-1 to 1, default 0). */
+  pan: number;
+  /** Tuning offset in cents (-1200 to 1200, default 0). */
+  tuneOffset: number;
+  /** Crossfade width in semitones for smooth transitions between adjacent zones (0–12). */
+  crossfadeWidth: number;
+}
+
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;
-export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable';
+export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular' | 'additive' | 'physical';
 export type InstrumentWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
 export type InstrumentLfoTarget = 'off' | 'pitch' | 'filterCutoff' | 'amp' | 'pan';
 
@@ -374,11 +413,98 @@ export interface WavetableTrackInstrument {
   settings: WavetableSettings;
 }
 
+/** Grain envelope shape applied to each individual grain. */
+export type GrainEnvelopeShape = 'hann' | 'triangle' | 'trapezoid' | 'tukey';
+
+/** Configuration for the granular synthesis engine. */
+export interface GranularSettings {
+  /** IndexedDB audio key for the granular source sample. */
+  audioKey: string;
+  /** MIDI root note (default 60 = C4). */
+  rootNote: number;
+  /** Grain size in milliseconds (1–500). */
+  grainSize: number;
+  /** Grain density — number of grains triggered per second (1–100). */
+  density: number;
+  /** Playback position in source buffer (0–1, normalized). */
+  position: number;
+  /** Position scatter — randomize grain start within this range (0–1). */
+  positionScatter: number;
+  /** Pitch scatter — randomize pitch per grain in semitones (0–24). */
+  pitchScatter: number;
+  /** Grain envelope shape. */
+  envelopeShape: GrainEnvelopeShape;
+  /** Grain attack portion of envelope (0–0.5, fraction of grain size). */
+  grainAttack: number;
+  /** Grain release portion of envelope (0–0.5, fraction of grain size). */
+  grainRelease: number;
+  /** Freeze mode — lock grain position for sustained textures. */
+  freeze: boolean;
+  /** Stereo spray/spread of grains (0–1, 0=mono center, 1=full stereo). */
+  spread: number;
+  /** Global output gain (0–1). */
+  gain: number;
+  /** Amplitude envelope attack in seconds. */
+  attack: number;
+  /** Amplitude envelope release in seconds. */
+  release: number;
+}
+
+export interface GranularTrackInstrument {
+  kind: 'granular';
+  preset: 'granular';
+  name: string;
+  settings: GranularSettings;
+}
+
+export type AdditivePreset = 'saw' | 'square' | 'organ' | 'bell' | 'custom';
+
+export interface AdditivePartial {
+  ratio: number;      // frequency multiplier (1 = fundamental, 2 = 2nd harmonic, etc.)
+  amplitude: number;  // 0–1
+  phase: number;      // 0–2π
+}
+
+export interface AdditiveSettings {
+  partials: AdditivePartial[];
+  ampEnvelope: InstrumentEnvelope;
+  outputGain: number;
+}
+
+export interface AdditiveTrackInstrument {
+  kind: 'additive';
+  preset: AdditivePreset;
+  name: string;
+  settings: AdditiveSettings;
+}
+
+export type PhysicalExciterType = 'pluck' | 'bow' | 'hammer';
+export type PhysicalModelPreset = 'acoustic-guitar' | 'harp' | 'kalimba' | 'marimba' | 'steel-drum' | 'custom';
+
+export interface PhysicalModelSettings {
+  exciter: PhysicalExciterType;
+  damping: number;       // 0–1 (how quickly the sound decays; higher = more damped)
+  brightness: number;    // 0–1 (lowpass filter in feedback; higher = brighter)
+  pluckPosition: number; // 0–1 (where along the string the excitation occurs)
+  bodySize: number;      // 0–1 (body resonance amount)
+  outputGain: number;    // dB
+}
+
+export interface PhysicalTrackInstrument {
+  kind: 'physical';
+  preset: PhysicalModelPreset;
+  name: string;
+  settings: PhysicalModelSettings;
+}
+
 export type TrackInstrument =
   | SubtractiveTrackInstrument
   | SamplerTrackInstrument
   | FmTrackInstrument
-  | WavetableTrackInstrument;
+  | WavetableTrackInstrument
+  | GranularTrackInstrument
+  | AdditiveTrackInstrument
+  | PhysicalTrackInstrument;
 
 export interface SamplerSettings {
   audioKey?: string;
@@ -393,6 +519,18 @@ export interface BounceInPlaceOptions {
   replaceOriginal: boolean;
 }
 
+export type DrumPadFilterType = 'off' | 'lowpass' | 'highpass';
+
+export interface DrumPadFilter {
+  type: DrumPadFilterType;
+  cutoff: number;          // 20–20000 Hz
+}
+
+export interface DrumPadSend {
+  reverb: number;          // 0–1
+  delay: number;           // 0–1
+}
+
 export interface DrumPad {
   id: string;
   name: string;
@@ -400,6 +538,11 @@ export interface DrumPad {
   color: string;
   volume: number;          // 0–1
   pan: number;             // -1 to +1
+  tune: number;            // -24 to +24 semitones
+  decay: number;           // 0–1 (relative decay length)
+  filter: DrumPadFilter;
+  drive: number;           // 0–1 saturation amount
+  send: DrumPadSend;
 }
 
 export interface DrumMachineConfig {
@@ -410,6 +553,24 @@ export interface DrumMachineConfig {
 export type ClipGenerationStatus =
   | 'empty' | 'idle' | 'queued' | 'generating' | 'processing' | 'ready' | 'error' | 'stale';
 
+/** A time-stamped expression point for MPE expression curves. */
+export interface ExpressionPoint {
+  /** Beat position relative to note start. */
+  beat: number;
+  /** Value (0–127 for pressure/timbre, -8192–8191 for pitch bend). */
+  value: number;
+}
+
+/** Per-note MPE expression data recorded from an MPE controller. */
+export interface MpeExpressionData {
+  /** Channel pressure curve (0–127). */
+  pressureCurve?: ExpressionPoint[];
+  /** CC74 timbre/slide curve (0–127). */
+  timbreCurve?: ExpressionPoint[];
+  /** Pitch bend curve (-8192 to 8191). */
+  pitchBendCurve?: ExpressionPoint[];
+}
+
 export interface MidiNote {
   id: string;
   pitch: number;
@@ -417,6 +578,8 @@ export interface MidiNote {
   durationBeats: number;
   velocity: number;
   isSlide?: boolean;
+  /** Per-note MPE expression data (optional, populated from MPE recording). */
+  mpeExpression?: MpeExpressionData;
 }
 
 export interface MidiClipData {
@@ -677,6 +840,44 @@ export interface ConvolverParams {
   preDelay: number;                   // pre-delay in ms (0–100)
 }
 
+// ─── Spectral Processing Types ─────────────────────────────────────────────
+
+export interface SpectralFreezeParams {
+  frozen: boolean;             // true = freeze active
+  mix: number;                 // dry/wet (0–1)
+  decay: number;               // spectral decay/sustain (0–1, 1 = infinite hold)
+  brightness: number;          // high-frequency emphasis (-1 to 1)
+  fftSize: 2048 | 4096;       // FFT window size
+}
+
+export interface SpectralBlurParams {
+  blurAmount: number;          // temporal smoothing in frames (0–1 mapped to 1–64 frames)
+  frequencySpread: number;     // cross-bin smearing (0–1)
+  mix: number;                 // dry/wet (0–1)
+  brightness: number;          // tilt EQ on blurred signal (-1 to 1)
+  fftSize: 2048 | 4096;       // FFT window size
+}
+
+export interface SpectralFilterPoint {
+  frequency: number;           // Hz (20–20000)
+  gain: number;                // dB (-48 to +12)
+}
+
+export interface SpectralFilterParams {
+  points: SpectralFilterPoint[]; // user-drawn filter curve control points
+  resolution: number;            // interpolation smoothness (0–1)
+  mix: number;                   // dry/wet (0–1)
+  fftSize: 2048 | 4096;         // FFT window size
+}
+
+export interface SpectralMorphParams {
+  morphAmount: number;         // crossfade position (0 = source A, 1 = source B)
+  sourceTrackId?: string;      // track B for morphing (undefined = self-morph with frozen snapshot)
+  frozen: boolean;             // freeze source B snapshot
+  mix: number;                 // dry/wet (0–1)
+  fftSize: 2048 | 4096;       // FFT window size
+}
+
 export type TrackEffect =
   | EffectBase<'eq3', EQ3Params>
   | EffectBase<'parametricEq', ParametricEQParams>
@@ -696,7 +897,11 @@ export type TrackEffect =
   | EffectBase<'saturation', SaturationParams>
   | EffectBase<'stereoImager', StereoImagerParams>
   | EffectBase<'algorithmicReverb', AlgorithmicReverbParams>
-  | EffectBase<'noiseReduction', NoiseGateReductionParams>;
+  | EffectBase<'noiseReduction', NoiseGateReductionParams>
+  | EffectBase<'spectralFreeze', SpectralFreezeParams>
+  | EffectBase<'spectralBlur', SpectralBlurParams>
+  | EffectBase<'spectralFilter', SpectralFilterParams>
+  | EffectBase<'spectralMorph', SpectralMorphParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -785,7 +990,11 @@ export interface ClipGenerationParams {
   useProjectMeta?: boolean;
   inferenceSteps?: number;
   guidanceScale?: number;
+  temperature?: number;
   shift?: number;
+  negativePrompt?: string;
+  /** Style tags persisted for edit/regenerate — prepended to prompt at generation time */
+  styleTags?: string[];
   // lego params
   globalCaption?: string;
   sampleMode?: boolean;
@@ -850,6 +1059,18 @@ export interface Clip {
   fadeInCurve?: 'linear' | 'exponential' | 'equal-power';
   /** Fade out curve shape. */
   fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
+  /**
+   * Optional bezier control point for the fade-in curve, in normalized
+   * coordinates. The bezier passes through (0, 0) silence at fade start
+   * and (1, 1) unity at fade end; the curve's geometric midpoint is dragged
+   * to {x, y} (so x runs along the fade duration, y is gain at that point).
+   * When set, this overrides `fadeInCurve` for both audio playback and the
+   * waveform amplitude rendering. Old projects without this field continue
+   * to use the preset.
+   */
+  fadeInCurvePoint?: { x: number; y: number };
+  /** Same as fadeInCurvePoint, for the fade-out region. */
+  fadeOutCurvePoint?: { x: number; y: number };
   /** Time-stretch playback rate (1 = original speed, 0.5 = half, 2 = double). */
   timeStretchRate?: number;
   /** Pitch shift in semitones (0 = original pitch). */
@@ -868,7 +1089,67 @@ export interface Clip {
   muted?: boolean;
   /** Generation parameters used to create this clip, for edit/regenerate. */
   generationParams?: ClipGenerationParams;
+  /** Video-specific metadata (only for clips on video tracks). */
+  videoMeta?: VideoClipData;
+  /** User-assigned tags for clip organization (e.g. "verse", "favorite"). */
+  tags?: string[];
 }
+
+// ─── Video Track Types ────────────────────────────────────────────────────────
+
+/** Video-specific clip metadata for clips on video tracks. */
+export interface VideoClipData {
+  /** Video codec identifier (e.g. 'h264', 'vp9', 'prores'). */
+  codec: string;
+  /** Video width in pixels. */
+  width: number;
+  /** Video height in pixels. */
+  height: number;
+  /** Frame rate (fps). */
+  frameRate: number;
+  /** Full duration of the source video file in seconds. */
+  fileDuration: number;
+  /** Offset into the source video in seconds (for non-destructive trimming). */
+  sourceOffset: number;
+  /** IndexedDB key where the video file blob is stored. */
+  indexedDbKey: string;
+  /** Whether the source video contains an audio stream (stripped on import). */
+  hasAudioStream: boolean;
+  /** Group of Pictures size — distance between keyframes. */
+  gopSize: number;
+  /** True if codec is intra-frame only (e.g. ProRes, MJPEG). */
+  isIntraOnly: boolean;
+  /** IndexedDB key for cached filmstrip thumbnail data. */
+  filmstripCacheKey?: string;
+}
+
+export type VideoPreviewSize = 'small' | 'medium' | 'large';
+export type VideoPreviewDock = 'top' | 'float';
+
+/** Per-track settings for video preview and display. */
+export interface VideoTrackSettings {
+  /** Preview panel size. */
+  previewSize: VideoPreviewSize;
+  /** Preview panel docking mode. */
+  previewDock: VideoPreviewDock;
+  /** Show filmstrip thumbnails in the timeline lane. */
+  showFilmstrip: boolean;
+  /** Filmstrip thumbnail opacity (0–1). */
+  filmstripOpacity: number;
+  /** Show timecode overlay on the preview panel. */
+  showTimecodeOverlay: boolean;
+  /** Update preview panel in real-time during timeline editing. */
+  videoFollowsEdit: boolean;
+}
+
+export const DEFAULT_VIDEO_TRACK_SETTINGS: VideoTrackSettings = {
+  previewSize: 'medium',
+  previewDock: 'top',
+  showFilmstrip: true,
+  filmstripOpacity: 0.8,
+  showTimecodeOverlay: false,
+  videoFollowsEdit: true,
+};
 
 export interface BounceInPlaceOptions {
   includeEffects: boolean;
@@ -1017,6 +1298,8 @@ export interface Track {
   synthPreset?: SynthPreset;
   /** ID of the active synth preset definition (factory or user). */
   synthPresetDefinitionId?: string;
+  /** Oscillator waveform type (overrides preset default when set). */
+  synthOscillatorType?: 'sine' | 'triangle' | 'sawtooth' | 'square';
   /** Custom ADSR envelope overriding the preset defaults. */
   synthEnvelope?: SynthEnvelope;
   /** Synth filter settings (lowpass/highpass/bandpass). */
@@ -1038,6 +1321,8 @@ export interface Track {
   drumMachine?: DrumMachineConfig;
   /** Sampler instrument config — when set on a pianoRoll track, uses loaded audio sample instead of synth preset. */
   samplerConfig?: SamplerConfig;
+  /** Granular synthesis config — when set on a pianoRoll track, uses granular engine. */
+  granularConfig?: GranularSettings;
   // Mixer / channel-strip settings
   pan?: number;               // -1 (full left) to +1 (full right), default 0
   panMode?: 'stereo' | 'dual-mono';  // default 'stereo'
@@ -1073,6 +1358,8 @@ export interface Track {
   strudelVersions?: StrudelCodeVersion[];
   /** WAP plugin instances on this track (effect & instrument plugins). */
   plugins?: import('./plugin').PluginInstance[];
+  /** Video track display/preview settings (only for video tracks). */
+  videoSettings?: VideoTrackSettings;
 }
 
 /** Persistent asset entry — survives clip/track removal. Only deleted explicitly from the Assets panel. */
@@ -1114,11 +1401,17 @@ export interface PlaybackLatencySettings {
   updatedAt: number | null;
 }
 
+export type MarkerType = 'generic' | 'scene' | 'cue' | 'hit';
+
 export interface Marker {
   id: string;
   time: number;
   name: string;
   color: string;
+  /** Marker type for categorization and filtering. */
+  type?: MarkerType;
+  /** Optional end time for range markers (undefined = point marker). */
+  endTime?: number;
 }
 
 export type SessionLaunchQuantization = 'none' | '1/32' | '1/16' | '1/8' | '1/4' | '1/2' | '1 bar' | '2 bars' | '4 bars' | '8 bars';
@@ -1127,7 +1420,15 @@ export type SessionLaunchQuantization = 'none' | '1/32' | '1/16' | '1/8' | '1/4'
 export type SessionLaunchMode = 'trigger' | 'gate' | 'toggle' | 'repeat';
 
 /** Action to perform automatically when a scene finishes playing. */
-export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'random' | 'stop';
+export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'first' | 'last' | 'random' | 'again' | 'any' | 'stop';
+
+/** Dual follow action for scenes with probability weighting (Ableton-style A/B split). */
+export interface SceneFollowActionConfig {
+  actionA: SceneFollowActionType;
+  actionB: SceneFollowActionType;
+  /** Probability of action A (0–1). Action B gets 1 − chanceA. */
+  chanceA: number;
+}
 
 // ─── Follow Action Types ─────────────────────────────────────────────────────
 
@@ -1152,6 +1453,8 @@ export interface SessionScene {
   id: string;
   name: string;
   index: number;
+  /** Optional color for this scene header. */
+  color?: string;
   /** Optional tempo override (BPM) applied when this scene launches. */
   tempo?: number;
   /** Optional time signature override [numerator, denominator] applied when this scene launches. */
@@ -1160,6 +1463,8 @@ export interface SessionScene {
   followAction?: SceneFollowActionType;
   /** Duration in bars after which the follow action triggers. */
   followActionTime?: number;
+  /** Dual follow action config with probability weighting. Takes precedence over followAction. */
+  followActionConfig?: SceneFollowActionConfig;
 }
 
 export interface SessionClipSlot {
@@ -1177,13 +1482,17 @@ export interface SessionClipSlot {
   legato?: boolean;
   /** Clip launch behavior: trigger (default), gate, toggle, or repeat. */
   launchMode?: SessionLaunchMode;
+  /** Optional tempo override (BPM) applied when this clip launches. */
+  tempo?: number;
+  /** Optional time signature override [numerator, denominator] applied when this clip launches. */
+  timeSignature?: [number, number];
   /** Follow action configuration for this clip slot. */
   followAction?: FollowActionConfig;
 }
 
 export interface SessionPendingLaunch {
   id: string;
-  type: 'clip' | 'scene' | 'stop-track' | 'stop-all' | 'follow-action';
+  type: 'clip' | 'scene' | 'stop-track' | 'stop-all' | 'follow-action' | 'scene-follow-action';
   executeAt: number;
   requestedAt: number;
   trackId?: string;
@@ -1215,6 +1524,10 @@ export interface SessionState {
   lastLaunchAt: number | null;
   /** Global toggle for follow actions. When false, no follow actions fire. Default true. */
   followActionsEnabled?: boolean;
+  /** Slot IDs currently recording (empty when no recording is active). */
+  recordingSlotIds?: string[];
+  /** Fixed-length recording setting in bars (null = manual stop). */
+  fixedLengthBars?: number | null;
 }
 
 /** A saved project template — a snapshot of project settings and track layout (without audio). */
@@ -1368,7 +1681,11 @@ export type AutomatableEffectTarget =
   | { effectType: 'saturation'; param: Exclude<keyof SaturationParams, 'saturationType'> }
   | { effectType: 'stereoImager'; param: keyof StereoImagerParams }
   | { effectType: 'algorithmicReverb'; param: Exclude<keyof AlgorithmicReverbParams, 'reverbType'> }
-  | { effectType: 'noiseReduction'; param: Exclude<keyof NoiseGateReductionParams, 'mode'> };
+  | { effectType: 'noiseReduction'; param: Exclude<keyof NoiseGateReductionParams, 'mode'> }
+  | { effectType: 'spectralFreeze'; param: Exclude<keyof SpectralFreezeParams, 'frozen' | 'fftSize'> }
+  | { effectType: 'spectralBlur'; param: Exclude<keyof SpectralBlurParams, 'fftSize'> }
+  | { effectType: 'spectralFilter'; param: Exclude<keyof SpectralFilterParams, 'points' | 'fftSize'> }
+  | { effectType: 'spectralMorph'; param: Exclude<keyof SpectralMorphParams, 'sourceTrackId' | 'frozen' | 'fftSize'> };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

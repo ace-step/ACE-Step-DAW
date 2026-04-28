@@ -44,7 +44,7 @@ describe('projectStore.createQuickSamplerFromAsset', () => {
   it('creates a sampler track from an asset by ID', () => {
     seedAsset();
     const track = useProjectStore.getState().createQuickSamplerFromAsset('asset-1');
-    expect(track).toBeDefined();
+    expect(track).not.toBeUndefined();
     expect(track!.trackType).toBe('pianoRoll');
     expect(track!.synthPreset).toBe('sampler');
     expect(track!.samplerConfig?.audioKey).toBe('audio:proj:clip-1:iso');
@@ -65,7 +65,7 @@ describe('projectStore.createQuickSamplerFromAsset', () => {
   it('uses cumulativeMixKey when isolatedAudioKey is null', () => {
     seedAsset({ isolatedAudioKey: null, cumulativeMixKey: 'audio:proj:clip-1:cum' });
     const track = useProjectStore.getState().createQuickSamplerFromAsset('asset-1');
-    expect(track).toBeDefined();
+    expect(track).not.toBeUndefined();
     expect(track!.samplerConfig?.audioKey).toBe('audio:proj:clip-1:cum');
   });
 
@@ -123,7 +123,7 @@ describe('projectStore.createQuickSamplerTrack (extended)', () => {
       sampleName: 'Test Sample',
       sampleDuration: 1.5,
     });
-    expect(track).toBeDefined();
+    expect(track).not.toBeUndefined();
     expect(useProjectStore.getState().project!.tracks.length).toBe(tracksBefore + 1);
     expect(track!.displayName).toBe('Test Sample');
     expect(track!.synthPreset).toBe('sampler');

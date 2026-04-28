@@ -224,7 +224,7 @@ describe('VST3BridgeClient', () => {
       const lastCall = ws.send.mock.calls[ws.send.mock.calls.length - 1][0];
       const sent = JSON.parse(lastCall as string);
       expect(sent.type).toBe('scanPlugins');
-      expect(sent.reqId).toBeTruthy();
+      expect(typeof sent.reqId).toBe('string');
 
       const plugins = [makeSamplePluginInfo()];
       ws.simulateMessage({

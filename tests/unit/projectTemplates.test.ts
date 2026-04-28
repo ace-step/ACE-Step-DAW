@@ -23,7 +23,7 @@ describe('project templates', () => {
       expect(template.keyScale).toBe('D minor');
       expect(template.timeSignature).toBe(3);
       expect(template.measures).toBe(128);
-      expect(template.id).toBeTruthy();
+      expect(template.id.length).toBeGreaterThan(0);
       expect(template.createdAt).toBeGreaterThan(0);
     });
 
@@ -44,7 +44,7 @@ describe('project templates', () => {
       expect(template.tracks).toHaveLength(1);
       expect(template.tracks[0].trackName).toBe('drums');
       expect(template.tracks[0].trackType).toBe('sequencer');
-      expect(template.tracks[0].displayName).toBeTruthy();
+      expect(template.tracks[0].displayName.length).toBeGreaterThan(0);
       // Template tracks should NOT contain clips
       expect((template.tracks[0] as Record<string, unknown>).clips).toBeUndefined();
     });
@@ -78,7 +78,7 @@ describe('project templates', () => {
 
     it('captures generation defaults', () => {
       const template = useProjectStore.getState().saveProjectAsTemplate('Gen Defaults');
-      expect(template.generationDefaults).toBeDefined();
+      expect(template.generationDefaults).not.toBeUndefined();
       expect(template.generationDefaults.inferenceSteps).toBeGreaterThan(0);
     });
   });

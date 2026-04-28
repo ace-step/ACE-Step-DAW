@@ -21,6 +21,7 @@ import { TempoLane } from './TempoLane';
 import { TimeSignatureLane } from './TimeSignatureLane';
 import { ArrangementMarkers } from './ArrangementMarkers';
 import { SelectionFloatingToolbar } from './SelectionFloatingToolbar';
+import { EmptyState } from '../layout/EmptyState';
 import {
   buildArrangementTrackSlots,
   getArrangementEmptyTrackId,
@@ -281,11 +282,7 @@ export function Timeline() {
 
   // --- Early return for no-project state ---
   if (!hasProject) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-zinc-600 text-sm">
-        Create a new project to get started
-      </div>
-    );
+    return <EmptyState />;
   }
 
   // --- Window overlay geometry ---
@@ -484,7 +481,7 @@ export function Timeline() {
           </div>
 
           {/* Track lanes area */}
-          <div className="relative" style={{ gridColumn: '2', gridRow: '2', width: totalWidth }}>
+          <div className="relative overflow-hidden" style={{ gridColumn: '2', gridRow: '2', width: totalWidth }}>
             <GridOverlay />
             <Playhead />
 
@@ -560,7 +557,7 @@ export function Timeline() {
                 />
               )}
 
-              {/* Live select drag overlay — accent-tinted with smooth fill */}
+              {/* Live select drag overlay */}
               {selDrag && (
                 <div
                   className="absolute pointer-events-none z-10"

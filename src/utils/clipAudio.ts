@@ -1,17 +1,26 @@
 import type { Clip } from '../types/project';
 
-export const CLIP_WAVEFORM_PEAK_COUNT = 1024;
+/**
+ * Number of interleaved peak values stored per clip (Lmax, Lmin, Rmax, Rmin per logical peak).
+ * 8192 values = 2048 logical peaks — enough for professional-quality detail at high zoom.
+ */
+export const CLIP_WAVEFORM_PEAK_COUNT = 8192;
 
 const RATE_EPSILON = 0.0001;
 const MIN_PLAYBACK_RATE = 0.0001;
 
 type ClipAudioState = Pick<
   Clip,
-  'startTime' | 'duration' | 'audioDuration' | 'audioOffset' | 'contentOffset' | 'timeStretchRate' | 'stretchMode'
+  'startTime' | 'duration' | 'audioDuration' | 'audioOffset' | 'contentOffset' | 'timeStretchRate' | 'stretchMode' | 'warpMarkers'
 >;
 
 export function getClipPlaybackRate(clip: ClipAudioState): number {
   return Math.max(MIN_PLAYBACK_RATE, clip.timeStretchRate ?? 1);
+}
+
+export function canDestructivelyProcessClipAudio(clip: Pick<Clip, 'stretchMode' | 'warpMarkers'>): boolean {
+  return !(clip.warpMarkers && clip.warpMarkers.length > 0)
+    && (!clip.stretchMode || clip.stretchMode === 'repitch');
 }
 
 export function isClipRepitchStretched(clip: ClipAudioState): boolean {

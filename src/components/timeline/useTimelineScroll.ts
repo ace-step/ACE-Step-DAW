@@ -8,6 +8,7 @@ import {
   clampTimelinePixelsPerSecond,
   computeAutoScrollAnchor,
   DEFAULT_TIMELINE_PIXELS_PER_SECOND,
+  getMinZoomForProject,
   getNextTimelineZoomLevel,
   getTimelineContentWidth,
   getTimelineFitViewport,
@@ -97,6 +98,7 @@ export function useTimelineScroll(scrollRef: React.RefObject<HTMLDivElement | nu
         : getNextTimelineZoomLevel(
             pixelsPerSecond,
             timelineZoomRequest.mode === 'stepIn' ? 'in' : 'out',
+            { projectDuration: totalDuration, viewportWidth: nextViewportWidth },
           );
 
       if (nextPixelsPerSecond === pixelsPerSecond) return;
@@ -217,7 +219,8 @@ export function useTimelineScroll(scrollRef: React.RefObject<HTMLDivElement | nu
         const currentBase = zoomAnimationFrameRef.current === null
           ? pixelsPerSecond
           : zoomTargetRef.current;
-        zoomTargetRef.current = clampTimelinePixelsPerSecond(currentBase * zoomFactor);
+        const dynamicMin = totalDuration > 0 ? getMinZoomForProject(totalDuration, timelineViewportWidth) : undefined;
+        zoomTargetRef.current = clampTimelinePixelsPerSecond(currentBase * zoomFactor, dynamicMin);
         zoomAnchorRef.current = anchor;
 
         if (zoomAnimationFrameRef.current !== null) {

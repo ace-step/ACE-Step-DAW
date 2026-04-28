@@ -16,7 +16,7 @@ describe('session legato mode', () => {
     const slots = useProjectStore.getState().project?.session?.slots.filter(
       (s) => s.trackId === track.id,
     );
-    expect(slots).toBeDefined();
+    expect(slots).not.toBeUndefined();
     expect(slots!.length).toBeGreaterThan(0);
     for (const slot of slots!) {
       expect(slot.legato).toBe(false);
@@ -28,7 +28,7 @@ describe('session legato mode', () => {
     const slot = useProjectStore.getState().project?.session?.slots.find(
       (s) => s.trackId === track.id,
     );
-    expect(slot).toBeDefined();
+    expect(slot).not.toBeUndefined();
 
     useProjectStore.getState().setSessionSlotLegato(slot!.id, true);
     const updated = useProjectStore.getState().project?.session?.slots.find(
@@ -42,7 +42,7 @@ describe('session legato mode', () => {
     const slot = useProjectStore.getState().project?.session?.slots.find(
       (s) => s.trackId === track.id,
     );
-    expect(slot).toBeDefined();
+    expect(slot).not.toBeUndefined();
 
     useProjectStore.getState().setSessionSlotLegato(slot!.id, true);
     useProjectStore.getState().setSessionSlotLegato(slot!.id, false);
@@ -93,7 +93,7 @@ describe('session legato mode', () => {
   it('transportStore launchSessionClip stores startOffset', () => {
     useTransportStore.getState().launchSessionClip('track-1', 'clip-1', 0, 10, 2.5);
     const launch = useTransportStore.getState().launchedSessionClips['track-1'];
-    expect(launch).toBeDefined();
+    expect(launch).not.toBeUndefined();
     expect(launch.clipId).toBe('clip-1');
     expect(launch.sceneIndex).toBe(0);
     expect(launch.launchedAt).toBe(10);

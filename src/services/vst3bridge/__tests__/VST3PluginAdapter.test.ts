@@ -332,7 +332,7 @@ describe('VST3PluginAdapter', () => {
       const audioNode = adapter.createAudioNode(ctx);
 
       expect(audioNode.inputNode).toBeNull();
-      expect(audioNode.outputNode).toBeDefined();
+      expect(audioNode.outputNode).not.toBeNull();
 
       adapter.dispose();
     });
@@ -344,7 +344,7 @@ describe('VST3PluginAdapter', () => {
       const audioNode = adapter.createAudioNode(ctx);
 
       expect(audioNode.inputNode).not.toBeNull();
-      expect(audioNode.outputNode).toBeDefined();
+      expect(audioNode.outputNode).not.toBeNull();
 
       adapter.dispose();
     });

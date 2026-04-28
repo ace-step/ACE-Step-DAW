@@ -79,7 +79,7 @@ describe('timelineZoom', () => {
 
   it('exposes zoom steps covering the full range up to deep zoom', () => {
     expect(TIMELINE_ZOOM_LEVELS.length).toBeGreaterThanOrEqual(50);
-    expect(TIMELINE_ZOOM_LEVELS[0]).toBe(10);
+    expect(TIMELINE_ZOOM_LEVELS[0]).toBe(2);
     expect(TIMELINE_ZOOM_LEVELS[TIMELINE_ZOOM_LEVELS.length - 1]).toBe(2000);
   });
 

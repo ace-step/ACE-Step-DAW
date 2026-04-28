@@ -8,6 +8,7 @@ describe('browserDownload', () => {
   const originalCreateElement = document.createElement.bind(document);
 
   beforeEach(() => {
+    vi.useFakeTimers();
     createObjectURL.mockClear();
     revokeObjectURL.mockClear();
     click.mockClear();
@@ -34,6 +35,7 @@ describe('browserDownload', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -45,6 +47,8 @@ describe('browserDownload', () => {
     expect(createObjectURL).toHaveBeenCalledOnce();
     expect(createObjectURL).toHaveBeenCalledWith(blob);
     expect(click).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
     expect(revokeObjectURL).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:test-url');
   });

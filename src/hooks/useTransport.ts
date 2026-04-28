@@ -378,11 +378,12 @@ export function useTransport() {
     // If neither finished yet → legacy fallback via _getProcessedBuffer.
     engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
 
-    const { metronomeEnabled } = useTransportStore.getState();
+    const { metronomeEnabled, metronomeSound, metronomeVolume } = useTransportStore.getState();
     if (metronomeEnabled) {
       engine.scheduleMetronome(
         proj.bpm, proj.timeSignature, proj.timeSignatureDenominator ?? 4, startFrom, effectiveEnd,
         proj.tempoMap, proj.timeSignatureMap,
+        { sound: metronomeSound, volume: metronomeVolume },
       );
     }
 

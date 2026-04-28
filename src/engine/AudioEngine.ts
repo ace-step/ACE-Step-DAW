@@ -1218,8 +1218,13 @@ export class AudioEngine {
     totalDuration: number,
     tempoMap?: TempoEvent[],
     timeSignatureMap?: TimeSignatureEvent[],
+    options?: { sound?: 'click' | 'woodblock' | 'beep'; volume?: number },
   ) {
     this.stopMetronome();
+    const sound = options?.sound ?? 'click';
+    const volume = options?.volume ?? 0.5;
+    this._metronomeGain.gain.value = Math.max(0, Math.min(1, volume)) * 0.7;
+
     const contextNow = this.ctx.currentTime;
     for (let bar = 1; bar <= 999; bar++) {
       const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature, timeSignatureDenominator);
@@ -1235,11 +1240,31 @@ export class AudioEngine {
         if (beatTime < fromTime) continue;
 
         const delay = beatTime - fromTime;
-        const freq = beatIndex === 0 ? 1200 : 800;
-        const clickDuration = 0.03;
+        const accent = beatIndex === 0;
+        let freq: number;
+        let oscType: OscillatorType;
+        let clickDuration: number;
+
+        switch (sound) {
+          case 'woodblock':
+            freq = accent ? 1600 : 1100;
+            oscType = 'triangle';
+            clickDuration = 0.015;
+            break;
+          case 'beep':
+            freq = accent ? 1000 : 700;
+            oscType = 'square';
+            clickDuration = 0.02;
+            break;
+          default: // 'click'
+            freq = accent ? 1200 : 800;
+            oscType = 'sine';
+            clickDuration = 0.03;
+            break;
+        }
 
         const osc = this.ctx.createOscillator();
-        osc.type = 'sine';
+        osc.type = oscType;
         osc.frequency.value = freq;
 
         const env = this.ctx.createGain();

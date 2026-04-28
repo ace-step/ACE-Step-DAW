@@ -519,6 +519,20 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
     ),
   );
 
+  // Metronome settings commands — call transportStore directly since they
+  // don't need context-dependent titles.
+  const metronomeSettings: Array<{ id: string; title: string; keywords: string[]; aliases: string[]; execute: () => void }> = [
+    { id: 'transport:metronome-sound-click', title: 'Metronome Sound: Click', keywords: ['metronome', 'sound', 'click'], aliases: ['click sound'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setMetronomeSound('click')); } },
+    { id: 'transport:metronome-sound-woodblock', title: 'Metronome Sound: Woodblock', keywords: ['metronome', 'sound', 'woodblock'], aliases: ['woodblock sound'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setMetronomeSound('woodblock')); } },
+    { id: 'transport:metronome-sound-beep', title: 'Metronome Sound: Beep', keywords: ['metronome', 'sound', 'beep'], aliases: ['beep sound'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setMetronomeSound('beep')); } },
+    { id: 'transport:countin-off', title: 'Count-In: Off', keywords: ['count', 'in', 'off', 'recording'], aliases: ['disable count in'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setCountInBars(0)); } },
+    { id: 'transport:countin-1bar', title: 'Count-In: 1 Bar', keywords: ['count', 'in', '1', 'bar', 'recording'], aliases: ['1 bar count in'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setCountInBars(1)); } },
+    { id: 'transport:countin-2bars', title: 'Count-In: 2 Bars', keywords: ['count', 'in', '2', 'bars', 'recording'], aliases: ['2 bar count in'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setCountInBars(2)); } },
+  ];
+  for (const cmd of metronomeSettings) {
+    commands.push(createTrackCommand(cmd.id, cmd.title, 'Transport', 'setting', cmd.keywords, cmd.aliases, cmd.execute, undefined, 'Metronome'));
+  }
+
   commands.push(
     createTrackCommand(
       'project:new',

@@ -49,7 +49,6 @@ export function buildCommandList(): Command[] {
       shortcut: 'K',
       action: () => useTransportStore.getState().toggleMetronome(),
     },
-
     // Project
     {
       id: 'new-project',

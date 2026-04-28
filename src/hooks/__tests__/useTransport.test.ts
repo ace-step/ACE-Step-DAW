@@ -166,6 +166,30 @@ describe('useTransport', () => {
     expect(useTransportStore.getState().isPlaying).toBe(true);
   });
 
+  it('passes metronome sound and volume settings into playback scheduling', async () => {
+    useTransportStore.setState({
+      metronomeEnabled: true,
+      metronomeSound: 'woodblock',
+      metronomeVolume: 0.8,
+    });
+    const { result } = renderHook(() => useTransport());
+
+    await act(async () => {
+      await result.current.play();
+    });
+
+    expect(mocks.engine.scheduleMetronome).toHaveBeenCalledWith(
+      120,
+      4,
+      4,
+      0,
+      256,
+      undefined,
+      undefined,
+      { sound: 'woodblock', volume: 0.8 },
+    );
+  });
+
   // ── pause() ──
 
   it('stops all engines and strudel when pausing', async () => {

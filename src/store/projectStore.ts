@@ -448,49 +448,7 @@ function _applyMixStateToProject(project: Project, mixState: AbMixState): Projec
 
 function _getProjectForPersist(project: Project): Project {
   if (!_abPreviousMixState) return project;
-
-  const trackMap = new Map(_abPreviousMixState.trackStates.map((s) => [s.trackId, s]));
-  const returnMap = new Map(_abPreviousMixState.returnTrackStates.map((s) => [s.returnTrackId, s]));
-  return {
-    ...project,
-    masterVolume: _abPreviousMixState.masterVolume ?? project.masterVolume,
-    tracks: project.tracks.map((track) => {
-      const state = trackMap.get(track.id);
-      if (!state) return track;
-      return {
-        ...track,
-        volume: state.volume,
-        muted: state.muted,
-        soloed: state.soloed,
-        pan: state.pan,
-        panMode: state.panMode,
-        panLeft: state.panLeft,
-        panRight: state.panRight,
-        eqLowGain: state.eqLowGain,
-        eqMidGain: state.eqMidGain,
-        eqHighGain: state.eqHighGain,
-        compressorEnabled: state.compressorEnabled,
-        compressorThreshold: state.compressorThreshold,
-        compressorRatio: state.compressorRatio,
-        reverbMix: state.reverbMix,
-        reverbRoomSize: state.reverbRoomSize,
-        effects: state.effects ?? [],
-        effectsBypassed: state.effectsBypassed,
-        sends: state.sends ?? [],
-      };
-    }),
-    returnTracks: (project.returnTracks ?? []).map((rt) => {
-      const state = returnMap.get(rt.id);
-      return state
-        ? {
-            ...rt,
-            volume: state.volume,
-            pan: state.pan,
-            effects: state.effects,
-          }
-        : rt;
-    }),
-  };
+  return _applyMixStateToProject(project, _abPreviousMixState);
 }
 
 function _getHistoryBucketKey(scope: HistoryScope, target: HistoryTarget = {}) {
@@ -684,14 +642,21 @@ function _applyHistorySnapshot(current: Project | null, snapshot: Project, entry
       if (entry.clipId) return _replaceClipFromSnapshot(current, snapshot, entry.clipId);
       if (entry.trackId) return _replaceTrackFromSnapshot(current, snapshot, entry.trackId);
       return structuredClone(snapshot);
-    case 'mixer':
+    case 'mixer': {
       if (entry.trackId) return _replaceTrackFromSnapshot(current, snapshot, entry.trackId);
+      const trackMixStates = new Map(snapshot.tracks.map((track) => [track.id, captureTrackMixState(track)]));
       return {
         ...current,
         updatedAt: Date.now(),
+        masterVolume: snapshot.masterVolume ?? current.masterVolume,
+        tracks: current.tracks.map((track) => {
+          const trackState = trackMixStates.get(track.id);
+          return trackState ? applyTrackMixState(track, trackState) : track;
+        }),
         mastering: structuredClone(snapshot.mastering),
         returnTracks: structuredClone(snapshot.returnTracks ?? []),
       };
+    }
     case 'arrangement':
     default:
       return structuredClone(snapshot);
@@ -3615,11 +3580,16 @@ export const useProjectStore = create<ProjectState>()(
     const snapshot = (state.project.mixSnapshots ?? []).find((s) => s.id === snapshotId);
     if (!snapshot) return;
 
+    const previousMixState = _abPreviousMixState;
+    const projectBase = previousMixState
+      ? _applyMixStateToProject(state.project, previousMixState)
+      : state.project;
+
     // Exit A/B mode if active
     _clearAbCompareState();
     const abCompareRevision = state.abCompareRevision + 1;
 
-    _pushHistory(state.project, { scope: 'mixer', label: `Load mix snapshot "${snapshot.name}"` });
+    _pushHistory(projectBase, { scope: 'mixer', label: `Load mix snapshot "${snapshot.name}"` });
 
     const snapshotTrackMap = new Map(snapshot.trackStates.map((s) => [s.trackId, s]));
     const snapshotReturnMap = new Map(snapshot.returnTrackStates.map((s) => [s.returnTrackId, s]));
@@ -3627,14 +3597,14 @@ export const useProjectStore = create<ProjectState>()(
     set({
       abCompareRevision,
       project: {
-        ...state.project,
+        ...projectBase,
         updatedAt: Date.now(),
-        masterVolume: snapshot.masterVolume ?? state.project.masterVolume,
-        tracks: state.project.tracks.map((track) => {
+        masterVolume: snapshot.masterVolume ?? projectBase.masterVolume,
+        tracks: projectBase.tracks.map((track) => {
           const trackState = snapshotTrackMap.get(track.id);
           return trackState ? applyTrackMixState(track, trackState) : track;
         }),
-        returnTracks: (state.project.returnTracks ?? []).map((rt) => {
+        returnTracks: (projectBase.returnTracks ?? []).map((rt) => {
           const rtState = snapshotReturnMap.get(rt.id);
           return rtState ? applyReturnTrackMixState(rt, rtState) : rt;
         }),

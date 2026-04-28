@@ -160,7 +160,7 @@ export const MixSnapshotBar = React.memo(function MixSnapshotBar() {
               {/* A/B toggle button */}
               <button
                 onClick={() => toggleAbCompare(snapshot.id)}
-                title={abSnapshotId === snapshot.id ? 'Exit A/B comparison' : `A/B compare with "${snapshot.name}" (Shift+B)`}
+                title={abSnapshotId === snapshot.id ? 'Exit A/B comparison' : `A/B compare with "${snapshot.name}"`}
                 aria-label={`Toggle A/B compare ${snapshot.name}`}
                 data-testid={`ab-snapshot-${snapshot.id}`}
                 className={`flex h-5 items-center justify-center rounded px-1 text-[9px] font-bold transition-colors opacity-0 group-hover:opacity-100 ${

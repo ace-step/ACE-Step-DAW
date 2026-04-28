@@ -418,6 +418,24 @@ describe('Mix Snapshots Store Actions', () => {
       expect(useProjectStore.getState().isAbComparing()).toBe(false);
     });
 
+    it('loading a snapshot during A/B preserves the original mix as the undo base', () => {
+      seed({ tracks: [makeTrack({ id: 't1', volume: 0.5 })] });
+      const snapA = useProjectStore.getState().saveMixSnapshot('Mix A');
+      useProjectStore.getState().updateTrack('t1', { volume: 0.7 });
+      const snapB = useProjectStore.getState().saveMixSnapshot('Mix B');
+      useProjectStore.getState().updateTrack('t1', { volume: 0.9 });
+
+      useProjectStore.getState().toggleAbCompare(snapA.id);
+      expect(useProjectStore.getState().project!.tracks[0].volume).toBe(0.5);
+
+      useProjectStore.getState().loadMixSnapshot(snapB.id);
+      expect(useProjectStore.getState().isAbComparing()).toBe(false);
+      expect(useProjectStore.getState().project!.tracks[0].volume).toBe(0.7);
+
+      useProjectStore.getState().undo();
+      expect(useProjectStore.getState().project!.tracks[0].volume).toBe(0.9);
+    });
+
     it('deleteMixSnapshot exits A/B mode if deleting active snapshot', () => {
       seed({ tracks: [makeTrack({ id: 't1', volume: 0.5 })] });
       const snap = useProjectStore.getState().saveMixSnapshot('Mix A');

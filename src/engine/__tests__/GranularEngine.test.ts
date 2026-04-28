@@ -2,8 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Mocks must be hoisted — no top-level variable references ─────────────────
 
-vi.mock('tone', () => {
-  const _mockCtx = {
+// Shared mock AudioContext used by both the `tone` mock (for
+// `Tone.getContext().rawContext`, only read by test assertions now)
+// and the `useAudioEngine` mock (for `getAudioEngine().ctx`, the
+// real code path after the 5D migration). Must be defined via
+// `vi.hoisted` so the hoisted `vi.mock(...)` factories can see it.
+const { _mockCtx } = vi.hoisted(() => {
+  const ctx = {
+    // `state: 'running'` mirrors the old `Tone.getContext()` mock
+    // and keeps `GranularEngine.ensureStarted()` from always calling
+    // `resume()` in future tests that exercise the start path.
+    // Codex P3 on PR #1729.
+    state: 'running' as AudioContextState,
     currentTime: 0,
     destination: {},
     createGain: vi.fn(() => ({
@@ -39,15 +49,12 @@ vi.mock('tone', () => {
       };
     }),
   };
-  return {
-    getContext: vi.fn().mockReturnValue({
-      state: 'running',
-      rawContext: _mockCtx,
-    }),
-    start: vi.fn(),
-    __mockCtx: _mockCtx,
-  };
+  return { _mockCtx: ctx };
 });
+
+// Phase 5Q: the `tone` module is no longer installed. The hoisted
+// `_mockCtx` is consumed directly — GranularEngine pulls its ctx
+// from `getAudioEngine()` already (5D migration).
 
 vi.mock('../../services/audioFileManager', () => ({
   loadAudioBlobByKey: vi.fn().mockResolvedValue(null),
@@ -55,17 +62,18 @@ vi.mock('../../services/audioFileManager', () => ({
 
 vi.mock('../../hooks/useAudioEngine', () => ({
   getAudioEngine: vi.fn().mockReturnValue({
+    ctx: _mockCtx,
     resume: vi.fn(),
     decodeAudioData: vi.fn(),
   }),
 }));
 
-import * as ToneMock from 'tone';
 import { granularEngine, DEFAULT_GRANULAR_SETTINGS, createGranularSettings } from '../GranularEngine';
 import type { GranularSettings } from '../../types/project';
 
-// Access the mock context for assertions
-const mockCtx = (ToneMock as unknown as { __mockCtx: Record<string, unknown> }).__mockCtx as {
+// Access the mock context for assertions — directly via the hoisted
+// reference instead of round-tripping through the ex-tone mock.
+const mockCtx = _mockCtx as {
   currentTime: number;
   createGain: ReturnType<typeof vi.fn>;
   createStereoPanner: ReturnType<typeof vi.fn>;

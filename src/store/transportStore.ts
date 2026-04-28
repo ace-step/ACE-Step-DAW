@@ -174,7 +174,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   setPunchOut: (time) => set({ punchOutTime: time }),
   togglePunch: () => set((s) => ({ punchEnabled: !s.punchEnabled })),
   setPunchRange: (inTime, outTime) => set({ punchInTime: inTime, punchOutTime: outTime, punchEnabled: true }),
-  setCountInBars: (bars) => set({ countInBars: Math.max(0, Math.min(4, bars)) }),
+  setCountInBars: (bars) => set({ countInBars: Math.max(0, Math.min(2, bars)) }),
   toggleLoopRecording: () =>
     set((s) => {
       const next = !s.loopRecordingEnabled;

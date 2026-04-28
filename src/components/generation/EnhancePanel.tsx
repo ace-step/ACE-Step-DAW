@@ -5,6 +5,7 @@ import { EnhanceRepaintControls } from './EnhanceRepaintControls';
 import { EnhanceSourcePreview } from './EnhanceSourcePreview';
 import { EnhanceHistorySidebar } from './EnhanceHistorySidebar';
 import { ResultsPanel } from './ResultsPanel';
+import { NegativePromptSection } from './NegativePromptSection';
 
 export function EnhancePanel() {
   const state = useEnhancePanelState();
@@ -13,6 +14,7 @@ export function EnhancePanel() {
     clip, track, project, mode, setMode, isGenerating, isSubmitting,
     caption, setCaption, lyrics, setLyrics, consistency, setConsistency, createNew, setCreateNew,
     quickStylesOpen, setQuickStylesOpen, timbreRef, setTimbreRef,
+    negativePrompt, setNegativePrompt,
     selStart, selEnd, prompt, setPrompt, globalCaption, setGlobalCaption,
     repaintMode, setRepaintMode, repaintStrength, setRepaintStrength,
     sessions, activeSessionId, setActiveSessionId,
@@ -200,6 +202,12 @@ export function EnhancePanel() {
               bpm={project?.bpm}
             />
           )}
+
+          <NegativePromptSection
+            value={negativePrompt}
+            onChange={setNegativePrompt}
+            disabled={isGenerating || isSubmitting}
+          />
 
           {/* Enhance button */}
           <button

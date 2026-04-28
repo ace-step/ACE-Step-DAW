@@ -20,9 +20,8 @@ export function computeWaveformPeaks(
     : leftData;
 
   const regionEnd = endSample ?? leftData.length;
-  const regionLength = regionEnd - startSample;
-  const samplesPerPeak = Math.floor(regionLength / numPeaks);
-  if (samplesPerPeak <= 0) return new Array(numPeaks * 4).fill(0);
+  const regionLength = Math.max(0, regionEnd - startSample);
+  if (numPeaks <= 0 || regionLength <= 0) return new Array(Math.max(0, numPeaks * 4)).fill(0);
 
   const peaks: number[] = new Array(numPeaks * 4);
 
@@ -31,8 +30,11 @@ export function computeWaveformPeaks(
     let lMin = 0;
     let rMax = 0;
     let rMin = 0;
-    const start = startSample + i * samplesPerPeak;
-    const end = Math.min(start + samplesPerPeak, regionEnd);
+    const start = startSample + Math.floor((i * regionLength) / numPeaks);
+    const end = Math.min(
+      regionEnd,
+      Math.max(start + 1, startSample + Math.ceil(((i + 1) * regionLength) / numPeaks)),
+    );
     for (let j = start; j < end; j++) {
       const lSample = leftData[j];
       if (lSample > lMax) lMax = lSample;
@@ -53,3 +55,30 @@ export function computeWaveformPeaks(
 
 /** Number of values stored per logical peak (Lmax, Lmin, Rmax, Rmin). */
 export const PEAK_STRIDE = 4;
+
+/**
+ * Compute waveform with mipmap (async, runs in Web Worker via WASM).
+ *
+ * Side effect: stores a multi-level mipmap in IndexedDB for the given audioKey.
+ * Returns legacy stride-4 peaks for backward compatibility with Clip.waveformPeaks.
+ *
+ * Falls back to synchronous computeWaveformPeaks if Worker is unavailable.
+ */
+export async function computeWaveformWithMipmap(
+  audioKey: string,
+  audioBuffer: AudioBuffer,
+  numPeaks?: number,
+): Promise<number[]> {
+  const left = audioBuffer.getChannelData(0);
+  const right = audioBuffer.numberOfChannels >= 2
+    ? audioBuffer.getChannelData(1)
+    : left;
+
+  try {
+    const { waveformMipmapService } = await import('../services/waveformMipmapService');
+    return await waveformMipmapService.computeMipmap(audioKey, left, right, audioBuffer.sampleRate);
+  } catch {
+    // Fallback: synchronous computation (no mipmap stored)
+    return computeWaveformPeaks(audioBuffer, numPeaks ?? Math.floor(left.length / 32));
+  }
+}

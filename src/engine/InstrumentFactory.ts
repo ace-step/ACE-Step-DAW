@@ -3,6 +3,7 @@ import type { InstrumentEngine } from './InstrumentEngine';
 import { synthEngine } from './SynthEngine';
 import { samplerEngine } from './SamplerEngine';
 import { granularEngine } from './GranularEngine';
+import { additiveEngine } from './AdditiveEngine';
 import { karplusStrongEngine } from './KarplusStrongEngine';
 
 /**
@@ -152,6 +153,39 @@ class GranularEngineAdapter implements InstrumentEngine {
 }
 
 /**
+* Adapter for additive synthesis engine.
+ */
+class AdditiveEngineAdapter implements InstrumentEngine {
+  noteOn(trackId: string, pitch: number, velocity: number): void {
+    additiveEngine.noteOn(trackId, pitch, velocity);
+  }
+
+  noteOff(trackId: string, pitch: number): void {
+    additiveEngine.noteOff(trackId, pitch);
+  }
+
+  triggerAttackRelease(trackId: string, pitch: number, duration: number, velocity: number): void {
+    additiveEngine.triggerAttackRelease(trackId, pitch, duration, velocity);
+  }
+
+  setParameter(trackId: string, name: string, value: number | string | boolean): void {
+    additiveEngine.setParameter(trackId, name, value);
+  }
+
+  releaseAll(): void {
+    additiveEngine.releaseAll();
+  }
+
+  removeTrack(trackId: string): void {
+    additiveEngine.removeTrack(trackId);
+  }
+
+  dispose(): void {
+    additiveEngine.dispose();
+  }
+}
+
+/**
  * Adapter for Karplus-Strong physical modeling synthesis.
  */
 class KarplusStrongAdapter implements InstrumentEngine {
@@ -190,6 +224,7 @@ const subtractiveAdapter = new SynthEngineAdapter();
 const samplerAdapter = new SamplerEngineAdapter();
 const fmAdapter = new FmEngineAdapter();
 const granularAdapter = new GranularEngineAdapter();
+const additiveAdapter = new AdditiveEngineAdapter();
 const physicalAdapter = new KarplusStrongAdapter();
 
 /**
@@ -209,10 +244,12 @@ export function getEngineForInstrument(instrument: TrackInstrument): InstrumentE
       return subtractiveAdapter;
     case 'granular':
       return granularAdapter;
-    case 'physical':
+case 'additive':
+      return additiveAdapter;
+case 'physical':
       return physicalAdapter;
   }
 }
 
 // Re-export the adapters for direct testing.
-export { SynthEngineAdapter, SamplerEngineAdapter, FmEngineAdapter, GranularEngineAdapter, KarplusStrongAdapter };
+export { SynthEngineAdapter, SamplerEngineAdapter, FmEngineAdapter, GranularEngineAdapter, AdditiveEngineAdapter, KarplusStrongAdapter };

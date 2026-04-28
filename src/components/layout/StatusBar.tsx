@@ -10,6 +10,7 @@ import type { SaveStatus } from '../../hooks/useAutoSave';
 import { OnboardingProgress } from './OnboardingProgress';
 
 const HEALTH_POLL_INTERVAL_MS = 10_000;
+const STATUS_BAR_PROXIMITY_PX = 24;
 const DEFAULT_SOURCE_CODE_URL = 'https://github.com/ace-step/ACE-Step-DAW';
 const CURRENT_YEAR = new Date().getFullYear();
 const DEFAULT_COPYRIGHT_NOTICE = `ACE Studio © ${CURRENT_YEAR}`;
@@ -28,6 +29,11 @@ interface StatusBarProps {
 
 export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
   const [connected, setConnected] = useState(lastKnownBackendConnection);
+  const statusBarAutoHide = useUIStore((s) => s.statusBarAutoHide);
+  const [isMouseOverBar, setIsMouseOverBar] = useState(false);
+  const [isInProximity, setIsInProximity] = useState(false);
+  const isExpandedByPointer = isMouseOverBar || isInProximity;
+  const isCollapsed = statusBarAutoHide && !isExpandedByPointer;
   const jobs = useGenerationStore((s) => s.jobs);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
@@ -73,6 +79,21 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!statusBarAutoHide) {
+      setIsMouseOverBar(false);
+      setIsInProximity(false);
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      setIsInProximity(window.innerHeight - event.clientY <= STATUS_BAR_PROXIMITY_PX);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    return () => window.removeEventListener('pointermove', handlePointerMove);
+  }, [statusBarAutoHide]);
+
   const jobCount = activeJobs.length;
   const jobLabel = jobCount === 1 ? '1 job' : `${jobCount} jobs`;
   const hasActiveJobs = activeJobs.length > 0;
@@ -94,9 +115,33 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
   }, 0);
 
   return (
-    <>
-      <div className="border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted" data-testid="status-bar">
-        {hasActiveJobs && (
+    <div
+      className="relative"
+      data-testid="status-bar-hover-zone"
+      onMouseEnter={() => setIsMouseOverBar(true)}
+      onMouseLeave={() => setIsMouseOverBar(false)}
+    >
+      <div
+        className={`status-bar border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted ${isCollapsed ? 'status-bar-collapsed overflow-hidden' : ''}`}
+        data-testid="status-bar"
+      >
+        {/* Collapsed mini-row: only critical dots visible within the 8px clamp */}
+        {isCollapsed && (
+          <div className="flex h-2 items-center gap-1.5 px-3" data-testid="status-bar-collapsed-row">
+            <span
+              className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${connected ? 'bg-emerald-500' : 'bg-zinc-500'}`}
+              title={connected ? 'Online' : 'Offline'}
+            />
+            {saveStatus && (
+              <span
+                className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${saveStatus === 'saved' ? 'bg-emerald-500' : saveStatus === 'saving' ? 'bg-amber-400' : 'bg-zinc-500'}`}
+                title={saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving...' : 'Unsaved'}
+                data-testid="collapsed-save-dot"
+              />
+            )}
+          </div>
+        )}
+        {!isCollapsed && hasActiveJobs && (
           <div className="flex h-6 items-center gap-3 px-3" data-testid="status-bar-job-row">
             <span className="text-daw-accent truncate tabular-nums">
               Generating: {primaryJob?.trackName ?? 'unknown'}
@@ -108,27 +153,39 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
           </div>
         )}
 
-        <div
-          className={`flex h-6 items-center gap-3 px-3 ${hasActiveJobs ? 'border-t border-white/4' : ''}`}
-          data-testid="status-bar-meta-row"
-        >
-          <span className="hidden lg:inline-flex items-center gap-3 truncate text-daw-text-muted" data-testid="status-model-name">
+        {!isCollapsed && (
+          <div
+            className={`flex h-6 items-center gap-3 px-3 min-w-0 ${hasActiveJobs ? 'border-t border-white/4' : ''}`}
+            data-testid="status-bar-meta-row"
+          >
+          <span
+            className="inline-flex items-center gap-1 text-daw-text-muted"
+            data-testid="status-connection"
+            title={connected ? 'Backend server connected' : 'Backend server disconnected'}
+          >
+            <span
+              className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${connected ? 'bg-emerald-500' : 'bg-zinc-500'}`}
+              data-testid="connection-dot"
+            />
+            <span>{connected ? 'Online' : 'Offline'}</span>
+          </span>
+          <span className="hidden lg:inline-flex items-center gap-3 min-w-0 truncate text-daw-text-muted" data-testid="status-model-name">
             {t2mName ? (
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 min-w-0">
                 <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isT2mLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                <span>Mixture: {t2mName}</span>
+                <span className="truncate">Mixture: {t2mName}</span>
               </span>
             ) : null}
             {legoName ? (
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 min-w-0">
                 <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isLegoLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                <span>Stems: {legoName}</span>
+                <span className="truncate">Stems: {legoName}</span>
               </span>
             ) : null}
             {lmName ? (
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 min-w-0">
                 <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isLmLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                <span>LM: {lmName}</span>
+                <span className="truncate">LM: {lmName}</span>
               </span>
             ) : null}
             {!t2mName && !legoName && !lmName && <span>No model</span>}
@@ -226,8 +283,9 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 }

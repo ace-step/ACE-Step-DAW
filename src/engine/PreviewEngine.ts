@@ -9,8 +9,16 @@
  * - Plays category-matched patterns (arpeggios for leads, chords for pads, etc.)
  * - Respects project BPM for timing
  * - Auto-stops when a new preview starts or component unmounts
+ *
+ * Phase 5G migration: uses NativeSynths (NativePolySynth / NativeFMSynth) +
+ * raw GainNode — no Tone.js dependency. PluckSynth's plucky timbre is
+ * approximated with a short-envelope NativePolySynth (good enough for a
+ * <= ~8-beat audition).
  */
-import * as Tone from 'tone';
+import { NativePolySynth, NativeFMSynth } from './dsp/NativeSynths';
+import type { IDSPPolySynth, IDSPFMSynth } from './dsp/interfaces';
+import { getAudioEngine } from '../hooks/useAudioEngine';
+import { midiToNoteName } from '../utils/pitch';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -202,24 +210,28 @@ function transposePattern(pattern: PreviewPattern, semitones: number): PreviewPa
 // Preview synth factory
 // ---------------------------------------------------------------------------
 
-function createPreviewSynth(kind: 'subtractive' | 'fm' | 'wavetable' | 'granular' | 'physical'): Tone.PolySynth | Tone.FMSynth | Tone.PluckSynth {
+type PreviewKind = 'subtractive' | 'fm' | 'wavetable' | 'granular' | 'additive' | 'physical';
+type PreviewSynth = IDSPPolySynth | IDSPFMSynth;
+
+function createPreviewSynth(ctx: AudioContext, kind: PreviewKind): PreviewSynth {
   if (kind === 'fm') {
-    return new Tone.FMSynth({
+    return new NativeFMSynth(ctx, {
       modulationIndex: 3,
       harmonicity: 2,
       envelope: { attack: 0.01, decay: 0.3, sustain: 0.5, release: 0.8 },
     });
   }
   if (kind === 'physical') {
-    return new Tone.PluckSynth({
-      attackNoise: 1,
-      dampening: 4000,
-      resonance: 0.9,
+    // Approximate PluckSynth with a short, percussive envelope —
+    // sufficient for a brief audition.
+    return new NativePolySynth(ctx, {
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.001, decay: 0.4, sustain: 0.05, release: 0.4 },
     });
   }
-  // subtractive & wavetable both use PolySynth for preview
-  return new Tone.PolySynth(Tone.Synth, {
-    oscillator: { type: 'triangle' as OscillatorType },
+  // subtractive / wavetable / granular / additive — generic poly
+  return new NativePolySynth(ctx, {
+    oscillator: { type: 'triangle' },
     envelope: { attack: 0.01, decay: 0.3, sustain: 0.5, release: 0.8 },
   });
 }
@@ -231,9 +243,9 @@ function createPreviewSynth(kind: 'subtractive' | 'fm' | 'wavetable' | 'granular
 export class PreviewEngine {
   private _volume = 0.3;
   private _isPlaying = false;
-  private _synth: Tone.PolySynth | Tone.FMSynth | Tone.PluckSynth | null = null;
-  private _gain: Tone.Gain | null = null;
-  private _scheduledIds: number[] = [];
+  private _synth: PreviewSynth | null = null;
+  private _gain: GainNode | null = null;
+  private _scheduledIds: ReturnType<typeof setTimeout>[] = [];
   private _stopTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   get isPlaying(): boolean {
@@ -265,10 +277,16 @@ export class PreviewEngine {
     }
     this._scheduledIds = [];
 
-    // Release all notes
+    // Cut any sounding notes before disposal so rapid preset auditions
+    // don't leave oscillators ringing until their scheduled stop.
+    // PolySynth uses `releaseAll()`; NativeFMSynth has a single-note
+    // `triggerRelease()` (acts as an "all notes off" since the synth
+    // is monophonic).
     if (this._synth) {
       if ('releaseAll' in this._synth) {
-        (this._synth as Tone.PolySynth).releaseAll();
+        (this._synth as IDSPPolySynth).releaseAll();
+      } else if ('triggerRelease' in this._synth) {
+        (this._synth as IDSPFMSynth).triggerRelease();
       }
     }
 
@@ -276,23 +294,32 @@ export class PreviewEngine {
   }
 
   async playPresetPreview(
-    instrumentKind: 'subtractive' | 'fm' | 'wavetable' | 'granular' | 'physical',
+    instrumentKind: PreviewKind,
     category: string,
     bpm: number,
     keyScale = 'C major',
   ): Promise<void> {
     this.stop();
-    await Tone.start();
+
+    const engine = getAudioEngine();
+    if (engine.ctx.state !== 'running') {
+      await engine.resume();
+    }
+    const ctx = engine.ctx;
 
     const basePattern = getPatternForCategory(category);
     const semitones = getTransposeSemitones(keyScale);
     const pattern = transposePattern(basePattern, semitones);
     const secondsPerBeat = 60 / bpm;
 
-    // Create dedicated synth for preview
-    this._synth = createPreviewSynth(instrumentKind);
-    this._gain = new Tone.Gain(this._volume).toDestination();
-    this._synth.connect(this._gain);
+    // Create dedicated synth for preview and route to destination.
+    // We pass durations as numbers (seconds), so the synth never needs
+    // to parse Tone.js-style notation — no need to pipe BPM through.
+    this._synth = createPreviewSynth(ctx, instrumentKind);
+    this._gain = ctx.createGain();
+    this._gain.gain.value = this._volume;
+    this._synth.connectNative(this._gain);
+    this._gain.connect(ctx.destination);
 
     this._isPlaying = true;
 
@@ -305,13 +332,13 @@ export class PreviewEngine {
       const endTime = startTime + duration;
       if (endTime > maxEndTime) maxEndTime = endTime;
 
-      const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+      const noteName = midiToNoteName(note.pitch);
       const vel = note.velocity / 127;
 
       const id = setTimeout(() => {
         if (!this._isPlaying || !this._synth) return;
-        this._synth.triggerAttackRelease(freq, duration, undefined, vel);
-      }, startTime * 1000) as unknown as number;
+        this._synth.triggerAttackRelease(noteName, duration, undefined, vel);
+      }, startTime * 1000);
 
       this._scheduledIds.push(id);
     }
@@ -333,7 +360,7 @@ export class PreviewEngine {
       this._synth = null;
     }
     if (this._gain) {
-      this._gain.dispose();
+      try { this._gain.disconnect(); } catch { /* already disconnected */ }
       this._gain = null;
     }
   }

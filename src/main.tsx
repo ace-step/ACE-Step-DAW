@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
-import { getAudioEngine } from './hooks/useAudioEngine';
 import { useProjectStore } from './store/projectStore';
 import { useUIStore } from './store/uiStore';
 import { useTransportStore } from './store/transportStore';
@@ -20,6 +19,9 @@ import { getMidiCaptureService } from './services/midiCaptureService';
 import { executeCoreDawShortcut } from './services/coreDawShortcuts';
 import { useAnalysisStore } from './store/analysisStore';
 import { analyzeClipLocally } from './services/localAnalysisService';
+import { useVoiceStore } from './store/voiceStore';
+import { useCustomModelStore } from './store/customModelStore';
+import { useVoiceVerificationStore } from './store/voiceVerificationStore';
 
 const agentProjectStore = {
   getState: () => ({
@@ -107,8 +109,46 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__analyzeClipLocally = analyzeClipLocally;
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
 (window as unknown as Record<string, unknown>).__modelStore = useModelStore;
-(window as unknown as Record<string, unknown>).__getAudioEngine = () => getAudioEngine();
+(window as unknown as Record<string, unknown>).__voiceStore = useVoiceStore;
+(window as unknown as Record<string, unknown>).__customModelStore = useCustomModelStore;
+(window as unknown as Record<string, unknown>).__voiceVerificationStore = useVoiceVerificationStore;
+// Keep synchronous — callers (uiStore video recording) expect immediate return.
+// Module is pre-loaded via dynamic import so it's available by user interaction time.
+let _cachedGetAudioEngine: (() => unknown) | null = null;
+void import('./hooks/useAudioEngine').then(m => { _cachedGetAudioEngine = m.getAudioEngine; });
+(window as unknown as Record<string, unknown>).__getAudioEngine = () => {
+  if (!_cachedGetAudioEngine) throw new Error('Audio engine module not yet loaded');
+  return _cachedGetAudioEngine();
+};
 (window as unknown as Record<string, unknown>).__shortcutsStore = useShortcutsStore;
+
+// Strudel Agent API — lazy-loaded to avoid pulling strudel deps into main bundle
+type StrudelApi = ReturnType<Awaited<typeof import('./services/strudelAgentApi')>['createStrudelAgentApi']>;
+let _strudelApi: StrudelApi | null = null;
+let _strudelApiPromise: Promise<StrudelApi> | null = null;
+function ensureStrudelApi(): Promise<StrudelApi> {
+  if (_strudelApi) return Promise.resolve(_strudelApi);
+  if (!_strudelApiPromise) {
+    _strudelApiPromise = import('./services/strudelAgentApi').then(m => {
+      _strudelApi = m.createStrudelAgentApi();
+      return _strudelApi;
+    });
+  }
+  return _strudelApiPromise;
+}
+const strudelApiProxy = new Proxy({} as Record<string, unknown>, {
+  get(_target, prop) {
+    if (_strudelApi) return (_strudelApi as Record<string, unknown>)[prop as string];
+    // Return async wrapper that awaits module load
+    return async (...args: unknown[]) => {
+      const api = await ensureStrudelApi();
+      const fn = (api as Record<string, unknown>)[prop as string];
+      if (typeof fn !== 'function') return fn;
+      return (fn as (...a: unknown[]) => unknown)(...args);
+    };
+  },
+});
+(window as unknown as Record<string, unknown>).__strudelApi = strudelApiProxy;
 (window as unknown as Record<string, unknown>).__coreDawShortcuts = {
   execute: (actionId: Parameters<typeof executeCoreDawShortcut>[0]) => executeCoreDawShortcut(actionId),
 };
@@ -144,9 +184,10 @@ window.__dawStructure = () =>
   generateProjectStructure(useProjectStore.getState().project);
 window.__midiCaptureService = getMidiCaptureService();
 
-// Start MCP bridge for Claude Code integration
-import { startMcpBridge } from './services/mcpBridge';
-startMcpBridge();
+// Start MCP bridge for Claude Code integration (lazy — not needed for initial render)
+void import('./services/mcpBridge')
+  .then(m => m.startMcpBridge())
+  .catch(err => console.error('Failed to start MCP bridge', err));
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

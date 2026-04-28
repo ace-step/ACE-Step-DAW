@@ -14,6 +14,7 @@ import { getSceneHeaderClass, getSceneButtonClass, getSceneButtonLabel, getScene
 import { generateSingleClip } from '../../services/generationPipeline';
 import { toastError } from '../../hooks/useToast';
 import { useSessionMidiController } from '../../hooks/useSessionMidiController';
+import { useSessionRecording } from '../../hooks/useSessionRecording';
 import { getMidiCaptureService } from '../../services/midiCaptureService';
 import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, SceneFollowActionConfig, FollowActionType, FollowActionConfig } from '../../types/project';
 
@@ -107,6 +108,8 @@ const CLIP_FOLLOW_ACTION_OPTIONS: { value: FollowActionType; label: string }[] =
 ];
 
 
+const EMPTY_STRING_ARRAY: string[] = [];
+
 export function SessionView() {
   const project = useProjectStore((s) => s.project);
   const setSessionLaunchQuantization = useProjectStore((s) => s.setSessionLaunchQuantization);
@@ -155,6 +158,11 @@ export function SessionView() {
   }, [hasArmedTrack, armedTrackIds, currentTime, captureMidi, captureService, captureBarCount]);
   const [midiEnabled, setMidiEnabled] = useState(false);
   const midiState = useSessionMidiController(midiEnabled);
+  const { startSlotRecording, stopSlotRecording, countInEnabled, setCountInEnabled, countInRemaining } = useSessionRecording();
+  const recordingSlotIds = useProjectStore((s) => s.project?.session?.recordingSlotIds ?? EMPTY_STRING_ARRAY);
+  const fixedLengthBars = useProjectStore((s) => s.project?.session?.fixedLengthBars ?? null);
+  const setSessionFixedLengthBars = useProjectStore((s) => s.setSessionFixedLengthBars);
+  const toggleArmTrack = useTransportStore((s) => s.toggleArmTrack);
 
   const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
 
@@ -352,6 +360,31 @@ export function SessionView() {
             >
               Capture MIDI
             </button>
+            <label className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+              <span>Rec:</span>
+              <select
+                value={fixedLengthBars ?? 'free'}
+                onChange={(e) => setSessionFixedLengthBars(e.target.value === 'free' ? null : Number(e.target.value))}
+                className="rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-1 text-[11px] text-zinc-200 outline-none"
+                aria-label="Fixed-length recording in bars"
+              >
+                <option value="free">Free</option>
+                {[1, 2, 4, 8, 16].map((n) => (
+                  <option key={n} value={n}>{n} bar{n > 1 ? 's' : ''}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              onClick={() => setCountInEnabled(!countInEnabled)}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                countInEnabled
+                  ? 'bg-orange-600/30 text-orange-300 border border-orange-500/50'
+                  : 'bg-[#2a2a2a] text-zinc-500 hover:bg-[#343434]'
+              }`}
+              aria-label={countInEnabled ? 'Disable count-in' : 'Enable count-in before recording'}
+            >
+              {countInRemaining != null ? `Count: ${countInRemaining}` : countInEnabled ? 'Count-In ON' : 'Count-In'}
+            </button>
             <button
               onClick={() => setMidiEnabled((v) => !v)}
               className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
@@ -491,6 +524,11 @@ export function SessionView() {
               dropTarget={dropTarget}
               onDragStart={handlePointerDown}
               onAiFill={handleAiFill}
+              isArmed={armedTrackIds.includes(track.id)}
+              recordingSlotIds={recordingSlotIds}
+              onArmTrack={() => toggleArmTrack(track.id)}
+              onStartRecording={(sceneId, slotId) => startSlotRecording(track.id, sceneId, slotId)}
+              onStopRecording={(slotId, sceneId, recordingType) => stopSlotRecording(slotId, track.id, sceneId, recordingType)}
               isArrangementRecording={sessionArrangementRecording}
             />
           );
@@ -958,6 +996,11 @@ function FragmentRow({
   dropTarget,
   onDragStart,
   onAiFill,
+  isArmed,
+  recordingSlotIds,
+  onArmTrack,
+  onStartRecording,
+  onStopRecording,
   isArrangementRecording,
 }: {
   track: Track;
@@ -979,6 +1022,11 @@ function FragmentRow({
   dropTarget: SessionDropTarget | null;
   onDragStart: (e: React.PointerEvent, type: 'clip' | 'scene', opts: { sourceSlotId?: string; sourceSceneIndex?: number; label: string; color: string }) => void;
   onAiFill: (trackId: string, sceneIndex: number) => void;
+  isArmed: boolean;
+  recordingSlotIds: string[];
+  onArmTrack: () => void;
+  onStartRecording: (sceneId: string, slotId: string) => void;
+  onStopRecording: (slotId: string, sceneId: string, recordingType: 'audio' | 'midi') => void;
   isArrangementRecording: boolean;
 }) {
   const trackSlots = sessionSlots.filter((s) => s.trackId === track.id);
@@ -1022,9 +1070,23 @@ function FragmentRow({
     <>
       <div className="border-r border-b border-[#2e2e2e] bg-[#212121] px-4 py-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-zinc-100">{track.displayName}</div>
-            <div className="text-[11px] text-zinc-400">{track.trackType ?? 'stems'}</div>
+          <div className="min-w-0 flex items-center gap-2">
+            <button
+              onClick={onArmTrack}
+              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                isArmed
+                  ? 'border-red-500 bg-red-500/30'
+                  : 'border-zinc-600 bg-transparent hover:border-zinc-400'
+              }`}
+              aria-label={`${isArmed ? 'Disarm' : 'Arm'} ${track.displayName} for recording`}
+              data-testid={`arm-track-${track.id}`}
+            >
+              {isArmed && <span className="w-2 h-2 rounded-full bg-red-500" />}
+            </button>
+            <div>
+              <div className="truncate text-sm font-medium text-zinc-100">{track.displayName}</div>
+              <div className="text-[11px] text-zinc-400">{track.trackType ?? 'stems'}</div>
+            </div>
           </div>
           <button
             onClick={() => void onStop()}
@@ -1225,50 +1287,146 @@ function FragmentRow({
                     ))}
                   </select>
                 )}
+                {isArmed && clip.midiData && slot && sceneId && !recordingSlotIds.includes(slot.id) && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void onStartRecording(sceneId, slot.id);
+                    }}
+                    className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-red-600/80 px-1.5 py-0.5 text-[9px] font-medium text-white leading-none hover:bg-red-500 transition-colors"
+                    title="MIDI Overdub — record additional notes on top"
+                    aria-label={`MIDI overdub on ${getClipLabel(clip, sceneIndex)}`}
+                    data-testid={`overdub-btn-${slot.id}`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                    OVR
+                  </button>
+                )}
+                {isArmed && slot && recordingSlotIds.includes(slot.id) && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const recordingType = track.trackType === 'pianoRoll' ? 'midi' as const : 'audio' as const;
+                      void onStopRecording(slot.id, sceneId!, recordingType);
+                    }}
+                    className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none animate-pulse"
+                    title="Stop overdub recording"
+                    aria-label={`Stop overdub on ${getClipLabel(clip, sceneIndex)}`}
+                    data-testid={`overdub-stop-${slot.id}`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-sm bg-white" />
+                    REC
+                  </button>
+                )}
               </div>
-            ) : hasStopButton ? (
-              <button
-                onClick={() => {
-                  if (dragState) return;
-                  onSlotClick(sceneIndex);
-                  void onStop();
-                }}
-                onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
-                className={`flex h-24 w-full items-center justify-center rounded-xl border border-dashed transition-colors ${
-                  isDropTarget
-                    ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_0_2px_rgba(59,130,246,0.5)]'
-                    : 'border-[#343434] bg-[#202020] hover:border-[#555] hover:bg-[#272727]'
-                } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
-                aria-label={`Stop ${track.displayName} in scene ${sceneIndex + 1}`}
-                data-testid={`stop-slot-${track.id}-${sceneIndex}`}
-                data-slot-id={slot?.id}
-                data-track-id={track.id}
-                data-scene-index={sceneIndex}
-              >
-                <span className="text-zinc-500 text-base leading-none" aria-hidden="true">&#9632;</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  if (dragState) return;
-                  onSlotClick(sceneIndex);
-                }}
-                onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
-                className={`flex h-24 w-full items-center justify-center rounded-xl border border-dashed text-[11px] uppercase tracking-[0.16em] text-zinc-600 cursor-pointer ${
-                  isDropTarget
-                    ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_0_2px_rgba(59,130,246,0.5)]'
-                    : 'border-[#2a2a2a] bg-[#1d1d1d]'
-                } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
-                data-testid={`empty-slot-${track.id}-${sceneIndex}`}
-                data-slot-id={slot?.id}
-                data-track-id={track.id}
-                data-scene-index={sceneIndex}
-                aria-label={`Empty slot, ${track.displayName} scene ${sceneIndex + 1}`}
-              >
-                Empty
-              </button>
-            )}
+            ) : (() => {
+              const isSlotRecording = slot ? recordingSlotIds.includes(slot.id) : false;
+              const canRecord = isArmed && slot && sceneId;
+              const recordingType = track.trackType === 'pianoRoll' ? 'midi' as const : 'audio' as const;
+
+              if (isSlotRecording && slot && sceneId) {
+                // Recording state — show red animated indicator
+                return (
+                  <button
+                    onClick={() => {
+                      onSlotClick(sceneIndex);
+                      void onStopRecording(slot.id, sceneId, recordingType);
+                    }}
+                    className={`flex h-24 w-full flex-col items-center justify-center gap-2 rounded-xl border border-red-500 bg-red-500/10 transition-colors ${
+                      isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''
+                    }`}
+                    style={{ animation: 'session-blink 800ms ease-in-out infinite' }}
+                    aria-label={`Stop recording on ${track.displayName} scene ${sceneIndex + 1}`}
+                    data-testid={`recording-slot-${track.id}-${sceneIndex}`}
+                    data-slot-id={slot.id}
+                    data-track-id={track.id}
+                    data-scene-index={sceneIndex}
+                  >
+                    <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-red-300 font-medium">
+                      Recording
+                    </span>
+                    <span className="text-[9px] text-red-400/70">{recordingType === 'midi' ? 'MIDI' : 'Audio'}</span>
+                  </button>
+                );
+              }
+
+              if (canRecord && sceneId) {
+                // Armed track + empty slot — show record button
+                return (
+                  <button
+                    onClick={() => {
+                      if (dragState) return;
+                      onSlotClick(sceneIndex);
+                      void onStartRecording(sceneId, slot.id);
+                    }}
+                    onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
+                    className={`flex h-24 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed transition-colors ${
+                      isDropTarget
+                        ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_0_2px_rgba(59,130,246,0.5)]'
+                        : 'border-red-500/50 bg-red-500/5 hover:border-red-500 hover:bg-red-500/10'
+                    } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
+                    aria-label={`Record ${recordingType} into ${track.displayName} scene ${sceneIndex + 1}`}
+                    data-testid={`record-slot-${track.id}-${sceneIndex}`}
+                    data-slot-id={slot.id}
+                    data-track-id={track.id}
+                    data-scene-index={sceneIndex}
+                  >
+                    <span className="w-4 h-4 rounded-full border-2 border-red-500 flex items-center justify-center">
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                    </span>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-red-400/80">
+                      {recordingType === 'midi' ? 'Rec MIDI' : 'Rec Audio'}
+                    </span>
+                  </button>
+                );
+              }
+
+              // Default: stop button or empty slot
+              return hasStopButton ? (
+                <button
+                  onClick={() => {
+                    if (dragState) return;
+                    onSlotClick(sceneIndex);
+                    void onStop();
+                  }}
+                  onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
+                  className={`flex h-24 w-full items-center justify-center rounded-xl border border-dashed transition-colors ${
+                    isDropTarget
+                      ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_0_2px_rgba(59,130,246,0.5)]'
+                      : 'border-[#343434] bg-[#202020] hover:border-[#555] hover:bg-[#272727]'
+                  } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
+                  aria-label={`Stop ${track.displayName} in scene ${sceneIndex + 1}`}
+                  data-testid={`stop-slot-${track.id}-${sceneIndex}`}
+                  data-slot-id={slot?.id}
+                  data-track-id={track.id}
+                  data-scene-index={sceneIndex}
+                >
+                  <span className="text-zinc-500 text-base leading-none" aria-hidden="true">&#9632;</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dragState) return;
+                    onSlotClick(sceneIndex);
+                  }}
+                  onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
+                  className={`flex h-24 w-full items-center justify-center rounded-xl border border-dashed text-[11px] uppercase tracking-[0.16em] text-zinc-600 cursor-pointer ${
+                    isDropTarget
+                      ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_0_2px_rgba(59,130,246,0.5)]'
+                      : 'border-[#2a2a2a] bg-[#1d1d1d]'
+                  } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
+                  data-testid={`empty-slot-${track.id}-${sceneIndex}`}
+                  data-slot-id={slot?.id}
+                  data-track-id={track.id}
+                  data-scene-index={sceneIndex}
+                  aria-label={`Empty slot, ${track.displayName} scene ${sceneIndex + 1}`}
+                >
+                  Empty
+                </button>
+              );
+            })()}
           </div>
         );
       })}

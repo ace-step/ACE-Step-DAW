@@ -15,6 +15,9 @@
 
 import { RingBuffer } from '../dsp/RingBuffer';
 import { ParamBuffer } from '../dsp/ParamBuffer';
+import { createDebugLogger } from '../../utils/debugLogger';
+
+const logger = createDebugLogger('ace-step:engine-worklet');
 
 export interface WorkletHostOptions {
   /** Audio context to use. */
@@ -127,7 +130,7 @@ export class EngineWorkletHost {
       this._setState('ready');
       return true;
     } catch (err) {
-      console.warn('[EngineWorkletHost] Initialization failed:', err);
+      logger.error('Initialization failed:', err);
       // Clean up partially created resources
       this._node?.disconnect();
       this._node?.port.close();

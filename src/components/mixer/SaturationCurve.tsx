@@ -110,6 +110,8 @@ export function SaturationCurve({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Saturation curve visualization"
       style={{ width, height }}
       className="rounded"
       data-testid="saturation-curve"

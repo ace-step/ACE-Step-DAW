@@ -1,6 +1,6 @@
-import * as Tone from 'tone';
 import { TrackNode } from './TrackNode';
 import { ReturnTrackNode } from './ReturnTrackNode';
+import { configureNativeDsp } from './dsp/configureNativeDsp';
 import type {
   AudioWarpMarker,
   GainEnvelopePoint,
@@ -13,7 +13,8 @@ import type {
   Track,
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
-import { timeStretch, pitchShift as pitchShiftAudio, type TimeStretchMode } from '../utils/timeStretch';
+import { pitchShift as legacyPitchShift } from '../utils/timeStretch';
+import { stretchOffline } from '../services/timeStretchService';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../utils/tempoMap';
 import { computeWarpedSegments } from '../utils/audioWarp';
@@ -46,6 +47,11 @@ export interface ClipScheduleInfo {
   fadeOutDuration?: number;
   fadeInCurve?: 'linear' | 'exponential' | 'equal-power';
   fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
+  /** User-dragged bezier control point for the fade-in curve, overriding
+   *  `fadeInCurve` when set. Must be propagated here so the audio engine
+   *  plays the same envelope the renderer draws. */
+  fadeInCurvePoint?: { x: number; y: number };
+  fadeOutCurvePoint?: { x: number; y: number };
   timeStretchRate?: number; // playback rate (1 = normal, 0.5 = half speed, 2 = double)
   pitchShift?: number; // pitch shift in semitones (0 = original pitch)
   gainEnvelope?: GainEnvelopePoint[]; // per-clip volume automation
@@ -157,10 +163,12 @@ export class AudioEngine {
   constructor() {
     this.ctx = new AudioContext({ sampleRate: 48000 });
     this._playbackLatencyCompensation = (this.ctx.outputLatency ?? 0) + (this.ctx.baseLatency ?? 0);
-    // Share our AudioContext with Tone.js so EffectsEngine nodes live on the same graph
-    Tone.setContext(this.ctx as unknown as Tone.BaseContext);
-    // Configure Tone.js lookahead for stable scheduling under UI load
-    try { Tone.getContext().lookAhead = AudioEngine.LOOK_AHEAD; } catch { /* test env */ }
+    // Phase 5P: install the native DSP factory bound to *this* context
+    // so every effect/synth node EffectsEngine builds via
+    // `getDSPFactory()` shares the engine's AudioContext. Without
+    // this, `getDSPFactory()` would lazy-create a second
+    // AudioContext and cross-context connections would throw.
+    configureNativeDsp(this.ctx);
     this.masterInputGain = this.ctx.createGain();
     this.masterDryGain = this.ctx.createGain();
     this.masterProcessedGain = this.ctx.createGain();
@@ -860,50 +868,79 @@ export class AudioEngine {
     const cached = this.stretchedBufferCache.get(cacheKey);
     if (cached) return { buffer: cached, appliedStretch: !!needsStretch };
 
-    // Process each channel
+    // No legacy fallback — stretch is pre-processed on mouseup via
+    // Signalsmith (fast) + Rubber Band (HQ background).
+    // If cache miss here, play the raw buffer without stretch.
+    return null;
+  }
+
+  /**
+   * Pre-process a clip's time-stretch using dual engines:
+   * 1. Signalsmith Stretch (fast) — populates cache immediately for playback
+   * 2. Rubber Band (slow, high quality) — upgrades cache in background
+   *
+   * Call before or during playback. The fast engine ensures no delay;
+   * Rubber Band silently upgrades quality for subsequent plays.
+   */
+  async preProcessClipStretch(clip: ClipScheduleInfo): Promise<void> {
+    const mode = clip.stretchMode;
+    const rawRate = clip.timeStretchRate ?? 1;
+    const rate = Number.isFinite(rawRate) ? Math.max(0.25, Math.min(4, rawRate)) : 1;
+    const semitones = clip.pitchShift ?? 0;
+    const needsStretch = mode && mode !== 'repitch' && mode !== 'slice' && Math.abs(rate - 1) >= 0.001;
+    const needsPitchShift = Math.abs(semitones) >= 0.01;
+
+    if (!needsStretch && !needsPitchShift) return;
+
+    const cacheKey = `${clip.clipId}:${mode ?? 'none'}:${rate.toFixed(4)}:ps${semitones.toFixed(2)}`;
+    if (this.stretchedBufferCache.has(cacheKey)) return;
+
     const buffer = clip.buffer;
-    const numChannels = buffer.numberOfChannels;
-    const ratio = 1 / rate; // rate=0.5 means slower → ratio=2 (stretch to 2x)
+    const ratio = 1 / rate;
+    const pitchScale = Math.pow(2, semitones / 12);
 
-    const processedChannels: Float32Array[] = [];
-    let maxLen = 0;
-
-    for (let ch = 0; ch < numChannels; ch++) {
-      let channelData: Float32Array = new Float32Array(buffer.getChannelData(ch));
-
-      // Apply time-stretch if needed (non-repitch modes only)
-      if (needsStretch) {
-        channelData = timeStretch(channelData, {
-          mode: mode as TimeStretchMode,
-          ratio,
-          sampleRate: buffer.sampleRate,
-        });
+    try {
+      const channelData: Float32Array[] = [];
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        channelData.push(new Float32Array(buffer.getChannelData(ch)));
       }
-
-      // Apply pitch shift if needed (preserves duration)
-      if (needsPitchShift) {
-        channelData = pitchShiftAudio(channelData, {
-          semitones,
-          sampleRate: buffer.sampleRate,
-        });
+      const stretched = await stretchOffline(
+        channelData, buffer.sampleRate,
+        needsStretch ? ratio : 1.0,
+        needsPitchShift ? pitchScale : 1.0,
+      );
+      const maxLen = Math.max(...stretched.map(ch => ch.length));
+      const hqBuffer = this.ctx.createBuffer(buffer.numberOfChannels, maxLen, buffer.sampleRate);
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        hqBuffer.getChannelData(ch).set(stretched[ch]);
       }
-
-      processedChannels.push(channelData);
-      maxLen = Math.max(maxLen, channelData.length);
+      this.stretchedBufferCache.set(cacheKey, hqBuffer);
+    } catch {
+      // Rubber Band unavailable
     }
+  }
 
-    // Create new AudioBuffer with processed data
-    const processedBuffer = this.ctx.createBuffer(
-      numChannels,
-      maxLen,
-      buffer.sampleRate,
-    );
-    for (let ch = 0; ch < numChannels; ch++) {
-      processedBuffer.getChannelData(ch).set(processedChannels[ch]);
+  /**
+   * Trigger dual-engine stretch pre-processing by audio key.
+   * Called from UI (mouseup after Shift+drag) to start processing immediately.
+   */
+  async preProcessClipStretchByKey(
+    clipId: string, audioKey: string,
+    clipDuration: number, timeStretchRate?: number,
+    stretchMode?: string, pitchShift?: number,
+  ): Promise<void> {
+    let buffer = this.decodedBufferCache.get(audioKey);
+    if (!buffer) {
+      // Buffer not in memory cache — load from IndexedDB and decode
+      buffer = await this._getDecodedBuffer(audioKey) ?? undefined;
+      if (!buffer) return;
     }
-
-    this.stretchedBufferCache.set(cacheKey, processedBuffer);
-    return { buffer: processedBuffer, appliedStretch: !!needsStretch };
+    await this.preProcessClipStretch({
+      clipId, trackId: '', buffer, startTime: 0,
+      clipDuration, audioDuration: buffer.duration, audioOffset: 0,
+      timeStretchRate, stretchMode: stretchMode as import('../types/project').StretchMode,
+      pitchShift,
+    } as unknown as ClipScheduleInfo);
   }
 
   /**
@@ -924,7 +961,7 @@ export class AudioEngine {
     let maxLen = 0;
 
     for (let ch = 0; ch < numChannels; ch++) {
-      const channelData = pitchShiftAudio(new Float32Array(buffer.getChannelData(ch)), {
+      const channelData = legacyPitchShift(new Float32Array(buffer.getChannelData(ch)), {
         semitones,
         sampleRate: buffer.sampleRate,
       });
@@ -946,13 +983,10 @@ export class AudioEngine {
     trackNode: TrackNode,
     fromTime: number,
   ) {
-    const source = this.ctx.createBufferSource();
-
-    // Get processed buffer (time-stretch and/or pitch shift).
-    // The result distinguishes whether offline time-stretch was applied,
-    // so we know whether to also apply playbackRate for repitch mode.
     const processed = this._getProcessedBuffer(clip);
     const appliedStretch = processed?.appliedStretch ?? false;
+
+    const source = this.ctx.createBufferSource();
     if (processed) {
       source.buffer = processed.buffer;
     } else {
@@ -1079,6 +1113,8 @@ export class AudioEngine {
       fadeOutDuration: clip.fadeOutDuration,
       fadeInCurve: clip.fadeInCurve,
       fadeOutCurve: clip.fadeOutCurve,
+      fadeInCurvePoint: clip.fadeInCurvePoint,
+      fadeOutCurvePoint: clip.fadeOutCurvePoint,
     }, this.ctx.currentTime, fromTime);
   }
 
@@ -1182,8 +1218,13 @@ export class AudioEngine {
     totalDuration: number,
     tempoMap?: TempoEvent[],
     timeSignatureMap?: TimeSignatureEvent[],
+    options?: { sound?: 'click' | 'woodblock' | 'beep'; volume?: number },
   ) {
     this.stopMetronome();
+    const sound = options?.sound ?? 'click';
+    const volume = options?.volume ?? 0.5;
+    this._metronomeGain.gain.value = Math.max(0, Math.min(1, volume)) * 0.7;
+
     const contextNow = this.ctx.currentTime;
     for (let bar = 1; bar <= 999; bar++) {
       const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature, timeSignatureDenominator);
@@ -1199,11 +1240,31 @@ export class AudioEngine {
         if (beatTime < fromTime) continue;
 
         const delay = beatTime - fromTime;
-        const freq = beatIndex === 0 ? 1200 : 800;
-        const clickDuration = 0.03;
+        const accent = beatIndex === 0;
+        let freq: number;
+        let oscType: OscillatorType;
+        let clickDuration: number;
+
+        switch (sound) {
+          case 'woodblock':
+            freq = accent ? 1600 : 1100;
+            oscType = 'triangle';
+            clickDuration = 0.015;
+            break;
+          case 'beep':
+            freq = accent ? 1000 : 700;
+            oscType = 'square';
+            clickDuration = 0.02;
+            break;
+          default: // 'click'
+            freq = accent ? 1200 : 800;
+            oscType = 'sine';
+            clickDuration = 0.03;
+            break;
+        }
 
         const osc = this.ctx.createOscillator();
-        osc.type = 'sine';
+        osc.type = oscType;
         osc.frequency.value = freq;
 
         const env = this.ctx.createGain();

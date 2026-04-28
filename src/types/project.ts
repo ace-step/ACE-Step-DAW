@@ -198,7 +198,7 @@ export interface SampleZone {
 }
 
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;
-export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular' | 'physical';
+export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular' | 'additive' | 'physical';
 export type InstrumentWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
 export type InstrumentLfoTarget = 'off' | 'pitch' | 'filterCutoff' | 'amp' | 'pan';
 
@@ -457,6 +457,27 @@ export interface GranularTrackInstrument {
   settings: GranularSettings;
 }
 
+export type AdditivePreset = 'saw' | 'square' | 'organ' | 'bell' | 'custom';
+
+export interface AdditivePartial {
+  ratio: number;      // frequency multiplier (1 = fundamental, 2 = 2nd harmonic, etc.)
+  amplitude: number;  // 0–1
+  phase: number;      // 0–2π
+}
+
+export interface AdditiveSettings {
+  partials: AdditivePartial[];
+  ampEnvelope: InstrumentEnvelope;
+  outputGain: number;
+}
+
+export interface AdditiveTrackInstrument {
+  kind: 'additive';
+  preset: AdditivePreset;
+  name: string;
+  settings: AdditiveSettings;
+}
+
 export type PhysicalExciterType = 'pluck' | 'bow' | 'hammer';
 export type PhysicalModelPreset = 'acoustic-guitar' | 'harp' | 'kalimba' | 'marimba' | 'steel-drum' | 'custom';
 
@@ -482,6 +503,7 @@ export type TrackInstrument =
   | FmTrackInstrument
   | WavetableTrackInstrument
   | GranularTrackInstrument
+  | AdditiveTrackInstrument
   | PhysicalTrackInstrument;
 
 export interface SamplerSettings {
@@ -970,8 +992,11 @@ export interface ClipGenerationParams {
   useProjectMeta?: boolean;
   inferenceSteps?: number;
   guidanceScale?: number;
+  temperature?: number;
   shift?: number;
   negativePrompt?: string;
+  /** Style tags persisted for edit/regenerate — prepended to prompt at generation time */
+  styleTags?: string[];
   // lego params
   globalCaption?: string;
   sampleMode?: boolean;
@@ -988,6 +1013,12 @@ export interface ClipGenerationParams {
   } | null;
   /** Chunk mask mode persisted for regeneration. */
   chunkMaskMode?: 'explicit' | 'auto';
+  /** Voice profile ID used for voice-conditioned generation. */
+  voiceProfileId?: string;
+  /** Audio Influence (0–100) — how much reference voice is preserved. */
+  audioInfluence?: number;
+  /** Style Influence (0–100) — how much AI's trained style is applied. */
+  styleInfluence?: number;
 }
 
 export interface Clip {
@@ -1036,6 +1067,18 @@ export interface Clip {
   fadeInCurve?: 'linear' | 'exponential' | 'equal-power';
   /** Fade out curve shape. */
   fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
+  /**
+   * Optional bezier control point for the fade-in curve, in normalized
+   * coordinates. The bezier passes through (0, 0) silence at fade start
+   * and (1, 1) unity at fade end; the curve's geometric midpoint is dragged
+   * to {x, y} (so x runs along the fade duration, y is gain at that point).
+   * When set, this overrides `fadeInCurve` for both audio playback and the
+   * waveform amplitude rendering. Old projects without this field continue
+   * to use the preset.
+   */
+  fadeInCurvePoint?: { x: number; y: number };
+  /** Same as fadeInCurvePoint, for the fade-out region. */
+  fadeOutCurvePoint?: { x: number; y: number };
   /** Time-stretch playback rate (1 = original speed, 0.5 = half, 2 = double). */
   timeStretchRate?: number;
   /** Pitch shift in semitones (0 = original pitch). */
@@ -1056,6 +1099,8 @@ export interface Clip {
   generationParams?: ClipGenerationParams;
   /** Video-specific metadata (only for clips on video tracks). */
   videoMeta?: VideoClipData;
+  /** User-assigned tags for clip organization (e.g. "verse", "favorite"). */
+  tags?: string[];
 }
 
 // ─── Video Track Types ────────────────────────────────────────────────────────
@@ -1321,6 +1366,8 @@ export interface Track {
   strudelVersions?: StrudelCodeVersion[];
   /** WAP plugin instances on this track (effect & instrument plugins). */
   plugins?: import('./plugin').PluginInstance[];
+  /** ID of the voice profile assigned to this track for voice cloning. */
+  voiceProfileId?: string;
   /** Video track display/preview settings (only for video tracks). */
   videoSettings?: VideoTrackSettings;
 }
@@ -1487,6 +1534,10 @@ export interface SessionState {
   lastLaunchAt: number | null;
   /** Global toggle for follow actions. When false, no follow actions fire. Default true. */
   followActionsEnabled?: boolean;
+  /** Slot IDs currently recording (empty when no recording is active). */
+  recordingSlotIds?: string[];
+  /** Fixed-length recording setting in bars (null = manual stop). */
+  fixedLengthBars?: number | null;
 }
 
 /** A saved project template — a snapshot of project settings and track layout (without audio). */
@@ -1524,6 +1575,49 @@ export interface ProjectTemplateTrack {
   sequencerPattern?: SequencerPattern;
 }
 
+// ─── Mix Snapshot Types ──────────────────────────────────────────────────────
+
+/** Per-track mixer state captured in a snapshot. */
+export interface MixSnapshotTrackState {
+  trackId: string;
+  volume: number;
+  muted: boolean;
+  soloed: boolean;
+  pan?: number;
+  panMode?: 'stereo' | 'dual-mono';
+  panLeft?: number;
+  panRight?: number;
+  eqLowGain?: number;
+  eqMidGain?: number;
+  eqHighGain?: number;
+  compressorEnabled?: boolean;
+  compressorThreshold?: number;
+  compressorRatio?: number;
+  reverbMix?: number;
+  reverbRoomSize?: number;
+  effects?: TrackEffect[];
+  effectsBypassed?: boolean;
+  sends?: Send[];
+}
+
+/** Return track state captured in a snapshot. */
+export interface MixSnapshotReturnTrackState {
+  returnTrackId: string;
+  volume: number;
+  pan: number;
+  effects: TrackEffect[];
+}
+
+/** A named, persistent snapshot of the entire mixer state. */
+export interface MixSnapshot {
+  id: string;
+  name: string;
+  createdAt: number;
+  trackStates: MixSnapshotTrackState[];
+  returnTrackStates: MixSnapshotReturnTrackState[];
+  masterVolume?: number;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -1555,6 +1649,8 @@ export interface Project {
   returnTracks?: ReturnTrack[];
   /** Reusable track templates saved from existing tracks. */
   trackPresets?: TrackPreset[];
+  /** Saved mix snapshots for recall and A/B comparison. */
+  mixSnapshots?: MixSnapshot[];
   /** Timeline markers (sorted by time). */
   markers?: Marker[];
   /** Reusable groove templates (extracted timing/velocity patterns). */

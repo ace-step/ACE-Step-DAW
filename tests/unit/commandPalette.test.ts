@@ -8,6 +8,7 @@ import {
 } from '../../src/services/commandPalette';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useTransportStore } from '../../src/store/transportStore';
+import { useMidiControllerStore } from '../../src/store/midiControllerStore';
 import { useUIStore } from '../../src/store/uiStore';
 
 function createContext(overrides: Partial<CommandPaletteContext> = {}): CommandPaletteContext {
@@ -74,6 +75,7 @@ describe('commandPalette', () => {
     localStorage.clear();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useTransportStore.setState(useTransportStore.getInitialState(), true);
+    useMidiControllerStore.setState(useMidiControllerStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
     useProjectStore.getState().createProject({ name: 'Palette Test', bpm: 120 });
   });
@@ -96,6 +98,28 @@ describe('commandPalette', () => {
 
     expect(commandIds).toContain(`track:${drumsTrack.id}:effect:reverb`);
     expect(commandIds).toContain(`track:${bassTrack.id}:effect:compressor`);
+  });
+
+  it('does not crash saving a mix snapshot when no project is loaded', async () => {
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    const saveSnapshot = buildCommandPaletteCommands(createContext()).find(
+      (command) => command.id === 'mixer:save-snapshot',
+    );
+
+    await expect(saveSnapshot?.execute()).resolves.toBeUndefined();
+    expect(useProjectStore.getState().project).toBeNull();
+  });
+
+  it('does not assign duplicate shortcuts to per-snapshot A/B commands', () => {
+    useProjectStore.getState().saveMixSnapshot('Mix A');
+    useProjectStore.getState().saveMixSnapshot('Mix B');
+
+    const abCommands = buildCommandPaletteCommands(createContext()).filter((command) =>
+      command.id.startsWith('mixer:ab-snapshot:'),
+    );
+
+    expect(abCommands).toHaveLength(2);
+    expect(abCommands.every((command) => command.shortcut === undefined)).toBe(true);
   });
 
   // ── BPM / Tempo ──
@@ -204,6 +228,23 @@ describe('commandPalette', () => {
 
     await fitProject?.execute();
     expect(useUIStore.getState().timelineZoomRequest).toEqual({ id: 2, mode: 'project' });
+  });
+
+  // ── MIDI controller commands ──
+
+  it('arms MIDI Learn for a concrete master-volume target', async () => {
+    const commands = buildCommandPaletteCommands(createContext());
+    const midiLearn = commands.find((c) => c.id === 'midi:learn');
+
+    await midiLearn?.execute();
+
+    expect(useUIStore.getState().showMidiControllerPanel).toBe(true);
+    expect(useMidiControllerStore.getState().learnMode).toEqual({
+      active: true,
+      targetParam: 'master:volume',
+      targetLabel: 'Master Volume',
+    });
+    expect(useMidiControllerStore.getState().enabled).toBe(true);
   });
 
   // ── Search scoring ──

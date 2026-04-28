@@ -14,6 +14,7 @@ import { getBarAtBeat, getBeatAtBar, timeToBeat } from '../../utils/tempoMap';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { LatencyDisplay } from './LatencyDisplay';
+import { MetronomeSettingsPopover } from './MetronomeSettingsPopover';
 
 const KEY_ROOT_LABELS: Record<string, string> = {
   C: 'C',
@@ -547,6 +548,7 @@ function ControlBarButton({
       disabled={disabled}
       title={shortcutHint ? undefined : title}
       aria-label={label}
+      aria-pressed={active ?? undefined}
       data-onboarding-target={dataTarget}
       className={`h-10 w-10 rounded-lg p-0 text-white/90 ${hoverClass} ${className ?? ''}`}
     >
@@ -731,6 +733,9 @@ export function Toolbar() {
   const toggleLoop = useTransportStore((s) => s.toggleLoop);
   const metronomeEnabled = useTransportStore((s) => s.metronomeEnabled);
   const toggleMetronome = useTransportStore((s) => s.toggleMetronome);
+  const [metronomeSettingsOpen, setMetronomeSettingsOpen] = useState(false);
+  const punchEnabled = useTransportStore((s) => s.punchEnabled);
+  const togglePunch = useTransportStore((s) => s.togglePunch);
   useEffect(() => {
     (window as unknown as Record<string, unknown>).__commandPaletteRuntime = {
       play,
@@ -865,19 +870,41 @@ export function Toolbar() {
         <ControlBarButton onClick={() => void toggleRecord()} title="Record (R)" shortcutHint="R" active={isRecording}>
           <div className={`h-[20px] w-[20px] rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-70'}`} />
         </ControlBarButton>
-        <Tooltip content="Metronome" shortcut="K" side="bottom">
-        <button
-          onClick={toggleMetronome}
-          aria-label="Metronome"
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-[color,background-color,transform] duration-150 active:scale-95 ${
-            metronomeEnabled
-              ? 'bg-[#8276f6] text-white'
-              : 'bg-transparent text-white/90 hover:bg-transparent hover:text-white'
-          }`}
+        <ControlBarButton
+          active={punchEnabled}
+          onClick={togglePunch}
+          title="Punch In/Out (Shift+P)"
+          shortcutHint="Shift+P"
+          disableHoverHighlight
         >
-          <MetronomePulseIcon />
-        </button>
-        </Tooltip>
+          <svg width="20" height="20" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="3" width="12" height="8" rx="1.5" />
+            <line x1="5" y1="3" x2="5" y2="11" strokeDasharray="1.5 1" />
+            <line x1="9" y1="3" x2="9" y2="11" strokeDasharray="1.5 1" />
+            <rect x="5" y="5" width="4" height="4" rx="0.5" fill={punchEnabled ? 'currentColor' : 'none'} opacity="0.6" />
+          </svg>
+        </ControlBarButton>
+        <div className="relative">
+          <Tooltip content="Metronome" shortcut="K" side="bottom">
+            <button
+              onClick={toggleMetronome}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setMetronomeSettingsOpen((open) => !open);
+              }}
+              aria-label="Metronome"
+              aria-pressed={metronomeEnabled}
+              className={`flex h-10 w-10 items-center justify-center rounded-xl transition-[color,background-color,transform] duration-150 active:scale-95 ${
+                metronomeEnabled
+                  ? 'bg-[#8276f6] text-white'
+                  : 'bg-transparent text-white/90 hover:bg-transparent hover:text-white'
+              }`}
+            >
+              <MetronomePulseIcon />
+            </button>
+          </Tooltip>
+          <MetronomeSettingsPopover open={metronomeSettingsOpen} onClose={() => setMetronomeSettingsOpen(false)} />
+        </div>
         <ControlBarButton
           active={loopEnabled}
           onClick={toggleLoop}

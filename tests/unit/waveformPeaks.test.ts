@@ -66,9 +66,12 @@ describe('computeWaveformPeaks', () => {
     expect(peaks.every((p) => p === 0)).toBe(true);
   });
 
-  it('returns zeros when a single sample is spread across multiple requested peaks', () => {
+  it('replicates single sample across all peak buckets', () => {
     const peaks = computeWaveformPeaks(createAudioBufferMock([0.75]), 4);
     expect(peaks).toHaveLength(4 * PEAK_STRIDE);
-    expect(peaks.every((p) => p === 0)).toBe(true);
+    for (let i = 0; i < 4; i++) {
+      expect(peaks[i * PEAK_STRIDE]).toBeCloseTo(0.75);     // Lmax
+      expect(peaks[i * PEAK_STRIDE + 2]).toBeCloseTo(0.75); // Rmax
+    }
   });
 });

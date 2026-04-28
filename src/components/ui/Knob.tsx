@@ -254,6 +254,7 @@ export function Knob({
           aria-valuenow={value}
           aria-valuemin={min}
           aria-valuemax={max}
+          aria-valuetext={`${displayValue}${unit && !formatValue ? unit : ''}`}
           className={`relative outline-none rounded-full transition-[transform,filter] duration-150
             focus-visible:ring-2 focus-visible:ring-daw-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent
             ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize hover:brightness-110 hover:scale-[1.03]'}`}

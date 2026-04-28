@@ -3,8 +3,7 @@ import { loadAudioBlobByKey, saveAudioBlob } from './audioFileManager';
 import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
 import { createSamplerConfig } from '../engine/SamplerEngine';
 import { audioBufferToWavBlob } from '../utils/wav';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
-import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import type { SynthPreset, DrumKitName } from '../types/project';
 
@@ -149,7 +148,7 @@ export async function flattenTrackToAudio(trackId: string): Promise<void> {
 
   const engine = getAudioEngine();
   const buf = await engine.decodeAudioData(blob);
-  const peaks = computeWaveformPeaks(buf, CLIP_WAVEFORM_PEAK_COUNT);
+  const peaks = await computeWaveformWithMipmap(audioKey, buf);
   const duration = buf.duration;
 
   useProjectStore.getState().flattenTrack(trackId, audioKey, peaks, duration);

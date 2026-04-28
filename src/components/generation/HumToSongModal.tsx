@@ -6,8 +6,7 @@ import { analyzeHumRecording, type HumAnalysisResult } from '../../services/humT
 import { generateCoverClip } from '../../services/generationPipeline';
 import { saveAudioBlob } from '../../services/audioFileManager';
 import { audioBufferToWavBlob } from '../../utils/wav';
-import { computeWaveformPeaks } from '../../utils/waveformPeaks';
-import { CLIP_WAVEFORM_PEAK_COUNT } from '../../utils/clipAudio';
+import { computeWaveformWithMipmap } from '../../utils/waveformPeaks';
 import type { MidiNote } from '../../types/project';
 
 type Step = 'record' | 'preview' | 'generate';
@@ -202,7 +201,7 @@ export function HumToSongModal() {
       // Save the recorded audio
       const wavBlob = audioBufferToWavBlob(buffer);
       const isolatedKey = await saveAudioBlob(project.id, humClip.id, 'isolated', wavBlob);
-      const peaks = computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT);
+      const peaks = await computeWaveformWithMipmap(isolatedKey, buffer);
 
       updateClipStatus(humClip.id, 'ready', {
         isolatedAudioKey: isolatedKey,

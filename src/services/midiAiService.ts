@@ -112,8 +112,9 @@ export async function submitMidiGeneration(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MIDI_GENERATE_TIMEOUT_MS);
 
-  // Chain external signal to internal controller
-  signal?.addEventListener('abort', () => controller.abort());
+  // Chain external signal to internal controller with cleanup
+  const onAbort = () => controller.abort();
+  signal?.addEventListener('abort', onAbort, { once: true });
 
   try {
     const res = await fetch(`${base}/v1/midi/generate`, {
@@ -132,6 +133,7 @@ export async function submitMidiGeneration(
     return data.task_id;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 
@@ -164,13 +166,11 @@ export async function pollMidiResult(
       throw new Error(data.error ?? 'MIDI generation failed on the server');
     }
 
-    // Wait before next poll (abortable)
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(resolve, POLL_INTERVAL_MS);
-      signal?.addEventListener('abort', () => {
-        clearTimeout(timer);
-        reject(new Error('MIDI generation cancelled'));
-      });
+    // Wait before next poll (abortable, with listener cleanup)
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => { clearTimeout(timer); reject(new Error('MIDI generation cancelled')); };
+      const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, POLL_INTERVAL_MS);
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
 

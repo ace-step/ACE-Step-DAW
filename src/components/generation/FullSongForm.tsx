@@ -4,12 +4,16 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useModelStore } from '../../store/modelStore';
 import { useUIStore } from '../../store/uiStore';
+import { useVoiceStore } from '../../store/voiceStore';
 import { MAX_DURATION, MIN_DURATION } from '../../constants/defaults';
 import { VOCAL_LANGUAGES, DEFAULT_VOCAL_LANGUAGE } from '../../constants/languages';
 import { generateText2Music, regenerateClip } from '../../services/generationPipeline';
 import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
+import { SavePromptDialog } from './SavePromptDialog';
+import { VoiceInfluenceControls } from './VoiceInfluenceControls';
+import { VoiceLibraryPanel } from '../voice/VoiceLibraryPanel';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
 import { NegativePromptSection } from './NegativePromptSection';
 
@@ -49,6 +53,23 @@ interface FullSongFormProps {
   onFooterChange: (footer: { label: string; disabled: boolean; action: () => void; thinkingState?: { checked: boolean; onChange: (v: boolean) => void; disabled: boolean } }) => void;
 }
 
+/** Predefined style tags for quick selection, organized by category */
+const STYLE_TAG_OPTIONS = [
+  { value: 'lo-fi', category: 'genre' },
+  { value: 'synthwave', category: 'genre' },
+  { value: 'ambient', category: 'genre' },
+  { value: 'house', category: 'genre' },
+  { value: 'techno', category: 'genre' },
+  { value: 'trap', category: 'genre' },
+  { value: 'jazz', category: 'genre' },
+  { value: 'cinematic', category: 'genre' },
+  { value: 'warm', category: 'mood' },
+  { value: 'dark', category: 'mood' },
+  { value: 'dreamy', category: 'mood' },
+  { value: 'uplifting', category: 'mood' },
+] as const;
+const DEFAULT_GENERATION_TEMPERATURE = 0.7;
+
 export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps) {
   const project = useProjectStore((s) => s.project);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
@@ -67,6 +88,10 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const setThinking = useGenerationStore((s) => s.setGenerationThinking);
   const seedStr = useGenerationStore((s) => s.generationForm.seed);
   const setSeedStr = useGenerationStore((s) => s.setGenerationSeed);
+  const styleTags = useGenerationStore((s) => s.generationForm.styleTags);
+  const toggleStyleTag = useGenerationStore((s) => s.toggleGenerationStyleTag);
+  const temperature = useGenerationStore((s) => s.generationForm.temperature);
+  const setTemperature = useGenerationStore((s) => s.setGenerationTemperature);
   // Stable fallback seed — only generated once per component mount, not on every render
   const fallbackSeed = useRef(Math.floor(Math.random() * 2147483647));
   const parsedSeed = Number(seedStr);
@@ -90,6 +115,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const [loadingExample, setLoadingExample] = useState(false);
   const [expandCaption, setExpandCaption] = useState(false);
   const [expandLyrics, setExpandLyrics] = useState(false);
+  const [showSavePromptDialog, setShowSavePromptDialog] = useState(false);
+  const [legacyGuidanceScale, setLegacyGuidanceScale] = useState<number | null>(null);
 
   const handleEnhanceCaption = useCallback(async () => {
     if (!prompt.trim()) return;
@@ -165,9 +192,16 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     editingClipId ? s.project?.tracks.flatMap((t) => t.clips).find((c) => c.id === editingClipId) : undefined,
   );
   const hydratedClipIdRef = useRef<string | null>(null);
+  const hydratedVoiceDefaultsRef = useRef<{
+    clipId: string;
+    voiceProfileId: string;
+    audioInfluence: number;
+    styleInfluence: number;
+  } | null>(null);
   useEffect(() => {
     if (!editingClipId || !editingClip || hydratedClipIdRef.current === editingClipId) return;
     hydratedClipIdRef.current = editingClipId;
+    hydratedVoiceDefaultsRef.current = null;
     const p = editingClip.generationParams;
     if (p) {
       setPrompt(p.prompt);
@@ -187,6 +221,53 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
       if (p.stemCount !== undefined) setStemCount(p.stemCount);
       if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
+      setNegativePrompt(p.negativePrompt ?? '');
+      const persistedTemperature = (p as { temperature?: unknown }).temperature;
+      const persistedGuidanceScale = p.guidanceScale;
+      if (
+        typeof persistedTemperature === 'number' &&
+        persistedTemperature >= 0 &&
+        persistedTemperature <= 1
+      ) {
+        setTemperature(persistedTemperature);
+        setLegacyGuidanceScale(null);
+      } else if (
+        typeof persistedGuidanceScale === 'number' &&
+        persistedGuidanceScale >= 0 &&
+        persistedGuidanceScale <= 1
+      ) {
+        setTemperature(persistedGuidanceScale);
+        setLegacyGuidanceScale(null);
+      } else if (
+        typeof persistedGuidanceScale === 'number' &&
+        Number.isFinite(persistedGuidanceScale) &&
+        persistedGuidanceScale >= 0
+      ) {
+        setTemperature(DEFAULT_GENERATION_TEMPERATURE);
+        setLegacyGuidanceScale(persistedGuidanceScale);
+      } else {
+        setTemperature(DEFAULT_GENERATION_TEMPERATURE);
+        setLegacyGuidanceScale(null);
+      }
+      // Hydrate style tags from clip to avoid double-prepend
+      useGenerationStore.getState().setGenerationStyleTags(p.styleTags ?? []);
+      if (p.voiceProfileId) {
+        const voiceStore = useVoiceStore.getState();
+        const savedVoice = voiceStore.getVoiceById(p.voiceProfileId);
+        if (savedVoice) {
+          hydratedVoiceDefaultsRef.current = {
+            clipId: editingClipId,
+            voiceProfileId: savedVoice.id,
+            audioInfluence: savedVoice.defaultAudioInfluence,
+            styleInfluence: savedVoice.defaultStyleInfluence,
+          };
+          voiceStore.selectVoice(savedVoice.id);
+        } else {
+          voiceStore.deselectVoice();
+        }
+      } else {
+        useVoiceStore.getState().deselectVoice();
+      }
     } else {
       // Backward compatibility: hydrate from basic clip fields
       setPrompt(editingClip.prompt || '');
@@ -196,16 +277,28 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         setDurationAuto(false);
       }
       setInstrumental(editingClip.lyrics === '[Instrumental]');
+      setTemperature(DEFAULT_GENERATION_TEMPERATURE);
+      setLegacyGuidanceScale(null);
+      setNegativePrompt('');
+      useGenerationStore.getState().setGenerationStyleTags([]);
     }
   }, [editingClipId, editingClip]);
   useEffect(() => {
-    if (!editingClipId) hydratedClipIdRef.current = null;
+    if (!editingClipId) {
+      hydratedClipIdRef.current = null;
+      hydratedVoiceDefaultsRef.current = null;
+      setLegacyGuidanceScale(null);
+    }
   }, [editingClipId]);
 
   // Only disable form during model loading, NOT during generation.
   // Generation runs in background — user should be able to edit/start new tasks.
   const isDisabled = modelLoadingState === 'loading';
   const isSubmitDisabled = isGenerating || isDisabled;
+  const handleTemperatureChange = useCallback((nextTemperature: number) => {
+    setLegacyGuidanceScale(null);
+    setTemperature(nextTemperature);
+  }, [setTemperature]);
 
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim()) {
@@ -213,6 +306,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       return;
     }
     setError(null);
+    const effectiveGuidanceScale = editingClipId ? (legacyGuidanceScale ?? temperature) : temperature;
 
     // Close the generation panel so user sees the timeline with the loading clip
     useUIStore.getState().setShowGenerationPanel(false);
@@ -220,6 +314,39 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     // Edit mode: update stored params on existing clip, then regenerate
     if (editingClipId) {
       const store = useProjectStore.getState();
+      const previousParams = editingClip?.generationParams?.type === 'text2music'
+        ? editingClip.generationParams
+        : undefined;
+      const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
+      const selectedVoiceProfile = selectedVoiceId
+        ? useVoiceStore.getState().getVoiceById(selectedVoiceId)
+        : undefined;
+      const voiceProfileId = selectedVoiceProfile?.id ?? previousParams?.voiceProfileId;
+      const selectedVoiceWasHydrated = Boolean(
+        selectedVoiceProfile &&
+        previousParams?.voiceProfileId === selectedVoiceProfile.id &&
+        hydratedVoiceDefaultsRef.current?.clipId === editingClipId &&
+        hydratedVoiceDefaultsRef.current.voiceProfileId === selectedVoiceProfile.id,
+      );
+      const selectedVoiceChangedSinceHydration = Boolean(
+        selectedVoiceProfile &&
+        selectedVoiceWasHydrated &&
+        hydratedVoiceDefaultsRef.current &&
+        (
+          hydratedVoiceDefaultsRef.current.audioInfluence !== selectedVoiceProfile.defaultAudioInfluence ||
+          hydratedVoiceDefaultsRef.current.styleInfluence !== selectedVoiceProfile.defaultStyleInfluence
+        ),
+      );
+      const audioInfluence = selectedVoiceProfile
+        ? (selectedVoiceWasHydrated && !selectedVoiceChangedSinceHydration
+          ? (previousParams?.audioInfluence ?? selectedVoiceProfile.defaultAudioInfluence)
+          : selectedVoiceProfile.defaultAudioInfluence)
+        : previousParams?.audioInfluence;
+      const styleInfluence = selectedVoiceProfile
+        ? (selectedVoiceWasHydrated && !selectedVoiceChangedSinceHydration
+          ? (previousParams?.styleInfluence ?? selectedVoiceProfile.defaultStyleInfluence)
+          : selectedVoiceProfile.defaultStyleInfluence)
+        : previousParams?.styleInfluence;
       store.updateClip(editingClipId, {
         generationParams: {
           type: 'text2music',
@@ -235,8 +362,14 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           stemCount,
           useProjectMeta,
           inferenceSteps: project?.generationDefaults?.inferenceSteps,
-          guidanceScale: project?.generationDefaults?.guidanceScale,
+          guidanceScale: effectiveGuidanceScale,
+          temperature: legacyGuidanceScale === null ? temperature : undefined,
           shift: project?.generationDefaults?.shift,
+          negativePrompt: negativePrompt.trim() || undefined,
+          styleTags: styleTags.length > 0 ? [...styleTags] : undefined,
+          voiceProfileId,
+          audioInfluence,
+          styleInfluence,
         },
       });
       useUIStore.getState().setEditingText2MusicClipId(null);
@@ -246,7 +379,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       return;
     }
 
-    // New generation: fire-and-forget, runs in background
+    // New generation: fire-and-forget, runs in background.
+    // Pass raw prompt + styleTags separately — pipeline handles prepending.
     generateText2Music({
       prompt: prompt.trim(),
       lyrics: instrumental ? '[Instrumental]' : lyrics,
@@ -257,20 +391,22 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       splitToStems,
       stemCount,
       inferenceSteps: project?.generationDefaults?.inferenceSteps,
-      guidanceScale: project?.generationDefaults?.guidanceScale,
+      guidanceScale: effectiveGuidanceScale,
+      temperature,
       shift: project?.generationDefaults?.shift,
       thinking,
       seed: useRandomSeed ? undefined : seed,
       useRandomSeed,
       vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
-      syncMetaToProject: !useProjectMeta && syncMetaToProject,
+      syncMetaToProject: thinking || (!useProjectMeta && syncMetaToProject),
       instrumental,
       useProjectMeta,
       negativePrompt: negativePrompt.trim() || undefined,
+      styleTags: styleTags.length > 0 ? [...styleTags] : undefined,
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId, negativePrompt, styleTags, temperature, legacyGuidanceScale]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -331,6 +467,30 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           enhancing={enhancingCaption}
           disabled={isDisabled}
           placeholder="Describe the music you want to generate..."
+        />
+        {prompt.trim() && (
+          <button
+            type="button"
+            onClick={() => setShowSavePromptDialog(true)}
+            className="mt-1 flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+            data-testid="save-prompt-to-library"
+          >
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M12.5 14.5h-9a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1h6.5l3.5 3.5v8.5a1 1 0 0 1-1 1z" />
+              <path d="M5.5 1.5v3h4" />
+            </svg>
+            Save to Library
+          </button>
+        )}
+        <SavePromptDialog
+          open={showSavePromptDialog}
+          onClose={() => setShowSavePromptDialog(false)}
+          initialPrompt={prompt}
+          initialMetadata={{
+            bpm: project?.bpm,
+            keyScale: project?.keyScale,
+            styleTags,
+          }}
         />
       </section>
 
@@ -428,8 +588,57 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         {loadingExample ? 'Loading...' : '🎲 Random Example'}
       </button>
 
+      {/* Style Tags */}
+      <section className="space-y-1.5" data-testid="style-tags-section">
+        <label className="block text-[11px] font-medium uppercase text-zinc-400">
+          Style Tags
+        </label>
+        <div className="flex flex-wrap gap-1.5">
+          {STYLE_TAG_OPTIONS.map((tag) => {
+            const isActive = styleTags.includes(tag.value);
+            return (
+              <button
+                key={tag.value}
+                type="button"
+                data-testid={`style-tag-${tag.value}`}
+                onClick={() => toggleStyleTag(tag.value)}
+                disabled={isDisabled}
+                aria-pressed={isActive}
+                aria-label={`${isActive ? 'Remove' : 'Add'} ${tag.value} style tag`}
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
+                  isActive
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-[#333] text-zinc-400 hover:bg-[#444]'
+                }`}
+              >
+                {tag.value}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       {/* Parameters grid */}
       <section className="grid grid-cols-2 gap-x-3 gap-y-2">
+        <div className="col-span-2 space-y-1">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-medium uppercase text-zinc-500">Temperature</label>
+            <span className="font-mono text-[10px] text-zinc-400">{temperature.toFixed(1)}</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.1}
+            value={temperature}
+            onChange={(e) => handleTemperatureChange(Number(e.target.value))}
+            className="w-full accent-indigo-500"
+            disabled={isDisabled}
+            data-testid="full-song-temperature"
+            aria-label="Generation temperature"
+          />
+        </div>
+
         <div className="space-y-1">
           <label className="text-[10px] font-medium uppercase text-zinc-500">Duration</label>
           <div className="flex items-center gap-1.5">
@@ -489,6 +698,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
             </label>
           </div>
         </div>
+
       </section>
 
       {/* Options — two-column tree layout */}
@@ -568,6 +778,14 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           )}
         </div>
 
+      </section>
+
+      {/* Voice influence for the selected library voice */}
+      <VoiceInfluenceControls />
+
+      {/* Voice Library section */}
+      <section className="border-t border-daw-border -mx-3 mt-2">
+        <VoiceLibraryPanel />
       </section>
 
     </div>

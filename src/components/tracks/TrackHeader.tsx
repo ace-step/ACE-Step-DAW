@@ -19,6 +19,7 @@ import {
   getArrangementRowHeight,
 } from '../arrangement/rowLayout';
 import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator, ContextMenuSubmenu } from '../ui/ContextMenu';
+import { toastError } from '../../hooks/useToast';
 
 const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
@@ -128,6 +129,7 @@ export const TrackHeader = React.memo(function TrackHeader({
   const hasAutomationLane = useProjectStore((s) => (s.project?.automationLanes ?? []).some((lane) => lane.trackId === track.id));
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const setOpenEffectChainTrackId = useUIStore((s) => s.setOpenEffectChainTrackId);
+  const isFxPanelOpen = useUIStore((s) => s.openEffectChainTrackId === track.id);
   const openBounceInPlaceDialog = useUIStore((s) => s.openBounceInPlaceDialog);
   const requestDeleteTracks = useUIStore((s) => s.requestDeleteTracks);
   const setExpandedTrackId = useUIStore((s) => s.setExpandedTrackId);
@@ -259,7 +261,10 @@ export const TrackHeader = React.memo(function TrackHeader({
     if (!presetName) return;
     const trimmedName = presetName.trim();
     if (!trimmedName) return;
-    saveTrackPreset(track.id, trimmedName);
+    const preset = saveTrackPreset(track.id, trimmedName);
+    if (!preset) {
+      toastError('Track presets cannot be saved in viewer mode.');
+    }
   }, [saveTrackPreset, track.displayName, track.id]);
 
   return (
@@ -481,10 +486,10 @@ export const TrackHeader = React.memo(function TrackHeader({
       {/* Track name element (shared between layouts) */}
       {isTwoRow ? (
         /* Two-row layout for non-compact tracks (laneHeight >= 60) */
-        <div className="flex-1 min-w-[48px] flex flex-col gap-1 py-1">
+        <div className="flex-1 min-w-[60px] flex flex-col gap-1 py-1">
           {/* Row 1: drag handle + instrument icon + name + M/S/Arm */}
           <div data-testid="track-header-row1" className="flex items-center gap-1 w-full">
-            <div className="flex-1 min-w-[48px]">
+            <div className="flex-1 min-w-[60px]">
               {isEditing ? (
                 <input
                   ref={inputRef}
@@ -514,55 +519,48 @@ export const TrackHeader = React.memo(function TrackHeader({
             {track.trackType !== 'video' ? (
             <div
               data-primary-actions
-              className="flex items-center gap-1"
+              className="flex items-center gap-0.5 overflow-hidden"
             >
               <button
                 onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
-                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-all duration-200 ${
-                  track.muted
-                    ? 'bg-red-500 text-white shadow-[0_0_6px_rgba(239,68,68,0.4)]'
-                    : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
+                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors duration-150 focus:outline-none focus-visible:outline-none focus-visible:ring-0 ${
+                  track.muted ? 'text-red-400' : 'text-zinc-500 hover:text-zinc-200'
                 }`}
                 title="Mute (M)"
                 aria-label={`Mute ${track.displayName}`}
               >M</button>
               <button
                 onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
-                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-all duration-200 ${
-                  track.soloed
-                    ? 'bg-amber-400 text-black shadow-[0_0_6px_rgba(251,191,36,0.5)]'
-                    : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
+                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors duration-150 focus:outline-none focus-visible:outline-none focus-visible:ring-0 ${
+                  track.soloed ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-200'
                 }`}
                 title="Solo (S)"
                 aria-label={`Solo ${track.displayName}`}
               >S</button>
               {!track.isGroup && (
                 <button
-                  onClick={() => setOpenEffectChainTrackId(track.id)}
-                  className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+                  onClick={() => setOpenEffectChainTrackId(isFxPanelOpen ? null : track.id)}
+                  className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors duration-150 focus:outline-none focus-visible:outline-none focus-visible:ring-0 ${
                     track.frozen
-                      ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
-                      : effectsBypassed
-                        ? 'bg-orange-500 text-white'
-                        : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
+                      ? 'text-zinc-600 cursor-not-allowed'
+                      : isFxPanelOpen
+                        ? 'text-sky-400'
+                        : effectsBypassed
+                          ? 'text-orange-400'
+                          : 'text-zinc-500 hover:text-zinc-200'
                   }`}
-                  title={track.frozen ? 'Effects bypassed (track frozen)' : 'Effects chain (FX)'}
+                  title={track.frozen ? 'Effects bypassed (track frozen)' : isFxPanelOpen ? 'Close effects chain' : 'Effects chain (FX)'}
                   aria-label={`Effects for ${track.displayName}`}
                 >FX</button>
               )}
               {!track.isGroup && (
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleArmTrack(track.id); }}
-                  className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
-                    isArmed
-                      ? 'bg-red-500 text-white shadow-[0_0_8px_rgba(239,68,68,0.5)]'
-                      : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
-                  }`}
-                  style={isArmed ? { animation: 'record-arm-pulse 1.5s ease-in-out infinite' } : undefined}
+                  className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors duration-150`}
                   title="Record Arm"
                   aria-label={`Record arm ${track.displayName}`}
                 >
-                  <div className={`w-[8px] h-[8px] rounded-full ${isArmed ? 'bg-white' : 'bg-zinc-500'}`} />
+                  <div className={`w-[8px] h-[8px] rounded-full ${isArmed ? 'bg-red-500' : 'bg-zinc-500 hover:bg-zinc-300'}`} />
                 </button>
               )}
             </div>
@@ -588,7 +586,7 @@ export const TrackHeader = React.memo(function TrackHeader({
       ) : (
         /* Single-row compact layout (laneHeight < 60) */
         <>
-          <div className="flex-1 min-w-[48px] flex flex-col gap-1 py-1">
+          <div className="flex-1 min-w-[60px] flex flex-col gap-1 py-1">
             {/* Name */}
             {isEditing ? (
               <input
@@ -621,20 +619,16 @@ export const TrackHeader = React.memo(function TrackHeader({
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
-              className={`w-[16px] h-[16px] rounded-full text-[8px] font-bold leading-none flex items-center justify-center transition-all duration-200 ${
-                track.muted
-                  ? 'bg-red-500 text-white shadow-[0_0_4px_rgba(239,68,68,0.4)]'
-                  : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+              className={`text-[8px] font-bold leading-none transition-colors duration-150 focus:outline-none focus-visible:outline-none focus-visible:ring-0 ${
+                track.muted ? 'text-red-400' : 'text-zinc-500 hover:text-zinc-200'
               }`}
               title="Mute (M)"
               aria-label={`Mute ${track.displayName}`}
             >M</button>
             <button
               onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
-              className={`w-[16px] h-[16px] rounded-full text-[8px] font-bold leading-none flex items-center justify-center transition-all duration-200 ${
-                track.soloed
-                  ? 'bg-amber-400 text-black shadow-[0_0_4px_rgba(251,191,36,0.5)]'
-                  : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+              className={`text-[8px] font-bold leading-none transition-colors duration-150 focus:outline-none focus-visible:outline-none focus-visible:ring-0 ${
+                track.soloed ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-200'
               }`}
               title="Solo (S)"
               aria-label={`Solo ${track.displayName}`}

@@ -360,7 +360,8 @@ function getUploadFileName(blob: Blob, fallbackBaseName: string): string {
     'audio/ogg': 'ogg',
     'audio/webm': 'webm',
   };
-  const extension = extensionByType[blob.type.toLowerCase()] ?? 'bin';
+  const mimeType = blob.type.toLowerCase().split(';', 1)[0].trim();
+  const extension = extensionByType[mimeType] ?? 'bin';
   return `${fallbackBaseName}.${extension}`;
 }
 

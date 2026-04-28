@@ -5,6 +5,7 @@ import type { PianoRollTool } from '../components/pianoroll/PianoRollConstants';
 import { useProjectStore } from './projectStore';
 import type { HistoryScope } from './projectStore';
 import { useTransportStore } from './transportStore';
+import { useGenerationStore } from './generationStore';
 import type { ShortcutContext } from '../types/shortcuts';
 import type { ThemeId } from '../themes/themeTokens';
 import type { EnhancementNode, EnhancementSession } from '../types/enhance';
@@ -31,7 +32,7 @@ import {
 } from '../utils/timelineZoom';
 
 export type PianoRollChordShape = (typeof CHORD_SHAPES)[number]['abbr'];
-export type GenerationPanelView = 'textToMusic' | 'multiTrack' | 'history' | 'settings';
+export type GenerationPanelView = 'textToMusic' | 'multiTrack' | 'history' | 'settings' | 'library';
 
 const DEFAULT_PIANO_ROLL_CHORD_SHAPE: PianoRollChordShape = 'maj';
 const VALID_PIANO_ROLL_CHORD_SHAPES = new Set<string>(CHORD_SHAPES.map((shape) => shape.abbr));
@@ -1588,7 +1589,9 @@ function buildCommandPaletteContext(state: UIState) {
       setEditingClip: state.setEditingClip,
       deselectAll: state.deselectAll,
       openEnhancer: state.openEnhancer,
+      applyPromptFromLibrary: useGenerationStore.getState().applyPromptFromLibrary,
     },
+    savedPrompts: useGenerationStore.getState().promptLibrary,
   };
 }
 

@@ -1,4 +1,5 @@
 import type { Project, ReverbParams, Track, TrackEffect, TrackEffectType, TrackName, TrackType } from '../types/project';
+import type { SavedPrompt } from '../types/promptLibrary';
 import { useUIStore } from '../store/uiStore';
 import { canDestructivelyProcessClipAudio } from '../utils/clipAudio';
 
@@ -89,7 +90,9 @@ export interface CommandPaletteContext {
     setEditingClip: (clipId: string | null) => void;
     deselectAll: () => void;
     openEnhancer: (clipId: string, trackId: string, range?: { start: number; end: number } | null) => void;
+    applyPromptFromLibrary?: (id: string) => boolean;
   };
+  savedPrompts?: SavedPrompt[];
 }
 
 const DEFAULT_RESULT_LIMIT = 12;
@@ -1175,6 +1178,61 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
           },
           undefined,
           `Capture current pattern code as a version snapshot`,
+        ),
+      );
+    }
+  }
+
+  // Prompt Library commands
+  commands.push(
+    createTrackCommand(
+      'prompt-library:open',
+      'Open Prompt Library',
+      'AI Generation',
+      'action',
+      ['prompt', 'library', 'saved', 'prompts', 'favorites'],
+      ['show prompt library', 'browse saved prompts', 'open prompts'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        useUIStore.getState().openGenerationPanelView('library');
+      },
+      undefined,
+      'Browse and apply saved AI generation prompts',
+    ),
+    createTrackCommand(
+      'prompt-library:export',
+      'Export Prompt Library',
+      'AI Generation',
+      'action',
+      ['prompt', 'library', 'export', 'backup', 'json'],
+      ['export prompts', 'download prompt library', 'backup prompts'],
+      async () => {
+        const { useGenerationStore } = await import('../store/generationStore');
+        const { downloadBlob } = await import('./browserDownload');
+        const data = useGenerationStore.getState().exportPromptLibrary();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        downloadBlob(blob, `prompt-library-${new Date().toISOString().slice(0, 10)}.json`);
+      },
+      undefined,
+      'Export saved prompts as JSON file',
+    ),
+  );
+
+  // Add "Apply prompt: <title>" commands for each saved prompt
+  if (context.savedPrompts && context.actions.applyPromptFromLibrary) {
+    const applyFn = context.actions.applyPromptFromLibrary;
+    for (const savedPrompt of context.savedPrompts.slice(0, 20)) {
+      commands.push(
+        createTrackCommand(
+          `prompt-library:apply:${savedPrompt.id}`,
+          `Apply Prompt: ${savedPrompt.title}`,
+          'Prompt Library',
+          'action',
+          ['prompt', 'apply', 'library', ...savedPrompt.tags, savedPrompt.category].filter(Boolean),
+          [savedPrompt.prompt.slice(0, 60)],
+          () => { applyFn(savedPrompt.id); },
+          undefined,
+          savedPrompt.prompt.length > 60 ? savedPrompt.prompt.slice(0, 60) + '...' : savedPrompt.prompt,
         ),
       );
     }

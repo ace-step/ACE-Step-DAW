@@ -342,6 +342,27 @@ const RELEASE_TASK_MAX_RETRIES = 3;
 
 interface ApiRequestOptions {
   signal?: AbortSignal;
+  referenceAudioBlob?: Blob;
+}
+
+function getUploadFileName(blob: Blob, fallbackBaseName: string): string {
+  if (typeof File !== 'undefined' && blob instanceof File && blob.name.trim()) {
+    return blob.name;
+  }
+
+  const extensionByType: Record<string, string> = {
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/flac': 'flac',
+    'audio/x-flac': 'flac',
+    'audio/ogg': 'ogg',
+    'audio/webm': 'webm',
+  };
+  const mimeType = blob.type.toLowerCase().split(';', 1)[0].trim();
+  const extension = extensionByType[mimeType] ?? 'bin';
+  return `${fallbackBaseName}.${extension}`;
 }
 
 async function releaseTask(
@@ -371,6 +392,13 @@ async function releaseTask(
     const formData = new FormData();
     if (uploadBlob) {
       formData.append('src_audio', uploadBlob, 'src_audio.wav');
+    }
+    if (options?.referenceAudioBlob) {
+      formData.append(
+        'reference_audio',
+        options.referenceAudioBlob,
+        getUploadFileName(options.referenceAudioBlob, 'reference_audio'),
+      );
     }
     for (const [key, value] of Object.entries(params)) {
       if (value === null || value === undefined) continue;

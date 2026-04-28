@@ -669,7 +669,7 @@ export interface ProjectState extends MidiSliceActions {
   removeTrack: (trackId: string) => void;
   removeTracks: (trackIds: string[]) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
-  updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig' | 'drumKit' | 'color'>>) => void;
+  updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig' | 'drumKit' | 'color' | 'voiceProfileId'>>) => void;
   setTrackInstrument: (trackId: string, instrument: TrackInstrument) => void;
   /** Configure FM synthesis parameters on a track, creating or updating the FM instrument. */
   setTrackFmSynth: (trackId: string, params: Partial<FmInstrumentSettings>) => void;

@@ -1358,6 +1358,8 @@ export interface Track {
   strudelVersions?: StrudelCodeVersion[];
   /** WAP plugin instances on this track (effect & instrument plugins). */
   plugins?: import('./plugin').PluginInstance[];
+  /** ID of the voice profile assigned to this track for voice cloning. */
+  voiceProfileId?: string;
   /** Video track display/preview settings (only for video tracks). */
   videoSettings?: VideoTrackSettings;
 }

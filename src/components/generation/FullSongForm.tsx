@@ -10,6 +10,7 @@ import { generateText2Music, regenerateClip } from '../../services/generationPip
 import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
+import { VoiceLibraryPanel } from '../voice/VoiceLibraryPanel';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
 import { NegativePromptSection } from './NegativePromptSection';
 
@@ -685,6 +686,11 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           )}
         </div>
 
+      </section>
+
+      {/* Voice Library section */}
+      <section className="border-t border-daw-border -mx-3 mt-2">
+        <VoiceLibraryPanel />
       </section>
 
     </div>

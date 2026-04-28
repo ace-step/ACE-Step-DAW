@@ -19,6 +19,7 @@ import { getMidiCaptureService } from './services/midiCaptureService';
 import { executeCoreDawShortcut } from './services/coreDawShortcuts';
 import { useAnalysisStore } from './store/analysisStore';
 import { analyzeClipLocally } from './services/localAnalysisService';
+import { useVoiceStore } from './store/voiceStore';
 import { useCustomModelStore } from './store/customModelStore';
 
 const agentProjectStore = {
@@ -107,6 +108,7 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__analyzeClipLocally = analyzeClipLocally;
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
 (window as unknown as Record<string, unknown>).__modelStore = useModelStore;
+(window as unknown as Record<string, unknown>).__voiceStore = useVoiceStore;
 (window as unknown as Record<string, unknown>).__customModelStore = useCustomModelStore;
 // Keep synchronous — callers (uiStore video recording) expect immediate return.
 // Module is pre-loaded via dynamic import so it's available by user interaction time.

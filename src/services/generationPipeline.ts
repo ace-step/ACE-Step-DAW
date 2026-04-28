@@ -8,6 +8,7 @@ import {
   type ModelOverride,
 } from '../store/generationStore';
 import { useModelStore } from '../store/modelStore';
+import { useVoiceStore } from '../store/voiceStore';
 import { useUIStore } from '../store/uiStore';
 import type { LegoTaskParams, Text2MusicTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
 import type { Clip, ClipGenerationStatus, InferredMetas } from '../types/project';
@@ -314,6 +315,20 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
     if (params.negativePrompt?.trim()) taskParams.negative_prompt = params.negativePrompt.trim();
 
+    // Voice cloning: load voice blob from IDB and upload it as ACE-Step reference audio.
+    let referenceAudioBlob: Blob | undefined;
+    const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
+    if (selectedVoiceId) {
+      const voiceProfile = useVoiceStore.getState().getVoiceById(selectedVoiceId);
+      if (voiceProfile) {
+        const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
+        if (blob) {
+          referenceAudioBlob = blob;
+          taskParams.audio_cover_strength = voiceProfile.defaultAudioInfluence / 100;
+        }
+      }
+    }
+
     const jobId = uuidv4();
     _regenerateJobId = jobId;
     const abortCtrl = registerJobAbortController(jobId);
@@ -322,7 +337,10 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     genStore.updateJob(jobId, { status: 'generating', startedAt: Date.now(), progress: 'Submitting...', stage: 'Submitting request' });
 
     const silenceBlob = generateSilenceWav(params.durationSeconds ?? 60);
-    const releaseResp = await api.releaseLegoTask(silenceBlob, taskParams, { signal: abortCtrl.signal });
+    const releaseResp = await api.releaseLegoTask(silenceBlob, taskParams, {
+      signal: abortCtrl.signal,
+      referenceAudioBlob,
+    });
     const taskId = releaseResp.task_id;
     genStore.updateJob(jobId, { taskId });
 
@@ -866,6 +884,19 @@ async function generateClipInternal(
       params.sample_query = clip.prompt;
     }
 
+    // Voice cloning: load voice blob from IDB and upload it as ACE-Step reference audio.
+    let referenceAudioBlob: Blob | undefined;
+    if (track.voiceProfileId) {
+      const voiceProfile = useVoiceStore.getState().getVoiceById(track.voiceProfileId);
+      if (voiceProfile) {
+        const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
+        if (blob) {
+          referenceAudioBlob = blob;
+          params.audio_cover_strength = voiceProfile.defaultAudioInfluence / 100;
+        }
+      }
+    }
+
     // Auto-expand prompt: controls whether LM rewrites the caption via CoT
     if (clip.autoExpandPrompt === false) {
       params.use_cot_caption = false;
@@ -888,7 +919,10 @@ async function generateClipInternal(
     }
     useProjectStore.getState().updateClipStatus(clipId, 'generating');
 
-    const releaseResp = await api.releaseLegoTask(srcAudioBlob, params, { signal: abortCtrl.signal });
+    const releaseResp = await api.releaseLegoTask(srcAudioBlob, params, {
+      signal: abortCtrl.signal,
+      referenceAudioBlob,
+    });
     const taskId = releaseResp.task_id;
     useGenerationStore.getState().updateJob(jobId, { taskId });
     genStore.upsertGenerationHistoryRecord({
@@ -3090,6 +3124,22 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       params.negative_prompt = request.negativePrompt.trim();
     }
 
+    // Voice cloning: load selected voice blob from IDB and upload it as ACE-Step reference audio.
+    let referenceAudioBlob: Blob | undefined;
+    const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
+    if (selectedVoiceId) {
+      const voiceProfile = useVoiceStore.getState().getVoiceById(selectedVoiceId);
+      if (voiceProfile) {
+        throwIfAborted(abortController.signal);
+        const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
+        throwIfAborted(abortController.signal);
+        if (blob) {
+          referenceAudioBlob = blob;
+          params.audio_cover_strength = voiceProfile.defaultAudioInfluence / 100;
+        }
+      }
+    }
+
     // Submit — text2music doesn't need source audio, send silence as placeholder
     const jobStartedAt = Date.now();
     genStore.updateJob(jobId, {
@@ -3101,7 +3151,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     store.updateClipStatus(clipId, 'generating');
 
     const silenceBlob = generateSilenceWav(request.durationSeconds);
-    const releaseResp = await api.releaseLegoTask(silenceBlob, params, { signal: abortController.signal });
+    const releaseResp = await api.releaseLegoTask(silenceBlob, params, {
+      signal: abortController.signal,
+      referenceAudioBlob,
+    });
     const taskId = releaseResp.task_id;
     genStore.updateJob(jobId, { taskId });
 

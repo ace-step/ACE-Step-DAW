@@ -77,6 +77,10 @@ export interface Text2MusicTaskParams {
   use_random_seed?: boolean;
   use_cot_caption?: boolean;
   vocal_language?: string;   // "en", "zh", "ja", etc. — "unknown" = auto-detect
+  /** Server-side path to reference audio sample for voice/style conditioning. */
+  reference_audio_path?: string;
+  /** Reference audio influence strength (0.0–1.0). */
+  audio_cover_strength?: number;
   negative_prompt?: string;  // Elements to exclude from generation
 }
 
@@ -125,6 +129,10 @@ export interface LegoTaskParams {
   src_audio_path?: string;  // server-side path; when set, skips blob upload
   chunk_mask_mode?: 'explicit' | 'auto'; // "auto" = model decides where instruments start/stop (value 2); "explicit" = 0/1 mask
   vocal_language?: string;   // "en", "zh", "ja", etc. — "unknown" = auto-detect
+  /** Server-side path to reference audio sample for voice/style conditioning. */
+  reference_audio_path?: string;
+  /** Reference audio influence strength (0.0–1.0). */
+  audio_cover_strength?: number;
   negative_prompt?: string;  // Elements to exclude from generation
 }
 

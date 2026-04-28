@@ -66,6 +66,7 @@ vi.mock('../../utils/wav', () => ({
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useModelStore } from '../../store/modelStore';
+import { useVoiceStore } from '../../store/voiceStore';
 import {
   resolveContextWindow,
   generateAllTracks,
@@ -504,6 +505,7 @@ describe('generateText2Music', () => {
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useGenerationStore.setState(useGenerationStore.getInitialState(), true);
     useModelStore.setState(useModelStore.getInitialState(), true);
+    useVoiceStore.setState({ voices: [], selectedVoiceId: null, searchQuery: '', filterTag: null });
     useProjectStore.getState().createProject();
   });
 
@@ -556,6 +558,62 @@ describe('generateText2Music', () => {
     expect(result.mixClipId).toBeDefined();
     expect(result.audioBlob).toBeInstanceOf(Blob);
     expect(useGenerationStore.getState().isGenerating).toBe(false);
+  });
+
+  it('attaches the selected voice profile to initial text2music submissions', async () => {
+    mockInitModel.mockResolvedValue(undefined);
+    setupModelStore();
+    mockReleaseLegoTask.mockResolvedValue({ task_id: 'task-t2m' });
+    mockQueryResult.mockResolvedValue([{
+      task_id: 'task-t2m',
+      status: 1,
+      progress_text: 'Done',
+      result: JSON.stringify([{
+        file: '/tmp/fullsong.wav',
+        seed_value: 99,
+        dit_model: 'test-model',
+        metas: { bpm: 128, keyscale: 'A minor', timesignature: '4/4', genres: ['electronic'] },
+      }]),
+    }]);
+    mockDownloadAudio.mockResolvedValue(new Blob(['full-song'], { type: 'audio/wav' }));
+    mockSaveAudioBlob.mockResolvedValue('audio:proj:mix:isolated');
+    mockDecodeAudioData.mockResolvedValue(fakeAudioBuffer(120));
+    const voiceBlob = new Blob(['voice'], { type: 'audio/wav' });
+    mockLoadAudioBlobByKey.mockResolvedValue(voiceBlob);
+    useVoiceStore.setState({
+      voices: [{
+        id: 'voice-1',
+        name: 'Lead vocal',
+        createdAt: 1,
+        updatedAt: 1,
+        audioKey: 'voice-audio:voice-1',
+        durationSeconds: 12,
+        skillLevel: 'professional',
+        tags: [],
+        defaultAudioInfluence: 70,
+        defaultStyleInfluence: 35,
+        source: 'upload',
+      }],
+      selectedVoiceId: 'voice-1',
+    });
+
+    const promise = generateText2Music({
+      prompt: 'An electronic dance track',
+      lyrics: '',
+      durationSeconds: 120,
+      bpm: 128,
+      keyScale: 'A minor',
+      timeSignature: '4/4',
+      splitToStems: false,
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockLoadAudioBlobByKey).toHaveBeenCalledWith('voice-audio:voice-1');
+    const [, params, options] = mockReleaseLegoTask.mock.calls[0];
+    expect(params.reference_audio_path).toBeUndefined();
+    expect(params.audio_cover_strength).toBe(0.7);
+    expect(options.referenceAudioBlob).toBe(voiceBlob);
   });
 
   it('fails when generation lock is already held', async () => {

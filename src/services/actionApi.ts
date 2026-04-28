@@ -314,8 +314,23 @@ export function createProjectActionApi(store: ProjectStore): ProjectActionApi {
         )));
       }
 
+      if (state.isViewerMode()) {
+        return capture(err(buildError(
+          'ACTION_FAILED',
+          'Track presets cannot be saved while the project is open in viewer mode.',
+          { action: 'saveTrackPreset', trackId, presetName },
+          [
+            { action: 'requestEditAccess', label: 'Request edit access before saving presets' },
+          ],
+        )));
+      }
+
       try {
-        return capture(ok(state.saveTrackPreset(trackId, presetName)));
+        const preset = state.saveTrackPreset(trackId, presetName);
+        if (!preset) {
+          return capture(withUnexpectedError('saveTrackPreset', { trackId }, new Error('Unable to save track preset')));
+        }
+        return capture(ok(preset));
       } catch (error) {
         return capture(withUnexpectedError('saveTrackPreset', { trackId }, error));
       }
@@ -335,6 +350,17 @@ export function createProjectActionApi(store: ProjectStore): ProjectActionApi {
           { action: 'applyTrackPreset', presetId },
           [
             { action: 'listTrackPresets', label: 'Inspect available track presets' },
+          ],
+        )));
+      }
+
+      if (state.isViewerMode()) {
+        return capture(err(buildError(
+          'ACTION_FAILED',
+          'Track presets cannot be applied while the project is open in viewer mode.',
+          { action: 'applyTrackPreset', presetId },
+          [
+            { action: 'requestEditAccess', label: 'Request edit access before applying presets' },
           ],
         )));
       }

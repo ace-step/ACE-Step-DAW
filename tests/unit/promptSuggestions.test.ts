@@ -81,7 +81,7 @@ describe('promptSuggestions', () => {
     it('includes category in each result', () => {
       const results = getPromptSuggestions('piano');
       for (const r of results) {
-        expect(r.category).toBeDefined();
+        expect(typeof r.category).toBe('string');
         expect(PROMPT_SUGGESTION_CATEGORIES).toContain(r.category);
       }
     });

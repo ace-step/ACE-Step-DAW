@@ -11,6 +11,8 @@
 
 ## Before Coding
 
+- **Spec check**: If a `spec:` label exists on the issue, read the corresponding spec in `openspec/specs/` or `openspec/changes/` before writing any code. Use Given/When/Then scenarios to drive test generation.
+- For new features touching 3+ files: run `/opsx:propose` first to create formal specs
 - Run `npm test` to establish baseline
 - For UI tasks: read `.claude/references/interaction-design.md` AND `.claude/references/design-patterns.md`
 - For store/API tasks: read `.claude/references/store-api.md`

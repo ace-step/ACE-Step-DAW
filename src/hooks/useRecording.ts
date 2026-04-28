@@ -5,8 +5,7 @@ import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
 import { toastError, toastInfo, toastSuccess } from './useToast';
 import { saveAudioBlob } from '../services/audioFileManager';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
-import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { audioBufferToWavBlob } from '../utils/wav';
 
 /** Map of trackId to clipId used during loop recording to accumulate takes. */
@@ -92,7 +91,7 @@ export function useRecording() {
 
         const wavBlob = audioBufferToWavBlob(result.audioBuffer);
         const isolatedAudioKey = await saveAudioBlob(project.id, clipId, 'isolated', wavBlob);
-        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+        const waveformPeaks = await computeWaveformWithMipmap(isolatedAudioKey, result.audioBuffer);
         updateClipStatus(clipId, 'ready', {
           isolatedAudioKey,
           waveformPeaks,
@@ -103,7 +102,7 @@ export function useRecording() {
       } else {
         const wavBlob = audioBufferToWavBlob(result.audioBuffer);
         const audioKey = await saveAudioBlob(project.id, `${clipId}-take-${Date.now()}`, 'isolated', wavBlob);
-        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+        const waveformPeaks = await computeWaveformWithMipmap(audioKey, result.audioBuffer);
         addTake(clipId, audioKey, waveformPeaks);
       }
     }
@@ -144,7 +143,7 @@ export function useRecording() {
         if (clipId) {
           const wavBlob = audioBufferToWavBlob(result.audioBuffer);
           const audioKey = await saveAudioBlob(project.id, `${clipId}-take-${Date.now()}`, 'isolated', wavBlob);
-          const waveformPeaks = computeWaveformPeaks(result.audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+          const waveformPeaks = await computeWaveformWithMipmap(audioKey, result.audioBuffer);
           addTake(clipId, audioKey, waveformPeaks);
           createdCount += 1;
         }
@@ -166,7 +165,7 @@ export function useRecording() {
         });
         const wavBlob = audioBufferToWavBlob(result.audioBuffer);
         const isolatedAudioKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
-        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+        const waveformPeaks = await computeWaveformWithMipmap(isolatedAudioKey, result.audioBuffer);
 
         updateClipStatus(clip.id, 'ready', {
           isolatedAudioKey,
@@ -223,6 +222,15 @@ export function useRecording() {
     const project = useProjectStore.getState().project;
     const bpm = project?.bpm ?? 120;
     const beatsPerBar = (typeof project?.timeSignature === 'number' ? project.timeSignature : 4);
+
+    // Sync count-in bars from transport store to recording engine.
+    // The engine only supports 0, 1, or 2 bars, so normalize any persisted
+    // out-of-range value before mapping it to the engine enum.
+    const storeCountInBars = useTransportStore.getState().countInBars;
+    const normalizedCountInBars = Math.max(0, Math.min(storeCountInBars, 2));
+    recordingEngine.setCountInLength(
+      normalizedCountInBars === 0 ? 'off' : normalizedCountInBars === 1 ? '1bar' : '2bars'
+    );
 
     if (recordingEngine.getCountInLength() !== 'off') {
       setCountIn(true, -(beatsPerBar * (recordingEngine.getCountInLength() === '1bar' ? 1 : 2)));

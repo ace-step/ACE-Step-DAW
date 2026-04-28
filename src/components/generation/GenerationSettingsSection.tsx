@@ -5,6 +5,7 @@ import { DEFAULT_GENERATION } from '../../constants/defaults';
 import { Button } from '../ui/Button';
 import { normalizePlaybackLatencySettings } from '../../utils/playbackLatency';
 import type { LmModelEntry, ModelEntry } from '../../types/api';
+import { useCustomModelStore } from '../../store/customModelStore';
 
 function modelSupportsThinking(modelName: string): boolean {
   return modelName.includes('turbo') || modelName.includes('sft');
@@ -12,6 +13,7 @@ function modelSupportsThinking(modelName: string): boolean {
 
 export function GenerationSettingsSection({ active }: { active: boolean }) {
   const project = useProjectStore((s) => s.project);
+  const customModels = useCustomModelStore((s) => s.customModels);
   const [globalCaption, setGlobalCaption] = useState('');
   const [manualLatencyText, setManualLatencyText] = useState('');
   const [steps, setSteps] = useState(DEFAULT_GENERATION.inferenceSteps);
@@ -219,12 +221,21 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
             disabled={modelsLoading || initLoading}
             className="w-full rounded border border-[#444] bg-[#2a2a2a] px-3 py-1.5 text-sm text-zinc-200 focus:border-indigo-500 focus:outline-none"
           >
-            {availableModels.length === 0 && <option value="">No models available</option>}
+            {availableModels.length === 0 && customModels.length === 0 && <option value="">No models available</option>}
             {availableModels.map((entry) => (
               <option key={entry.name} value={entry.name}>
                 {entry.name}{entry.is_default ? ' (default)' : ''}{entry.is_loaded ? ' (loaded)' : ''}
               </option>
             ))}
+            {customModels.length > 0 && (
+              <optgroup label="Custom Models">
+                {customModels.map((cm) => (
+                  <option key={cm.id} value={cm.name}>
+                    {cm.name} (custom)
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="text-[10px] text-zinc-400">

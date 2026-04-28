@@ -166,6 +166,19 @@ describe('Design System Tokens (index.css)', () => {
       expect(reducedMotionCss).toMatch(/\.daw-btn-interactive:active[\s\S]*?transform\s*:\s*none/);
       expect(reducedMotionCss).toMatch(/\[data-dragging="true"\][\s\S]*?transform\s*:\s*none/);
     });
+
+    it('disables visual polish animations in reduced motion', () => {
+      const reducedMotionBlockStart = indexCss.indexOf('@media (prefers-reduced-motion: reduce)');
+      const visualPolishAnimationStart = indexCss.indexOf('.clip-mount-animation', reducedMotionBlockStart);
+      const recordingPulseStart = indexCss.indexOf('.recording-lane-pulse', reducedMotionBlockStart);
+      const generationFlashStart = indexCss.indexOf('/* Generation complete flash */');
+      const reducedMotionCss = indexCss.slice(reducedMotionBlockStart, generationFlashStart);
+
+      expect(reducedMotionBlockStart).toBeGreaterThanOrEqual(0);
+      expect(visualPolishAnimationStart).toBeGreaterThan(reducedMotionBlockStart);
+      expect(recordingPulseStart).toBeGreaterThan(reducedMotionBlockStart);
+      expect(reducedMotionCss).toContain('animation: none !important');
+    });
   });
 
   describe('All tokens are within @theme block', () => {

@@ -1,0 +1,25 @@
+[package]
+name = "ace-plugin-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "VST3 plugin host for ACE-Step DAW — pure Rust, no C++ bridge"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+walkdir = "2"
+plist = "1"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+thiserror = "1"
+# COM interop for VST3 — `libloading` dlopens the bundle's dylib,
+# the `vst3` crate generates the COM interfaces. Pure-Rust; no C++.
+libloading = "0.8"
+vst3 = "0.3"
+crossbeam = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
+tracing-subscriber = "0.3"

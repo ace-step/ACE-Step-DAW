@@ -73,7 +73,7 @@ describe('sequencer row sample assignment and clearing', () => {
       // sampleName should be cleared
       expect(getRow().sampleName).toBeUndefined();
       // sampleKey should still exist (reset to built-in default)
-      expect(getRow().sampleKey).toBeTruthy();
+      expect(typeof getRow().sampleKey).toBe('string');
       // Should not be the user sample anymore
       expect(getRow().sampleKey).not.toBe('user-sample-abc');
     });

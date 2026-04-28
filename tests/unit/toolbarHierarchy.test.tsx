@@ -87,7 +87,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
 
   it('renders the play/pause button in a compact flat style', () => {
     render(<Toolbar />);
-    const playButton = screen.getByTitle('Play (Space)');
+    const playButton = screen.getByLabelText('Play');
     // Play button should exist with flat styling — no shadow
     expect(playButton.className).not.toMatch(/shadow/);
   });
@@ -144,7 +144,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
 
     const toolbar = screen.getByTestId('main-toolbar');
     const arrangementButton = screen.getByLabelText('Arrangement View');
-    const playButton = screen.getByTitle('Play (Space)');
+    const playButton = screen.getByLabelText('Play');
     const tempoReadout = screen.getByTitle('Project tempo (beats per minute)');
     const timeSignatureReadout = screen.getByTitle('Project time signature');
     const transportPosition = screen.getByTitle('Transport position (bars.beats.ticks)');
@@ -180,8 +180,8 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     const transportBar = screen.getByTestId('transport-bar');
     expect(timingStrip).toBeInTheDocument();
     expect(harmonyStrip).toBeInTheDocument();
-    expect(timingStrip.compareDocumentPosition(transportBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(transportBar.compareDocumentPosition(harmonyStrip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(timingStrip.compareDocumentPosition(transportBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+    expect(transportBar.compareDocumentPosition(harmonyStrip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
     expect(screen.getByLabelText('Project BPM')).toHaveValue('120');
     expect(screen.getByLabelText('Time signature numerator')).toHaveValue('4');
     expect(screen.getByLabelText('Project key root')).toHaveValue('C');
@@ -225,8 +225,8 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
   it('keeps only loop and auto-scroll controls to the right of metronome', () => {
     render(<Toolbar />);
 
-    expect(screen.getByTitle('Loop (C)')).toBeInTheDocument();
-    expect(screen.getByTitle('Auto Scroll')).toBeInTheDocument();
+    expect(screen.getByLabelText('Loop')).toBeInTheDocument();
+    expect(screen.getByLabelText('Auto Scroll')).toBeInTheDocument();
     expect(screen.queryByTitle('Overdub / Loop Recording (Shift+L)')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Capture MIDI (F)')).not.toBeInTheDocument();
   });
@@ -234,13 +234,13 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
   it('does not add a hover highlight to the auto-scroll button', () => {
     render(<Toolbar />);
 
-    expect(screen.getByTitle('Auto Scroll').className).not.toContain('hover:bg-white/8');
+    expect(screen.getByLabelText('Auto Scroll').className).not.toContain('hover:bg-white/8');
   });
 
   it('does not add a hover highlight to the loop button', () => {
     render(<Toolbar />);
 
-    expect(screen.getByTitle('Loop (C)').className).not.toContain('hover:bg-white/8');
+    expect(screen.getByLabelText('Loop').className).not.toContain('hover:bg-white/8');
   });
 
   it('renders metronome pulse dots based on the time signature numerator', () => {

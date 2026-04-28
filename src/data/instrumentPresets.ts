@@ -27,7 +27,7 @@ export interface InstrumentPreset {
   id: string;
   name: string;
   category: InstrumentPresetCategory;
-  instrumentKind: 'subtractive' | 'fm' | 'wavetable';
+  instrumentKind: 'subtractive' | 'fm' | 'wavetable' | 'granular' | 'additive' | 'physical';
   isFactory: boolean;
   /** Full instrument config to apply to a track. */
   instrument: TrackInstrument;
@@ -157,6 +157,9 @@ export function createUserPreset(
 ): InstrumentPreset {
   if (instrument.kind === 'sampler') {
     throw new Error('Sampler instruments cannot be saved as instrument presets');
+  }
+  if (instrument.kind === 'granular') {
+    throw new Error('Granular instruments cannot be saved as presets (source audio is project-scoped)');
   }
   return {
     id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

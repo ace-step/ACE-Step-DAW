@@ -224,7 +224,7 @@ describe('uiStore', () => {
       const registry = useUIStore.getState().getCommandPaletteRegistry('vocals volume 80');
       const entry = registry.find((item) => item.id === `track:${vocalsTrack.id}:volume:80`);
 
-      expect(entry).toBeTruthy();
+      expect(entry).not.toBeUndefined();
       expect(entry?.kind).toBe('parameter');
       expect(entry?.searchText).toContain('volume');
     });

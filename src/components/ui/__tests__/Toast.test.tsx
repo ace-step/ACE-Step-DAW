@@ -24,7 +24,7 @@ describe('ToastContainer', () => {
     act(() => {
       useToastStore.getState().showToast({ type: 'success', message: 'Saved!' });
     });
-    expect(screen.getByText('Saved!')).toBeDefined();
+    screen.getByText('Saved!'); // getBy* throws if not found
   });
 
   it('renders type label', () => {
@@ -32,7 +32,7 @@ describe('ToastContainer', () => {
     act(() => {
       useToastStore.getState().showToast({ type: 'error', message: 'Failed' });
     });
-    expect(screen.getByText('error')).toBeDefined();
+    screen.getByText('error'); // getBy* throws if not found
   });
 
   it('renders SVG icon per type', () => {
@@ -41,7 +41,7 @@ describe('ToastContainer', () => {
       useToastStore.getState().showToast({ type: 'info', message: 'Note' });
     });
     const item = screen.getByTestId('toast-item');
-    expect(item.querySelector('svg')).toBeTruthy();
+    expect(item.querySelector('svg')).not.toBeNull();
   });
 
   it('renders a progress bar', () => {
@@ -52,7 +52,7 @@ describe('ToastContainer', () => {
     const item = screen.getByTestId('toast-item');
     // Progress bar is the last child div
     const progressTrack = item.lastElementChild;
-    expect(progressTrack?.querySelector('div')).toBeTruthy();
+    expect(progressTrack?.querySelector('div')).not.toBeNull();
   });
 
   it('has aria-live="polite" on the container', () => {
@@ -86,8 +86,8 @@ describe('ToastContainer', () => {
       useToastStore.getState().showToast({ type: 'info', message: 'First' });
       useToastStore.getState().showToast({ type: 'success', message: 'Second' });
     });
-    expect(screen.getByText('First')).toBeDefined();
-    expect(screen.getByText('Second')).toBeDefined();
+    screen.getByText('First'); // getBy* throws if not found
+    screen.getByText('Second');
     expect(screen.getAllByTestId('toast-item')).toHaveLength(2);
   });
 });

@@ -210,4 +210,158 @@ describe('contextAudioExtractor', () => {
     expect(createdSources.length).toBe(1);
     expect(createdSources[0].playbackRate).toBe(1);
   });
+
+  // ── Null/invalid inputs ──
+
+  it('returns null when project is null', async () => {
+    mockGetState.mockReturnValue({ project: null });
+    const result = await extractContextAudio({ startTime: 0, endTime: 10 });
+    expect(result).toBeNull();
+  });
+
+  it('returns null when context window is invalid (endTime <= startTime)', async () => {
+    setupStore([makeTrack([makeClip()])]);
+    const result = await extractContextAudio({ startTime: 5, endTime: 5 });
+    expect(result).toBeNull();
+  });
+
+  it('returns null when context window end is before start', async () => {
+    setupStore([makeTrack([makeClip()])]);
+    const result = await extractContextAudio({ startTime: 10, endTime: 5 });
+    expect(result).toBeNull();
+  });
+
+  // ── No clips overlap ──
+
+  it('returns null when no clips overlap the context window', async () => {
+    const clip = makeClip({ startTime: 10, duration: 5 }); // clip is at 10-15
+    setupStore([makeTrack([clip])]);
+    setupAudioBlob();
+
+    const result = await extractContextAudio({ startTime: 0, endTime: 5 }); // window at 0-5
+    expect(result).toBeNull();
+  });
+
+  // ── Mute/solo logic ──
+
+  it('skips muted tracks', async () => {
+    const clip = makeClip();
+    setupStore([makeTrack([clip], { muted: true })]);
+    setupAudioBlob();
+
+    const result = await extractContextAudio({ startTime: 0, endTime: 4 });
+    expect(result).toBeNull();
+    expect(createdSources.length).toBe(0);
+  });
+
+  it('skips non-soloed tracks when any track is soloed', async () => {
+    const clip1 = makeClip({ id: 'clip-1' });
+    const clip2 = makeClip({ id: 'clip-2' });
+    setupStore([
+      makeTrack([clip1], { id: 'track-1', soloed: false }), // should be skipped
+      makeTrack([clip2], { id: 'track-2', soloed: true }),   // should be included
+    ]);
+    setupAudioBlob();
+
+    await extractContextAudio({ startTime: 0, endTime: 4 });
+
+    // Only the soloed track's clip should be scheduled
+    expect(createdSources.length).toBe(1);
+  });
+
+  // ── generationStatus filtering ──
+
+  it('skips clips that are not ready', async () => {
+    const clip = makeClip({ generationStatus: 'generating' });
+    setupStore([makeTrack([clip])]);
+    setupAudioBlob();
+
+    const result = await extractContextAudio({ startTime: 0, endTime: 4 });
+    expect(result).toBeNull();
+    expect(createdSources.length).toBe(0);
+  });
+
+  // ── Audio key preference ──
+
+  it('prefers isolatedAudioKey over cumulativeMixKey', async () => {
+    const clip = makeClip({
+      isolatedAudioKey: 'isolated-key',
+      cumulativeMixKey: 'cumulative-key',
+    });
+    setupStore([makeTrack([clip])]);
+    setupAudioBlob();
+
+    await extractContextAudio({ startTime: 0, endTime: 4 });
+
+    expect(mockLoadAudioBlobByKey).toHaveBeenCalledWith('isolated-key');
+    expect(mockLoadAudioBlobByKey).not.toHaveBeenCalledWith('cumulative-key');
+  });
+
+  it('falls back to cumulativeMixKey when isolatedAudioKey is null', async () => {
+    const clip = makeClip({
+      isolatedAudioKey: null,
+      cumulativeMixKey: 'cumulative-key',
+    });
+    setupStore([makeTrack([clip])]);
+    setupAudioBlob();
+
+    await extractContextAudio({ startTime: 0, endTime: 4 });
+
+    expect(mockLoadAudioBlobByKey).toHaveBeenCalledWith('cumulative-key');
+  });
+
+  it('skips clip when no audio blob is found', async () => {
+    const clip = makeClip({
+      isolatedAudioKey: 'missing-key',
+      cumulativeMixKey: null,
+    });
+    setupStore([makeTrack([clip])]);
+    mockLoadAudioBlobByKey.mockResolvedValue(undefined);
+
+    const result = await extractContextAudio({ startTime: 0, endTime: 4 });
+    expect(result).toBeNull();
+  });
+
+  // ── Multiple clips/tracks ──
+
+  it('renders multiple clips from multiple tracks', async () => {
+    const clip1 = makeClip({ id: 'c1', startTime: 0, duration: 4, isolatedAudioKey: 'k1' });
+    const clip2 = makeClip({ id: 'c2', startTime: 0, duration: 4, isolatedAudioKey: 'k2' });
+    setupStore([
+      makeTrack([clip1], { id: 't1' }),
+      makeTrack([clip2], { id: 't2' }),
+    ]);
+    setupAudioBlob();
+
+    const result = await extractContextAudio({ startTime: 0, endTime: 4 });
+
+    expect(result).not.toBeNull();
+    expect(createdSources.length).toBe(2);
+  });
+
+  // ── Partial clip overlap ──
+
+  it('renders clip that partially overlaps context window start', async () => {
+    const clip = makeClip({ startTime: 2, duration: 4 }); // clip spans 2-6
+    setupStore([makeTrack([clip])]);
+    setupAudioBlob();
+
+    const result = await extractContextAudio({ startTime: 0, endTime: 4 }); // window 0-4
+
+    expect(result).not.toBeNull();
+    expect(createdSources.length).toBe(1);
+  });
+
+  it('renders clip that starts before context window', async () => {
+    const clip = makeClip({ startTime: 0, duration: 8 }); // clip spans 0-8
+    setupStore([makeTrack([clip])]);
+    setupAudioBlob();
+
+    const result = await extractContextAudio({ startTime: 3, endTime: 6 }); // window 3-6
+
+    expect(result).not.toBeNull();
+    expect(createdSources.length).toBe(1);
+    // Source should seek into the buffer
+    expect(createdSources[0].offset).toBeGreaterThan(0);
+  });
 });

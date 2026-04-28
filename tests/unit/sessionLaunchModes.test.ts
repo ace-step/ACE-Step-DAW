@@ -40,7 +40,7 @@ describe('session clip launch modes', () => {
     it('sets the launch mode on a session slot', () => {
       const session = useProjectStore.getState().project?.session;
       const slot = session?.slots.find((s) => s.trackId === trackId && s.sceneId === sceneId);
-      expect(slot).toBeDefined();
+      expect(slot).not.toBeUndefined();
 
       useProjectStore.getState().setSessionSlotLaunchMode(slot!.id, 'gate');
 

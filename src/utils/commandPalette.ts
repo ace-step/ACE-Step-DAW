@@ -49,7 +49,6 @@ export function buildCommandList(): Command[] {
       shortcut: 'K',
       action: () => useTransportStore.getState().toggleMetronome(),
     },
-
     // Project
     {
       id: 'new-project',
@@ -137,6 +136,13 @@ export function buildCommandList(): Command[] {
       label: 'Toggle Spectrum Analyzer',
       category: 'View',
       action: () => useUIStore.getState().toggleSpectrumAnalyzer(),
+    },
+    {
+      id: 'toggle-clip-inspector',
+      label: 'Toggle Clip Inspector',
+      category: 'View',
+      shortcut: '⇧I',
+      action: () => useUIStore.getState().toggleClipInspector(),
     },
 
     // Zoom

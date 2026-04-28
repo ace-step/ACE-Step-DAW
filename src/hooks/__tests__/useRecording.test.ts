@@ -11,6 +11,7 @@ const mockSetMonitoring = vi.fn();
 const mockGetCountInLength = vi.fn().mockReturnValue('off');
 const mockGetSession = vi.fn().mockReturnValue(undefined);
 let mockHasPermission = false;
+const mockSetCountInLength = vi.fn();
 
 vi.mock('../../engine/RecordingEngine', () => ({
   recordingEngine: {
@@ -19,6 +20,7 @@ vi.mock('../../engine/RecordingEngine', () => ({
     stopAllRecordings: (...args: unknown[]) => mockStopAllRecordings(...args),
     setMonitoring: (...args: unknown[]) => mockSetMonitoring(...args),
     getCountInLength: () => mockGetCountInLength(),
+    setCountInLength: (...args: unknown[]) => mockSetCountInLength(...args),
     getSession: (...args: unknown[]) => mockGetSession(...args),
     get hasPermission() { return mockHasPermission; },
     get denied() { return false; },
@@ -35,7 +37,7 @@ vi.mock('../../services/audioFileManager', () => ({
 }));
 
 vi.mock('../../utils/waveformPeaks', () => ({
-  computeWaveformPeaks: vi.fn().mockReturnValue([0.1, 0.2, 0.3]),
+  computeWaveformWithMipmap: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
 }));
 
 vi.mock('../../utils/wav', () => ({
@@ -147,6 +149,59 @@ describe('useRecording', () => {
     expect(result.current.isRecording).toBe(true);
   });
 
+  it('toggleArmTrack with exclusive mode disarms other tracks', () => {
+    const { result } = renderHook(() => useRecording());
+
+    act(() => { result.current.armTrack('track-1'); });
+    act(() => { result.current.toggleArmTrack('track-2', true); });
+
+    expect(useTransportStore.getState().armedTrackIds).not.toContain('track-1');
+    expect(mockSetMonitoring).toHaveBeenCalledWith('track-1', false);
+  });
+
+  it('toggleArmTrack disarms when already armed', () => {
+    const { result } = renderHook(() => useRecording());
+
+    act(() => { result.current.armTrack('track-1'); });
+    act(() => { result.current.toggleArmTrack('track-1'); });
+
+    expect(useTransportStore.getState().armedTrackIds).not.toContain('track-1');
+  });
+
+  it('hasPermission reflects recordingEngine state', () => {
+    const { result } = renderHook(() => useRecording());
+    expect(result.current.hasPermission).toBe(false);
+
+    mockHasPermission = true;
+    const { result: result2 } = renderHook(() => useRecording());
+    expect(result2.current.hasPermission).toBe(true);
+  });
+
+  it('stopRecording processes audio buffers from all armed tracks', async () => {
+    const mockBuffer = {
+      duration: 2, length: 96000, sampleRate: 48000, numberOfChannels: 1,
+      getChannelData: () => new Float32Array(96000),
+    };
+    mockStopAllRecordings.mockResolvedValue(
+      new Map([
+        ['track-1', { audioBuffer: mockBuffer, waveformData: [0.1, 0.2], duration: 2 }],
+      ]),
+    );
+
+    const { result } = renderHook(() => useRecording());
+
+    // Set up armed track and start recording
+    act(() => {
+      useTransportStore.getState().armTrack('track-1');
+      useTransportStore.getState().setIsRecording(true);
+    });
+
+    await act(async () => { await result.current.stopRecording(); });
+
+    expect(mockStopAllRecordings).toHaveBeenCalled();
+    expect(result.current.isRecording).toBe(false);
+  });
+
   it('toggleRecord stops recording when already recording', async () => {
     const { result } = renderHook(() => useRecording());
 
@@ -159,5 +214,37 @@ describe('useRecording', () => {
 
     expect(mockStopAllRecordings).toHaveBeenCalled();
     expect(result.current.isRecording).toBe(false);
+  });
+
+  describe('count-in sync', () => {
+    it('syncs countInBars=0 as off to recording engine', async () => {
+      const { result } = renderHook(() => useRecording());
+      act(() => {
+        useTransportStore.getState().armTrack('track-1');
+        useTransportStore.getState().setCountInBars(0);
+      });
+      await act(async () => { await result.current.toggleRecord(); });
+      expect(mockSetCountInLength).toHaveBeenCalledWith('off');
+    });
+
+    it('syncs countInBars=1 as 1bar to recording engine', async () => {
+      const { result } = renderHook(() => useRecording());
+      act(() => {
+        useTransportStore.getState().armTrack('track-1');
+        useTransportStore.getState().setCountInBars(1);
+      });
+      await act(async () => { await result.current.toggleRecord(); });
+      expect(mockSetCountInLength).toHaveBeenCalledWith('1bar');
+    });
+
+    it('syncs countInBars=2 as 2bars to recording engine', async () => {
+      const { result } = renderHook(() => useRecording());
+      act(() => {
+        useTransportStore.getState().armTrack('track-1');
+        useTransportStore.getState().setCountInBars(2);
+      });
+      await act(async () => { await result.current.toggleRecord(); });
+      expect(mockSetCountInLength).toHaveBeenCalledWith('2bars');
+    });
   });
 });

@@ -173,7 +173,7 @@ describe('preparePasteClips', () => {
 
     const result = preparePasteClips(data, 4);
     expect(result[0].clip.id).not.toBe('clip-1');
-    expect(result[0].clip.id).toBeTruthy();
+    expect(result[0].clip.id.length).toBeGreaterThan(0);
   });
 
   it('generates new IDs for MIDI notes inside pasted clips', () => {
@@ -253,7 +253,7 @@ describe('preparePasteNotes', () => {
 
     const result = preparePasteNotes(data, 0);
     expect(result[0].id).not.toBe('original');
-    expect(result[0].id).toBeTruthy();
+    expect(result[0].id.length).toBeGreaterThan(0);
   });
 
   it('preserves pitch, duration, and velocity', () => {

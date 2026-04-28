@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { TimelineEmptyState } from '../TimelineEmptyState';
 import { useProjectStore } from '../../../store/projectStore';
 
@@ -16,9 +16,7 @@ describe('TimelineEmptyState', () => {
 
   it('renders the empty state message when there are 0 tracks', () => {
     render(<TimelineEmptyState />);
-    expect(
-      screen.getByText(/drop audio files here or click \+ track to get started/i),
-    ).toBeDefined();
+    screen.getByText(/drop audio files here or click \+ track to get started/i); // getBy* throws if not found
   });
 
   it('renders a music note icon', () => {
@@ -28,15 +26,22 @@ describe('TimelineEmptyState', () => {
     expect(svg).not.toBeNull();
   });
 
-  it('does not render action buttons', () => {
+  it('renders a new track action button', () => {
     render(<TimelineEmptyState />);
-    expect(screen.queryByRole('button')).toBeNull();
+    const button = screen.getByRole('button', { name: /\+ new track/i });
+    expect(button).not.toBeUndefined();
   });
 
-  it('does not have a dashed border', () => {
+  it('clicking new track button calls addTrack', () => {
+    const addTrackSpy = vi.spyOn(useProjectStore.getState(), 'addTrack');
     render(<TimelineEmptyState />);
-    const container = screen.getByTestId('timeline-empty-state');
-    expect(container.className).not.toContain('border-dashed');
+    fireEvent.click(screen.getByRole('button', { name: /\+ new track/i }));
+    expect(addTrackSpy).toHaveBeenCalled();
+  });
+
+  it('renders description text', () => {
+    render(<TimelineEmptyState />);
+    screen.getByText(/create tracks, generate ai music, or drag loops/i); // getBy* throws if not found
   });
 
   it('is not visible when there is 1 or more tracks', () => {
@@ -54,12 +59,5 @@ describe('TimelineEmptyState', () => {
 
     const { container } = render(<TimelineEmptyState />);
     expect(container.innerHTML).toBe('');
-  });
-
-  it('is visible when there are 0 tracks', () => {
-    render(<TimelineEmptyState />);
-    expect(
-      screen.getByText(/drop audio files here or click \+ track to get started/i),
-    ).toBeDefined();
   });
 });

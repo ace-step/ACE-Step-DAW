@@ -14,25 +14,25 @@ describe('Knob component', () => {
   describe('rendering', () => {
     it('renders with aria-label', () => {
       render(<Knob {...defaultProps} label="Volume" />);
-      expect(screen.getByLabelText('Volume knob')).toBeDefined();
+      screen.getByLabelText('Volume knob'); // getBy* throws if not found
     });
 
     it('renders label text', () => {
       render(<Knob {...defaultProps} label="Volume" />);
-      expect(screen.getByText('Volume')).toBeDefined();
+      screen.getByText('Volume'); // getBy* throws if not found
     });
 
     it('renders value display', () => {
       render(<Knob {...defaultProps} value={42} step={1} />);
-      expect(screen.getByText('42')).toBeDefined();
+      screen.getByText('42'); // getBy* throws if not found
     });
 
     it('renders SVG with layered elements', () => {
       const { container } = render(<Knob {...defaultProps} />);
       const svg = container.querySelector('svg');
-      expect(svg).toBeDefined();
+      expect(svg).not.toBeNull();
       // Should have defs with filters/gradients
-      expect(svg?.querySelector('defs')).toBeDefined();
+      expect(svg?.querySelector('defs')).not.toBeNull();
       // Should have the knob body circle with gradient fill
       const circles = svg?.querySelectorAll('circle');
       expect(circles!.length).toBeGreaterThanOrEqual(1);
@@ -116,7 +116,7 @@ describe('Knob component', () => {
       const knob = screen.getByLabelText('Control knob');
       fireEvent.contextMenu(knob);
       // PrecisionInput should appear
-      expect(screen.getByLabelText('Control exact value')).toBeDefined();
+      screen.getByLabelText('Control exact value'); // getBy* throws if not found
     });
 
     it('reduces opacity when disabled', () => {
@@ -200,7 +200,7 @@ describe('Knob component', () => {
       }));
 
       // Should show fine mode indicator
-      expect(screen.getByText('Fine')).toBeDefined();
+      screen.getByText('Fine'); // getBy* throws if not found
 
       // Release
       fireEvent(window, new MouseEvent('mouseup', { bubbles: true }));
@@ -245,12 +245,12 @@ describe('Knob component', () => {
   describe('value formatting', () => {
     it('formats integer values when step >= 1', () => {
       render(<Knob {...defaultProps} value={42.7} step={1} />);
-      expect(screen.getByText('43')).toBeDefined();
+      screen.getByText('43'); // getBy* throws if not found
     });
 
     it('formats decimal values when step < 1', () => {
       render(<Knob {...defaultProps} value={0.75} min={0} max={1} step={0.01} />);
-      expect(screen.getByText('0.8')).toBeDefined();
+      screen.getByText('0.8'); // getBy* throws if not found
     });
 
     it('uses custom formatValue function when provided', () => {
@@ -263,12 +263,40 @@ describe('Knob component', () => {
           formatValue={(v) => `${Math.round(v * 100)}%`}
         />,
       );
-      expect(screen.getByText('50%')).toBeDefined();
+      screen.getByText('50%'); // getBy* throws if not found
     });
 
     it('displays unit suffix', () => {
       render(<Knob {...defaultProps} value={440} min={20} max={20000} unit=" Hz" step={1} />);
-      expect(screen.getByText('440 Hz')).toBeDefined();
+      screen.getByText('440 Hz'); // getBy* throws if not found
+    });
+  });
+
+  describe('hover parameter highlighting', () => {
+    it('calls onHoverChange with paramId on mouse enter/leave', () => {
+      const onHoverChange = vi.fn();
+      render(
+        <Knob {...defaultProps} paramId="frequency" onHoverChange={onHoverChange} />,
+      );
+      const wrapper = screen.getByLabelText('Control knob').closest('[data-param-id]')!;
+      fireEvent.mouseEnter(wrapper);
+      expect(onHoverChange).toHaveBeenCalledWith('frequency', true);
+      fireEvent.mouseLeave(wrapper);
+      expect(onHoverChange).toHaveBeenCalledWith('frequency', false);
+    });
+
+    it('sets data-param-id attribute when paramId is provided', () => {
+      render(<Knob {...defaultProps} paramId="threshold" />);
+      const wrapper = screen.getByLabelText('Control knob').closest('[data-param-id]');
+      expect(wrapper?.getAttribute('data-param-id')).toBe('threshold');
+    });
+
+    it('does not call onHoverChange when paramId is not set', () => {
+      const onHoverChange = vi.fn();
+      render(<Knob {...defaultProps} onHoverChange={onHoverChange} />);
+      const knob = screen.getByLabelText('Control knob');
+      fireEvent.mouseEnter(knob.parentElement!.parentElement!);
+      expect(onHoverChange).not.toHaveBeenCalled();
     });
   });
 });

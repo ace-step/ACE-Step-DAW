@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUIStore, getBottomPanelHeight } from '../../store/uiStore';
 import { Z } from '../../utils/zIndex';
 import { useGenerationStore } from '../../store/generationStore';
+import { useArrangementAssistantStore } from '../../store/arrangementAssistantStore';
 import { useProjectStore } from '../../store/projectStore';
 import { MultiTrackGenerateSection } from './MultiTrackGenerateSection';
 import { GenerationSettingsSection } from './GenerationSettingsSection';
@@ -20,9 +21,11 @@ export function GenerationSidePanel() {
   const loopBrowserOpen = useUIStore((s) => s.loopBrowserOpen);
   const toggleLoopBrowser = useUIStore((s) => s.toggleLoopBrowser);
   const showMixer = useUIStore((s) => s.showMixer);
+  const showClipInspector = useUIStore((s) => s.showClipInspector);
   const setShowMixer = useUIStore((s) => s.setShowMixer);
   const showAIAssistant = useUIStore((s) => s.showAIAssistant);
   const toggleAIAssistant = useUIStore((s) => s.toggleAIAssistant);
+  const arrangementAssistantOpen = useArrangementAssistantStore((s) => s.isOpen);
   const setGenerationPanelView = useUIStore((s) => s.setGenerationPanelView);
   const batchGenerateMode = useUIStore((s) => s.batchGenerateMode);
   const setBatchGenerateMode = useUIStore((s) => s.setBatchGenerateMode);
@@ -126,9 +129,9 @@ export function GenerationSidePanel() {
           left: dockLeft,
           zIndex: Z.toast,
           bottom: showSmartControls ? 208 : 68,
-          opacity: activeBottomPanel || showMixer || showSettingsDialog ? 0 : 1,
-          pointerEvents: activeBottomPanel || showMixer || showSettingsDialog ? 'none' : 'auto',
-          transform: `translateX(-50%) translateY(${activeBottomPanel || showMixer || showSettingsDialog ? '16px' : '0px'})`,
+          opacity: activeBottomPanel || showMixer || showClipInspector || showSettingsDialog ? 0 : 1,
+          pointerEvents: activeBottomPanel || showMixer || showClipInspector || showSettingsDialog ? 'none' : 'auto',
+          transform: `translateX(-50%) translateY(${activeBottomPanel || showMixer || showClipInspector || showSettingsDialog ? '16px' : '0px'})`,
         }}
         data-testid="generation-dock"
       >
@@ -210,6 +213,49 @@ export function GenerationSidePanel() {
                 <path d="M9 3.1a3.55 3.55 0 0 1 2.12 6.4c-.61.46-1.02 1.12-1.16 1.82H8.04c-.14-.7-.55-1.36-1.16-1.82A3.55 3.55 0 0 1 9 3.1Z" />
                 <path d="M7.35 12.5h3.3M7.75 14.15h2.5" />
                 <path d="M9.3 6 8.35 7.9h1.05L8.7 9.55" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => useUIStore.getState().setShowHumToSongModal(true)}
+              className="group relative flex h-10 w-10 items-center justify-center rounded-[10px] text-white/70 transition-all duration-200 hover:bg-white/[0.06] hover:text-white"
+              aria-label="Hum to Song"
+              title="Hum to Song — Record a melody and generate a full arrangement"
+              data-testid="dock-hum-to-song"
+            >
+              <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#232629]/96 px-2 py-0.5 text-[10px] text-zinc-300 opacity-0 shadow-lg transition-all duration-150 group-hover:-translate-y-0.5 group-hover:opacity-100">
+                Hum to Song
+              </span>
+              <svg width="22" height="22" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 2.5v8" />
+                <path d="M5.5 6.5a3.5 3.5 0 0 0 7 0" />
+                <path d="M6 12.5c0 1.66 1.34 3 3 3s3-1.34 3-3" />
+                <circle cx="9" cy="10.5" r="3.5" />
+                <path d="M12.5 10.5h1.5" />
+                <path d="M4 10.5h1.5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => useArrangementAssistantStore.getState().toggle()}
+              className={`group relative flex h-10 w-10 items-center justify-center rounded-[10px] transition-all duration-200 ${
+                arrangementAssistantOpen
+                  ? 'bg-white/10 text-white'
+                  : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
+              }`}
+              aria-label="Arrangement Assistant"
+              title="Arrangement Assistant"
+              data-testid="dock-arrangement-assistant-toggle"
+            >
+              <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#232629]/96 px-2 py-0.5 text-[10px] text-zinc-300 opacity-0 shadow-lg transition-all duration-150 group-hover:-translate-y-0.5 group-hover:opacity-100">
+                Arrange
+              </span>
+              <svg width="22" height="22" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2" y="3" width="14" height="12" rx="1.5" />
+                <path d="M2 7h14" />
+                <path d="M2 11h14" />
+                <path d="M6 3v12" />
+                <path d="M11 3v12" />
               </svg>
             </button>
             <button

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { downloadBlob } from '../../services/browserDownload';
 import {
@@ -90,6 +91,9 @@ export function ExportDialog() {
     artist: '',
   });
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, show && !!project);
+
   if (!show || !project) return null;
 
   const handleExport = async () => {
@@ -178,10 +182,10 @@ export function ExportDialog() {
   const selectClass = 'w-full bg-daw-surface-2 border border-daw-border rounded px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-daw-accent';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-[400px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title">
+      <div ref={dialogRef} className="w-[400px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-daw-border">
-          <h2 className="text-sm font-medium">Export Audio</h2>
+          <h2 id="export-dialog-title" className="text-sm font-medium">Export Audio</h2>
           <button
             onClick={() => setShow(false)}
             className="text-zinc-400 hover:text-zinc-300 text-lg leading-none"

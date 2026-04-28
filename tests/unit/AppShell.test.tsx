@@ -44,7 +44,30 @@ vi.mock('../../src/hooks/useAudioEngine', () => ({ useAudioEngine: () => ({ resu
 vi.mock('../../src/hooks/useKeyboardShortcuts', () => ({ useKeyboardShortcuts: vi.fn() }));
 vi.mock('../../src/hooks/useEffectsSync', () => ({ useEffectsSync: vi.fn() }));
 vi.mock('../../src/hooks/useShareLink', () => ({ useShareLink: vi.fn() }));
+vi.mock('../../src/hooks/useReducedMotion', () => ({ useReducedMotionSync: vi.fn() }));
+vi.mock('../../src/hooks/useAccessibilitySync', () => ({ useAccessibilitySync: vi.fn() }));
+vi.mock('../../src/hooks/useVST3Connection', () => ({ useVST3Connection: vi.fn() }));
+vi.mock('../../src/hooks/useVST3Sync', () => ({ useVST3Sync: vi.fn() }));
+vi.mock('../../src/hooks/useAutoSave', () => ({ useAutoSave: () => ({ status: 'saved', saveNow: vi.fn(), lastSavedAt: null }) }));
+vi.mock('../../src/hooks/useOnboardingTracking', () => ({ useOnboardingTracking: vi.fn() }));
 vi.mock('../../src/components/layout/AudioContextOverlay', () => ({ AudioContextOverlay: () => null }));
+vi.mock('../../src/components/dialogs/WelcomeOverlay', () => ({ WelcomeOverlay: () => null }));
+vi.mock('../../src/components/ui/BottomPanelTransition', () => ({ BottomPanelTransition: ({ show, children }: { show: boolean; children: React.ReactNode }) => show ? <>{children}</> : null }));
+vi.mock('../../src/components/ui/PanelSkeleton', () => ({ PanelSkeleton: () => null }));
+vi.mock('../../src/components/ui/SkipLinks', () => ({ SkipLinks: () => null }));
+vi.mock('../../src/components/sharing/SharedProjectPage', () => ({ SharedProjectPage: () => null }));
+vi.mock('../../src/components/arrangement/ArrangementAssistantPanel', () => ({ ArrangementAssistantPanel: () => null }));
+vi.mock('../../src/components/timeline/ClipInspectorPanel', () => ({ ClipInspectorPanel: () => null }));
+vi.mock('../../src/components/plugins/VST3SidePanel', () => ({ VST3SidePanel: () => null }));
+vi.mock('../../src/components/generation/AddLayerPanel', () => ({ AddLayerPanel: () => null }));
+vi.mock('../../src/components/generation/EnhancePanel', () => ({ EnhancePanel: () => null }));
+vi.mock('../../src/components/generation/HumToSongModal', () => ({ HumToSongModal: () => null }));
+vi.mock('../../src/components/generation/VocalReplacementModal', () => ({ VocalReplacementModal: () => null }));
+vi.mock('../../src/components/dialogs/VideoExportDialog', () => ({ VideoExportDialog: () => null }));
+vi.mock('../../src/components/recording/RecordingOverlay', () => ({ RecordingOverlay: () => null }));
+vi.mock('../../src/components/strudel/StrudelEditor', () => ({ StrudelEditor: () => null }));
+vi.mock('../../src/components/models/ModelLibraryPanel', () => ({ ModelLibraryPanel: () => null }));
+vi.mock('../../src/components/models/CustomModelsPanel', () => ({ CustomModelsPanel: () => null }));
 
 describe('AppShell overlay orchestration', () => {
   beforeEach(() => {
@@ -75,10 +98,9 @@ describe('AppShell dialog lazy loading', () => {
   });
 
   it('uses React.lazy for dialog components (not static imports)', async () => {
-    // Verify the module uses lazy imports by checking that the module
-    // source code contains lazy() calls for dialog components
-    const appShellModule = await import('../../src/components/layout/AppShell?raw');
-    const source = appShellModule.default as string;
+    // EditorShell now contains lazy loading — AppShell lazy-loads EditorShell itself
+    const editorShellModule = await import('../../src/components/layout/EditorShell?raw');
+    const source = editorShellModule.default as string;
 
     // NewProjectDialog should remain eager (needed on first load)
     expect(source).toMatch(/import\s*\{\s*NewProjectDialog\s*\}/);
@@ -111,8 +133,8 @@ describe('AppShell dialog lazy loading', () => {
   });
 
   it('uses React.lazy for heavy panels', async () => {
-    const appShellModule = await import('../../src/components/layout/AppShell?raw');
-    const source = appShellModule.default as string;
+    const editorShellModule = await import('../../src/components/layout/EditorShell?raw');
+    const source = editorShellModule.default as string;
 
     const lazyPanels = [
       'PianoRoll',
@@ -134,8 +156,8 @@ describe('AppShell dialog lazy loading', () => {
   });
 
   it('wraps lazy components in Suspense', async () => {
-    const appShellModule = await import('../../src/components/layout/AppShell?raw');
-    const source = appShellModule.default as string;
+    const editorShellModule = await import('../../src/components/layout/EditorShell?raw');
+    const source = editorShellModule.default as string;
 
     // Should import Suspense and lazy from react
     expect(source).toMatch(/import\s*\{[^}]*lazy[^}]*\}\s*from\s*['"]react['"]/);
@@ -145,10 +167,19 @@ describe('AppShell dialog lazy loading', () => {
     expect(source).toContain('<Suspense');
   });
 
-  it('still renders the app shell structure correctly', () => {
+  it('lazy-loads EditorShell from AppShell', async () => {
+    const appShellModule = await import('../../src/components/layout/AppShell?raw');
+    const source = appShellModule.default as string;
+
+    // AppShell should lazy-load EditorShell
+    expect(source).toMatch(/lazy\(\s*\(\)\s*=>\s*import\(['"]\.\/EditorShell['"]\)/);
+  });
+
+  it('still renders the app shell structure correctly', async () => {
     render(<AppShell />);
 
-    expect(screen.getByText('Toolbar')).toBeInTheDocument();
+    // EditorShell is lazy-loaded, need to wait for it
+    expect(await screen.findByText('Toolbar')).toBeInTheDocument();
     expect(screen.getByText('StatusBar')).toBeInTheDocument();
     expect(screen.getByRole('application')).toHaveAttribute('aria-label', 'ACE-Step DAW');
   });

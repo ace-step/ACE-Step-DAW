@@ -203,7 +203,7 @@ describe('VST3AudioWorkletNode', () => {
     );
 
     expect(node.inputNode).toBeNull();
-    expect(node.outputNode).toBeDefined();
+    expect(node.outputNode).not.toBeNull();
     expect(node.inputSAB).toBeNull();
     expect(node.outputSAB).toBeInstanceOf(SharedArrayBuffer);
     expect(node.dropoutCount).toBe(0);
@@ -218,7 +218,7 @@ describe('VST3AudioWorkletNode', () => {
     );
 
     expect(node.inputNode).toBe(mockGainNode);
-    expect(node.outputNode).toBeDefined();
+    expect(node.outputNode).not.toBeNull();
     expect(node.inputSAB).toBeInstanceOf(SharedArrayBuffer);
     expect(node.outputSAB).toBeInstanceOf(SharedArrayBuffer);
     expect(mockGainNode.connect).toHaveBeenCalled();

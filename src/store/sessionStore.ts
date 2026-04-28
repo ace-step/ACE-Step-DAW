@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { SessionClipSlot, SessionScene, BufferedMidiEvent, SceneFollowActionType } from '../types/session';
+import type { SessionClipSlot, SessionScene, BufferedMidiEvent, SceneFollowActionType, FollowActionConfig } from '../types/session';
 import { MidiCaptureBuffer } from '../utils/midiCaptureBuffer';
 
 const DEFAULT_SCENE_COUNT = 8;
@@ -35,6 +35,8 @@ export interface SessionState {
   renameScene: (sceneId: string, name: string) => void;
   updateSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
   setSceneFollowAction: (sceneId: string, action: SceneFollowActionType, bars?: number) => void;
+  setFollowActionConfig: (sceneId: string, config: FollowActionConfig) => void;
+  clearFollowActionConfig: (sceneId: string) => void;
   addScene: (trackIds: string[]) => void;
   setRecordingToArrangement: (v: boolean) => void;
   recordSessionEvent: (event: SessionRecordedEvent) => void;
@@ -192,6 +194,30 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
               followAction: action,
               followActionTime: action === 'none' ? undefined : bars,
             }
+          : scene,
+      ),
+    }));
+  },
+
+  setFollowActionConfig: (sceneId, config) => {
+    set((s) => {
+      if (!s.scenes.some((scene) => scene.id === sceneId)) return s;
+      const clampedChance = Math.max(0, Math.min(1, config.chanceA));
+      return {
+        scenes: s.scenes.map((scene) =>
+          scene.id === sceneId
+            ? { ...scene, followActionConfig: { ...config, chanceA: clampedChance } }
+            : scene,
+        ),
+      };
+    });
+  },
+
+  clearFollowActionConfig: (sceneId) => {
+    set((s) => ({
+      scenes: s.scenes.map((scene) =>
+        scene.id === sceneId
+          ? { ...scene, followActionConfig: undefined }
           : scene,
       ),
     }));

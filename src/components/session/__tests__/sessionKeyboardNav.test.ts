@@ -198,7 +198,7 @@ describe('Session keyboard navigation', () => {
       const clip = playableClips[0];
 
       // Verify the clip exists and matches expectations
-      expect(clip).toBeDefined();
+      expect(clip).not.toBeUndefined();
       expect(clip.trackId).toBe(trackId);
     });
   });

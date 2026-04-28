@@ -1,10 +1,97 @@
 import React from 'react';
-import type { Clip, Track } from '../../types/project';
+import type { Clip, MidiNote, Project, Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
-import { regenerateClip } from '../../services/generationPipeline';
+import { useCollaborationStore } from '../../store/collaborationStore';
+import { toastError } from '../../hooks/useToast';
 import { ClipContextMenu } from './ClipContextMenu';
+import {
+  getBarAtBeat,
+  getTimeSignatureAtBar,
+  getTimeSignatureBarLength,
+  timeToBeat,
+} from '../../utils/tempoMap';
+import { canDestructivelyProcessClipAudio } from '../../utils/clipAudio';
+
+/** Default grid size for groove extraction (16th note = 0.25 beats). */
+const DEFAULT_GROOVE_GRID_BEATS = 0.25;
+const THIRTY_SECOND_GRID_BEATS = 0.125;
+const FINE_GRID_TOLERANCE_BEATS = 0.02;
+/** Fallback groove analysis length when clip is too short (1 bar of 4/4). */
+const FALLBACK_GROOVE_LENGTH_BEATS = 4;
+
+function distanceToGrid(beat: number, gridBeats: number): number {
+  const snapped = Math.round(beat / gridBeats) * gridBeats;
+  return Math.abs(beat - snapped);
+}
+
+export function getGrooveGridBeatsFromMidiNotes(notes: MidiNote[] | undefined): number {
+  if (!notes || notes.length === 0) return DEFAULT_GROOVE_GRID_BEATS;
+
+  const hasThirtySecondOnset = notes.some((note) => {
+    const start = Number.isFinite(note.startBeat) ? Math.max(0, note.startBeat) : 0;
+    return distanceToGrid(start, DEFAULT_GROOVE_GRID_BEATS) > FINE_GRID_TOLERANCE_BEATS
+      && distanceToGrid(start, THIRTY_SECOND_GRID_BEATS) <= FINE_GRID_TOLERANCE_BEATS;
+  });
+
+  return hasThirtySecondOnset ? THIRTY_SECOND_GRID_BEATS : DEFAULT_GROOVE_GRID_BEATS;
+}
+
+export function getGrooveLengthBeatsFromMidiNotes(
+  notes: MidiNote[] | undefined,
+  oneBarBeats: number,
+  gridBeats: number,
+): number {
+  const validOneBar = Number.isFinite(oneBarBeats) && oneBarBeats > 0
+    ? oneBarBeats
+    : FALLBACK_GROOVE_LENGTH_BEATS;
+  const validGrid = Number.isFinite(gridBeats) && gridBeats > 0
+    ? gridBeats
+    : DEFAULT_GROOVE_GRID_BEATS;
+
+  const maxQuantizedOnset = notes?.reduce((maxOnset, note) => {
+    const start = Number.isFinite(note.startBeat) ? note.startBeat : 0;
+    const quantizedStart = Math.round(Math.max(0, start) / validGrid) * validGrid;
+    const isExactBoundary = quantizedStart > 0
+      && Math.abs(start - quantizedStart) < 1e-9
+      && Math.abs(quantizedStart % validOneBar) < 1e-9;
+    const effectiveOnset = isExactBoundary ? quantizedStart + validGrid : quantizedStart;
+    return Math.max(maxOnset, effectiveOnset);
+  }, 0) ?? 0;
+
+  if (maxQuantizedOnset <= 0) return validOneBar;
+  return Math.max(validOneBar, Math.ceil(maxQuantizedOnset / validOneBar) * validOneBar);
+}
+
+export function getGrooveBarLengthBeatsForClip(
+  project: Project | null | undefined,
+  clipStartTime: number,
+): number {
+  if (!project) return FALLBACK_GROOVE_LENGTH_BEATS;
+
+  const fallbackNumerator = project.timeSignature ?? 4;
+  const fallbackDenominator = project.timeSignatureDenominator ?? 4;
+  const clipStartBeat = timeToBeat(
+    Number.isFinite(clipStartTime) ? Math.max(0, clipStartTime) : 0,
+    project.tempoMap,
+    project.bpm,
+  );
+  const activeBar = getBarAtBeat(
+    clipStartBeat,
+    project.timeSignatureMap,
+    fallbackNumerator,
+    fallbackDenominator,
+  );
+  const activeSignature = getTimeSignatureAtBar(
+    project.timeSignatureMap,
+    activeBar,
+    fallbackNumerator,
+    fallbackDenominator,
+  );
+
+  return getTimeSignatureBarLength(activeSignature.numerator, activeSignature.denominator);
+}
 
 interface ClipContextMenuContainerProps {
   x: number;
@@ -38,23 +125,37 @@ export function ClipContextMenuContainer({
   const setAnalysisPanel = useUIStore((s) => s.setAnalysisPanel);
   const setStemSeparationModal = useUIStore((s) => s.setStemSeparationModal);
   const setAudioToMidiModal = useUIStore((s) => s.setAudioToMidiModal);
+  const setVocalReplacementModal = useUIStore((s) => s.setVocalReplacementModal);
   const selectClip = useUIStore((s) => s.selectClip);
 
   const removeClip = useProjectStore((s) => s.removeClip);
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
   const consolidateClips = useProjectStore((s) => s.consolidateClips);
+  const reverseClip = useProjectStore((s) => s.reverseClip);
+  const normalizeClip = useProjectStore((s) => s.normalizeClip);
+  const adjustClipGainAction = useProjectStore((s) => s.adjustClipGain);
+  const setClipSpeedPreset = useProjectStore((s) => s.setClipSpeedPreset);
   const createQuickSamplerFromClip = useProjectStore((s) => s.createQuickSamplerFromClip);
   const applyAudioQuantize = useProjectStore((s) => s.applyAudioQuantize);
   const clearAudioQuantize = useProjectStore((s) => s.clearAudioQuantize);
   const exportMidiClip = useProjectStore((s) => s.exportMidiClip);
+  const extractGrooveFromClip = useProjectStore((s) => s.extractGrooveFromClip);
   const convertMidiClipToStrudel = useProjectStore((s) => s.convertMidiClipToStrudel);
   const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
   const splitClipAtZeroCrossing = useProjectStore((s) => s.splitClipAtZeroCrossing);
   const updateClipColors = useProjectStore((s) => s.updateClipColors);
   const tracks = useProjectStore((s) => s.project?.tracks);
+  const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
 
   const hasAudio = !!(clip.isolatedAudioKey || clip.cumulativeMixKey);
   const isReady = clip.generationStatus === 'ready';
+  const canProcessAudio = !isMidiClip && hasAudio && isReady && canDestructivelyProcessClipAudio(clip);
+  const canResetSpeed = !isMidiClip && hasAudio && isReady
+    && (
+      (clip.timeStretchRate !== undefined && clip.timeStretchRate !== 1)
+      || !!(clip.warpMarkers && clip.warpMarkers.length > 0)
+      || (!!clip.stretchMode && clip.stretchMode !== 'repitch')
+    );
   const isVocalTrack = track.trackName === 'vocals' || track.trackName === 'backing_vocals';
   const hasWarpMarkers = !!(clip.warpMarkers && clip.warpMarkers.length > 0);
 
@@ -70,11 +171,12 @@ export function ClipContextMenuContainer({
   } : undefined;
 
   const clipAIContext = (!isMidiClip && isReady) ? {
-    onRegenerate: () => { onClose(); regenerateClip(clip.id); },
+    onRegenerate: () => { onClose(); void import('../../services/generationPipeline').then(m => m.regenerateClip(clip.id)).catch(err => console.error('Failed to regenerate clip', err)); },
     hasPrompt: !!clip.prompt,
     isReady,
     ...(hasAudio ? { onSeparateStems: () => { onClose(); setStemSeparationModal(clip.id); } } : {}),
     ...(isVocalTrack ? { onGenerateAccompaniment: () => { onClose(); setVocal2BGMModal(clip.id); } } : {}),
+    ...(!isVocalTrack && hasAudio ? { onGenerateVocals: () => { onClose(); setVocalReplacementModal(clip.id); } } : {}),
     onAnalyze: () => { onClose(); setAnalysisPanel(clip.id); },
     ...(hasAudio ? {
       onConvertToMidi: () => { onClose(); setAudioToMidiModal(clip.id); },
@@ -89,10 +191,15 @@ export function ClipContextMenuContainer({
   } : undefined;
 
   const handleConsolidate = async () => {
-    const consolidatedClip = await consolidateClips(track.id, selectedActionClipIds);
-    onClose();
-    if (consolidatedClip) {
-      selectClip(consolidatedClip.id, false);
+    try {
+      const consolidatedClip = await consolidateClips(track.id, selectedActionClipIds);
+      onClose();
+      if (consolidatedClip) {
+        selectClip(consolidatedClip.id, false);
+      }
+    } catch {
+      onClose();
+      toastError('Failed to consolidate clips');
     }
   };
 
@@ -116,6 +223,24 @@ export function ClipContextMenuContainer({
         })();
       } : undefined}
       onExportMidi={isMidiClip ? () => { onClose(); exportMidiClip(clip.id); } : undefined}
+      onExtractGroove={isMidiClip ? () => {
+        onClose();
+        const name = `Groove from ${track.displayName || track.trackName}`;
+        const gridBeats = getGrooveGridBeatsFromMidiNotes(clip.midiData?.notes);
+        const project = useProjectStore.getState().project;
+        const oneBar = getGrooveBarLengthBeatsForClip(project, clip.startTime);
+        const lengthBeats = getGrooveLengthBeatsFromMidiNotes(clip.midiData?.notes, oneBar, gridBeats);
+        const groove = extractGrooveFromClip(clip.id, name, { gridBeats, lengthBeats });
+        if (!groove) {
+          if (isViewerMode) {
+            toastError('Grooves cannot be extracted in viewer mode.');
+          } else if (!clip.midiData?.notes.length) {
+            toastError('Add MIDI notes before extracting a groove.');
+          } else {
+            toastError('Failed to extract groove.');
+          }
+        }
+      } : undefined}
       onEdit={() => {
         onClose();
         if (clip.generationParams?.type === 'text2music' || (clip.source === 'generated' && track.trackType === 'mix')) {
@@ -135,6 +260,13 @@ export function ClipContextMenuContainer({
         }
       }}
       onConsolidate={() => { void handleConsolidate(); }}
+      onReverse={canProcessAudio ? () => { onClose(); void reverseClip(clip.id); } : undefined}
+      onNormalize={canProcessAudio ? () => { onClose(); void normalizeClip(clip.id); } : undefined}
+      onGainUp={canProcessAudio ? () => { onClose(); void adjustClipGainAction(clip.id, 3); } : undefined}
+      onGainDown={canProcessAudio ? () => { onClose(); void adjustClipGainAction(clip.id, -3); } : undefined}
+      onHalfSpeed={canProcessAudio ? () => { onClose(); setClipSpeedPreset(clip.id, 0.5); } : undefined}
+      onDoubleSpeed={canProcessAudio ? () => { onClose(); setClipSpeedPreset(clip.id, 2.0); } : undefined}
+      onResetSpeed={canResetSpeed ? () => { onClose(); setClipSpeedPreset(clip.id, 1.0); } : undefined}
       onDelete={() => { onClose(); removeClip(clip.id); }}
       onSelectAll={() => {
         onClose();
@@ -170,6 +302,7 @@ export function ClipContextMenuContainer({
       hasCustomColor={hasCustomColor}
       canConsolidate={canConsolidate}
       isMidiClip={isMidiClip}
+      clip={clip}
     />
   );
 }

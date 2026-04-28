@@ -70,7 +70,7 @@ describe('project action API', () => {
     const track = useProjectStore.getState().addTrack('drums', 'sequencer');
     const rowId = useProjectStore.getState().project?.tracks[0]?.sequencerPattern?.rows[0]?.id;
 
-    expect(rowId).toBeDefined();
+    expect(rowId).not.toBeUndefined();
 
     const result = actionApi.toggleSequencerStep({
       trackId: track.id,
@@ -123,7 +123,7 @@ describe('project action API', () => {
     }
 
     expect(success.value.clipId).toBe(clip.id);
-    expect(success.value.noteId).toBeTruthy();
+    expect(typeof success.value.noteId).toBe('string');
     expect(actionApi.getLastError()).toBeNull();
 
     const exported = actionApi.exportMidiClip({ clipId: clip.id });

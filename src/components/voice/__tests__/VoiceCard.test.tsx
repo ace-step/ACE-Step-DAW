@@ -60,6 +60,12 @@ describe('VoiceCard', () => {
     expect(screen.getByText('2m 5s')).toBeInTheDocument();
   });
 
+  it('normalizes rounded duration overflow into the minutes value', () => {
+    render(<VoiceCard voice={makeVoice({ durationSeconds: 119.6 })} {...defaultProps} />);
+    expect(screen.getByText('2m 0s')).toBeInTheDocument();
+    expect(screen.queryByText('1m 60s')).not.toBeInTheDocument();
+  });
+
   it('calls onSelect when clicked', () => {
     const onSelect = vi.fn();
     render(<VoiceCard voice={makeVoice()} {...defaultProps} onSelect={onSelect} />);

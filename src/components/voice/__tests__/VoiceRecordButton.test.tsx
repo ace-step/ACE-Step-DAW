@@ -65,4 +65,28 @@ describe('VoiceRecordButton', () => {
     const { toastError } = await import('../../../hooks/useToast');
     expect(toastError).toHaveBeenCalledWith('Microphone permission denied');
   });
+
+  it('re-enables stop control when stopping recording fails', async () => {
+    const { recordingEngine } = await import('../../../engine/RecordingEngine');
+    vi.mocked(recordingEngine.requestPermission).mockResolvedValue(true);
+    vi.mocked(recordingEngine.startRecording).mockResolvedValue(undefined);
+    vi.mocked(recordingEngine.stopRecording).mockRejectedValueOnce(new Error('engine failed'));
+
+    render(<VoiceRecordButton />);
+    const btn = screen.getByTestId('voice-record-btn');
+
+    fireEvent.click(btn);
+    await vi.waitFor(() => {
+      expect(btn).toHaveAttribute('aria-label', 'Stop recording');
+    });
+
+    fireEvent.click(btn);
+
+    const { toastError } = await import('../../../hooks/useToast');
+    await vi.waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith('Failed to stop recording');
+      expect(btn).toHaveAttribute('aria-label', 'Stop recording');
+      expect(btn).not.toBeDisabled();
+    });
+  });
 });

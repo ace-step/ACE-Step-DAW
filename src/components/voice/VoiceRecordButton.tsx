@@ -22,6 +22,13 @@ export function VoiceRecordButton() {
     };
   }, []);
 
+  const clearRecordingTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
   const startRecording = useCallback(async () => {
     const ok = await recordingEngine.requestPermission();
     if (!ok) {
@@ -45,44 +52,46 @@ export function VoiceRecordButton() {
   }, []);
 
   const stopRecording = useCallback(async () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
     setIsStopping(true);
 
-    const result = await recordingEngine.stopRecording(VOICE_RECORD_TRACK_ID);
-    setIsRecording(false);
-    setIsStopping(false);
-    if (!result) {
-      toastError('No audio captured');
-      return;
+    try {
+      const result = await recordingEngine.stopRecording(VOICE_RECORD_TRACK_ID);
+      clearRecordingTimer();
+      setIsRecording(false);
+      if (!result) {
+        toastError('No audio captured');
+        return;
+      }
+
+      if (result.duration < VOICE_MIN_DURATION_SECONDS) {
+        toastError(`Recording too short (${Math.round(result.duration)}s). Minimum is ${VOICE_MIN_DURATION_SECONDS}s.`);
+        return;
+      }
+
+      const blob = audioBufferToWavBlob(result.audioBuffer);
+      const peaks = computeSimplePeaks(result.audioBuffer, 64);
+      const name = `Recording ${new Date().toLocaleTimeString()}`;
+
+      addVoice(
+        {
+          name,
+          durationSeconds: result.duration,
+          skillLevel: 'intermediate',
+          source: 'recording',
+          tags: [],
+          waveformPeaks: peaks,
+        },
+        blob,
+      );
+
+      toastSuccess(`Voice recording "${name}" added (${Math.round(result.duration)}s)`);
+      setRecordingDuration(0);
+    } catch {
+      toastError('Failed to stop recording');
+    } finally {
+      setIsStopping(false);
     }
-
-    if (result.duration < VOICE_MIN_DURATION_SECONDS) {
-      toastError(`Recording too short (${Math.round(result.duration)}s). Minimum is ${VOICE_MIN_DURATION_SECONDS}s.`);
-      return;
-    }
-
-    const blob = audioBufferToWavBlob(result.audioBuffer);
-    const peaks = computeSimplePeaks(result.audioBuffer, 64);
-    const name = `Recording ${new Date().toLocaleTimeString()}`;
-
-    addVoice(
-      {
-        name,
-        durationSeconds: result.duration,
-        skillLevel: 'intermediate',
-        source: 'recording',
-        tags: [],
-        waveformPeaks: peaks,
-      },
-      blob,
-    );
-
-    toastSuccess(`Voice recording "${name}" added (${Math.round(result.duration)}s)`);
-    setRecordingDuration(0);
-  }, [addVoice]);
+  }, [addVoice, clearRecordingTimer]);
 
   return (
     <button

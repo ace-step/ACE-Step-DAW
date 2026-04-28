@@ -3,6 +3,7 @@ import type {
   SessionScene,
   FollowActionConfig,
   FollowActionType,
+  SceneFollowActionType,
 } from '../types/project';
 
 /**
@@ -104,4 +105,40 @@ export function resolveFollowAction(
  */
 export function rollFollowAction(config: FollowActionConfig): FollowActionType {
   return Math.random() < config.chanceA ? config.actionA : config.actionB;
+}
+
+/**
+ * Resolve a scene-level follow action to the target scene.
+ * Returns null for 'none', 'stop', or when no valid target exists.
+ * Unlike clip follow actions, scene follow actions do NOT wrap — 'next' at the
+ * last scene and 'previous' at the first scene both return null (stop).
+ */
+export function resolveSceneFollowAction(
+  action: SceneFollowActionType,
+  currentScene: SessionScene,
+  scenes: SessionScene[],
+): SessionScene | null {
+  if (action === 'none' || action === 'stop') return null;
+
+  const sorted = [...scenes].sort((a, b) => a.index - b.index);
+  const currentIndex = sorted.findIndex((s) => s.id === currentScene.id);
+  if (currentIndex === -1) return null;
+
+  switch (action) {
+    case 'next': {
+      const nextIndex = currentIndex + 1;
+      return nextIndex < sorted.length ? sorted[nextIndex] : null;
+    }
+    case 'previous': {
+      const prevIndex = currentIndex - 1;
+      return prevIndex >= 0 ? sorted[prevIndex] : null;
+    }
+    case 'random': {
+      if (sorted.length === 0) return null;
+      const randomIndex = Math.floor(Math.random() * sorted.length);
+      return sorted[randomIndex];
+    }
+    default:
+      return null;
+  }
 }

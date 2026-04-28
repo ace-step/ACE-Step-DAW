@@ -1,6 +1,10 @@
 import type { Clip } from '../types/project';
 
-export const CLIP_WAVEFORM_PEAK_COUNT = 1024;
+/**
+ * Number of interleaved peak values stored per clip (Lmax, Lmin, Rmax, Rmin per logical peak).
+ * 8192 values = 2048 logical peaks — enough for professional-quality detail at high zoom.
+ */
+export const CLIP_WAVEFORM_PEAK_COUNT = 8192;
 
 const RATE_EPSILON = 0.0001;
 const MIN_PLAYBACK_RATE = 0.0001;

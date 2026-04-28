@@ -53,3 +53,30 @@ export function computeWaveformPeaks(
 
 /** Number of values stored per logical peak (Lmax, Lmin, Rmax, Rmin). */
 export const PEAK_STRIDE = 4;
+
+/**
+ * Compute waveform with mipmap (async, runs in Web Worker via WASM).
+ *
+ * Side effect: stores a multi-level mipmap in IndexedDB for the given audioKey.
+ * Returns legacy stride-4 peaks for backward compatibility with Clip.waveformPeaks.
+ *
+ * Falls back to synchronous computeWaveformPeaks if Worker is unavailable.
+ */
+export async function computeWaveformWithMipmap(
+  audioKey: string,
+  audioBuffer: AudioBuffer,
+  numPeaks?: number,
+): Promise<number[]> {
+  const left = audioBuffer.getChannelData(0);
+  const right = audioBuffer.numberOfChannels >= 2
+    ? audioBuffer.getChannelData(1)
+    : left;
+
+  try {
+    const { waveformMipmapService } = await import('../services/waveformMipmapService');
+    return await waveformMipmapService.computeMipmap(audioKey, left, right, audioBuffer.sampleRate);
+  } catch {
+    // Fallback: synchronous computation (no mipmap stored)
+    return computeWaveformPeaks(audioBuffer, numPeaks ?? Math.floor(left.length / 32));
+  }
+}

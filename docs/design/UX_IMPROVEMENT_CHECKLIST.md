@@ -1,6 +1,6 @@
 # ACE-Step DAW — UX Improvement Checklist
 
-> **Version:** 1.0 · **Last Updated:** 2026-03-18  
+> **Version:** 1.1 · **Last Updated:** 2026-04-09  
 > **How to use:** Work top-down by priority. Each item is actionable and implementable.  
 > **Priority:** P0 = Must ship, P1 = Should ship, P2 = Nice to have, P3 = Future
 
@@ -49,10 +49,10 @@
 ### Timeline & Navigation
 - ✅ **Minimap** — Always-visible project overview strip at top of timeline. Shows all clips as colored blocks. Click to navigate.
 - ✅ **Zoom gestures** — `Cmd+Scroll` = horizontal zoom, `Cmd+Shift+Scroll` = vertical zoom, pinch on trackpad/touch.
-- ⬜ **Zoom to selection** — `Z` zooms to fit selected clips/region. `Shift+Z` zooms to fit entire project.
+- ✅ **Zoom to selection** — `Z` zooms to fit selected clips/region. `Shift+Z` zooms to fit entire project.
 - ✅ **Adaptive grid** — Grid resolution auto-adjusts based on zoom level (zoomed out = bars, zoomed in = 16th notes).
 - ✅ **Snap toggle** — `Cmd+G` toggles snap. Hold `Cmd` while dragging to temporarily disable snap.
-- ⬜ **Scrubbing** — Click-drag on timeline ruler to scrub audio. Scrub speed ∝ drag velocity.
+- ✅ **Scrubbing** — Click-drag on timeline ruler to scrub audio. Scrub speed ∝ drag velocity.
 
 ### Drag & Drop
 - ✅ **OS file drop** — Handle native drag-drop of audio files from Finder/Explorer into timeline. Use File API + `dataTransfer`. Auto-decode and create clip at drop position.
@@ -66,30 +66,30 @@
 - ✅ **Draw/paint tools** — Pencil (single note), paint brush (repeat notes), select, erase. Number keys `1-4` to switch tools.
 - ⬜ **Velocity color** — Note color = velocity (light = soft, saturated = loud). Also show velocity bars below piano roll.
 - ✅ **Quick quantize** — `Q` quantizes selected notes to current grid. `Cmd+Q` opens quantize dialog with strength slider.
-- ⬜ **Chord stamp** — Click to place common chord shapes (maj, min, 7th, dim, etc.). Shortcut: hold `Shift` + click.
-- ⬜ **Note resize** — Drag right edge to change duration. Drag left edge to change start (and duration).
+- ✅ **Chord stamp** — Click to place common chord shapes (maj, min, 7th, dim, etc.). Shortcut: hold `Shift` + click.
+- ✅ **Note resize** — Drag right edge to change duration. Drag left edge to change start (and duration).
 - ⬜ **Slide/portamento notes** — Special note type that bends between pitches. Visual: diagonal line between notes.
 
 ### AI Generation UX
-- ⬜ **Generation panel** — Sidebar panel with: text prompt, style tags, key/BPM/length selectors, temperature slider, variation count.
+- ✅ **Generation panel** — Sidebar panel with: text prompt, style tags, key/BPM/length selectors, temperature slider, variation count.
 - ⬜ **Multi-variation output** — Always generate 2-4 variations. Show as they complete (don't wait for all).
 - ⬜ **A/B comparison** — Keyboard `1`/`2`/`3`/`4` to switch between variations during playback. Visual indicator of which is active.
-- ⬜ **Progress with ETA** — Honest progress bar with estimated time remaining. Never fake progress.
-- ⬜ **Inline regeneration** — Select region on timeline → right-click → "Regenerate with AI". New content auto-crossfades at boundaries.
-- ⬜ **Prompt history** — Scrollable list of past prompts with timestamps. Click to re-use.
-- ⬜ **Prompt autocomplete** — Suggest genres, instruments, moods, techniques as user types.
+- ✅ **Progress with ETA** — Honest progress bar with estimated time remaining. Never fake progress.
+- ✅ **Inline regeneration** — Select region on timeline → right-click → "Regenerate with AI". New content auto-crossfades at boundaries.
+- ✅ **Prompt history** — Scrollable list of past prompts with timestamps. Click to re-use.
+- ✅ **Prompt autocomplete** — Suggest genres, instruments, moods, techniques as user types.
 
 ### Keyboard Shortcuts
 - ✅ **Single-key shortcuts** — `Space` play, `R` record, `L` loop, `S` solo, `M` mute, `Z` zoom-to-selection. Shared command layer now ignores focused text-entry and editable fields.
-- ⬜ **Context-sensitive keys** — Arrow keys do different things in timeline vs piano roll vs mixer.
-- ⬜ **Shortcut customization** — Full editor in settings. Import/export presets. Conflict detection.
-- ⬜ **DAW migration presets** — Shortcut presets for Ableton, Logic, FL Studio, Pro Tools users.
+- ✅ **Context-sensitive keys** — Arrow keys do different things in timeline vs piano roll vs mixer.
+- ✅ **Shortcut customization** — Full editor in settings. Import/export presets. Conflict detection.
+- ✅ **DAW migration presets** — Shortcut presets for Ableton, Logic, FL Studio, Pro Tools users.
 - ⬜ **Browser conflict prevention** — Prevent `Cmd+W`, `Cmd+T` etc. in DAW context. Use safe alternatives.
 
 ### Command Palette
-- ⬜ **Cmd+K** — Fuzzy-match command palette. Index every action, parameter, and setting.
+- ✅ **Cmd+K** — Fuzzy-match command palette. Index every action, parameter, and setting.
 - ⬜ **Natural language commands** — "add reverb to vocals" matches "Add Reverb effect to Track: Vocals".
-- ⬜ **Recent commands** — Show recently used commands at top.
+- ✅ **Recent commands** — Show recently used commands at top.
 - ⬜ **Parameter search** — Search for any parameter by name ("kick volume", "reverb decay").
 
 ---
@@ -97,14 +97,14 @@
 ## P2 — Nice to Have
 
 ### Visual Polish
-- ⬜ **Playhead glow** — 2px playhead with soft glow trail (not just a hard line).
-- ⬜ **AI clip distinction** — AI-generated clips have subtle gradient/sparkle overlay (✨) to distinguish from manual.
-- ⬜ **Recording pulse** — Pulsing red border on recording track. Growing waveform display.
-- ⬜ **Clip transitions** — Smooth animation when clips are created, moved, deleted (200ms ease-out).
+- ✅ **Playhead glow** — 2px playhead with soft glow trail (not just a hard line).
+- ✅ **AI clip distinction** — AI-generated clips have subtle gradient/sparkle overlay (✨) to distinguish from manual.
+- ✅ **Recording pulse** — Pulsing red border on recording track. Growing waveform display.
+- ✅ **Clip transitions** — Smooth animation when clips are created, moved, deleted (200ms ease-out).
 - ⬜ **Hover preview in browser** — Hovering over a loop in the browser auto-plays preview (300ms delay to prevent accidental triggers).
 
 ### Mixer
-- ⬜ **Level meters** — Per-track vertical meters with green→yellow→red gradient. Peak hold indicator. 60fps.
+- ✅ **Level meters** — Per-track vertical meters with green→yellow→red gradient. Peak hold indicator. 60fps.
 - ⬜ **Clip indicator** — Red dot at top of meter when clipping. Click to reset.
 - ⬜ **Pan knob** — Horizontal slider or knob. Center-detented. Double-click to center.
 - ⬜ **Channel strip** — Volume fader + pan + solo/mute + 4 insert slots + 2 send knobs per track.
@@ -123,7 +123,7 @@
 - ⬜ **Color-blind safe palette** — 16-color palette tested for deuteranopia, protanopia, tritanopia (see design guide §7.2).
 - ⬜ **Shape coding** — Track type icons alongside colors (hexagon=drums, wave=melodic, mic=vocal, etc.).
 - ⬜ **High contrast mode** — Toggle for increased border/text contrast.
-- ⬜ **Reduced motion** — Respect `prefers-reduced-motion`. Disable decorative animations, keep functional ones.
+- ✅ **Reduced motion** — Respect `prefers-reduced-motion`. Disable decorative animations, keep functional ones.
 
 ### Performance
 - ⬜ **Virtualized track rendering** — Only render visible tracks in DOM. Use react-window or react-virtuoso.
@@ -144,7 +144,7 @@
 ## P3 — Future / Stretch
 
 ### Advanced Features
-- ⬜ **Session View / Clip Launcher** — Ableton-style grid of clips for non-linear performance. Record into Arrangement from Session.
+- ✅ **Session View / Clip Launcher** — Ableton-style grid of clips for non-linear performance. Record into Arrangement from Session.
 - ⬜ **Modulators** — Bitwig-style drag-modulator-onto-parameter system. LFO, step sequencer, envelope follower.
 - ⬜ **Nested devices** — Effects and instruments can contain sub-chains.
 - ⬜ **Capture MIDI** — Retroactive MIDI recording (Ableton-style). Always-on MIDI buffer, "Capture" saves last N bars.
@@ -157,7 +157,7 @@
 - ⬜ **Real-time multiplayer** — Google Docs-style simultaneous editing. WebSocket sync.
 - ⬜ **Project sharing** — Share link, fork, remix (BandLab-style social).
 - ⬜ **Comments** — Time-stamped comments on timeline (like SoundCloud but for editing).
-- ⬜ **Version history** — Git-like project versioning with named checkpoints.
+- ✅ **Version history** — Git-like project versioning with named checkpoints.
 
 ### AI Advanced
 - ⬜ **AI suggestions (passive)** — Sparkle icon (✨) appears when AI has arrangement suggestions. Non-intrusive, dismissable.
@@ -175,8 +175,8 @@
 - ⬜ **Persistent storage** — Request `navigator.storage.persist()` for important projects.
 
 ### Export & Integration
-- ⬜ **Stem export** — Export each track as individual WAV file.
-- ⬜ **MIDI export** — Export MIDI data for use in other DAWs.
+- ✅ **Stem export** — Export each track as individual WAV file.
+- ✅ **MIDI export** — Export MIDI data for use in other DAWs.
 - ⬜ **File System Access API** — Native save/open dialogs where browser supports it.
 - ⬜ **Multi-project** — Open multiple projects, drag between them (Bitwig-style).
 

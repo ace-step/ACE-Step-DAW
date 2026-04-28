@@ -9,7 +9,8 @@ import { getClipContentOffset } from '../../utils/clipAudio';
 import { getClipPresentation } from './clipPresentation';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { ClipContextMenuContainer } from './ClipContextMenuContainer';
-import { ClipWaveform, ClipMidiThumbnail } from './ClipWaveform';
+import { CanvasClipWaveform } from './CanvasClipWaveform';
+import { CanvasClipMidiThumbnail } from './CanvasClipMidiThumbnail';
 import { ClipGainEnvelope } from './ClipGainEnvelope';
 import { ClipWarpMarkers } from './ClipWarpMarkers';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
@@ -53,6 +54,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
   const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 600);
   const isMidiClip = Boolean(clip.midiData);
+  const hasGeneratedClipBadge = clip.source === 'generated' || (clip.source == null && track.trackType === 'stems');
   const hasAudioBody = Boolean(clip.isolatedAudioKey || clip.cumulativeMixKey || clip.waveformPeaks);
 
   const [addLayerOpen, setAddLayerOpen] = useState(false);
@@ -64,10 +66,12 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const [scissorLine, setScissorLine] = useState<number | null>(null);
   const [rangePreview, setRangePreview] = useState<{ left: number; width: number } | null>(null);
   const clipBlockRef = useRef<HTMLDivElement>(null);
+  const ghostLandingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     hoveredResizeEdge,
     hoverSeekX,
+    isPointerInside,
     handleMouseEnter: handleMouseEnterLocal,
     handleMouseMove: handleMouseMoveLocal,
     handleMouseLeave: handleMouseLeaveLocal,
@@ -75,12 +79,20 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     handleResizeHandleLeave,
   } = useClipHover(clipBlockRef);
 
+  useEffect(() => {
+    return () => {
+      if (ghostLandingTimerRef.current !== null) clearTimeout(ghostLandingTimerRef.current);
+    };
+  }, []);
+
   const onGhostLanding = useCallback(() => {
     setGhostLanding(true);
     setShowDragTooltip(false);
-    setTimeout(() => {
+    if (ghostLandingTimerRef.current !== null) clearTimeout(ghostLandingTimerRef.current);
+    ghostLandingTimerRef.current = setTimeout(() => {
       setDragGhost(null);
       setGhostLanding(false);
+      ghostLandingTimerRef.current = null;
     }, 200);
   }, []);
 
@@ -137,13 +149,46 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
   const isSelected = isClipSelected;
-  const { fadeInDuration, fadeOutDuration } = getClipFadeBounds(clip);
+  // Local override for live fade values during drag. We deliberately bypass
+  // the Zustand store while the user is dragging to keep redraws cheap: only
+  // this ClipBlock re-renders per frame, instead of the whole project tree
+  // notifying every subscriber. The store is updated once on mouseup.
+  const [liveFadeIn, setLiveFadeIn] = useState<number | null>(null);
+  const [liveFadeOut, setLiveFadeOut] = useState<number | null>(null);
+
+  const storedFade = getClipFadeBounds(clip);
+  const fadeInDuration = liveFadeIn ?? storedFade.fadeInDuration;
+  const fadeOutDuration = liveFadeOut ?? storedFade.fadeOutDuration;
   const fadeInWidth = Math.min(width, fadeInDuration * pixelsPerSecond);
   const fadeOutWidth = Math.min(width, fadeOutDuration * pixelsPerSecond);
-  const showFadeInHandle = fadeInDuration > 0;
-  const showFadeOutHandle = fadeOutDuration > 0;
+  // Handles are strictly hover-only so the timeline stays uncluttered when the
+  // pointer is elsewhere. The fade itself is shown by the waveform amplitude
+  // envelope, which is always visible when a fade exists.
+  const showFadeInHandle = isPointerInside;
+  const showFadeOutHandle = isPointerInside;
   const clipColor = clip.color ?? track.color;
   const clipPresentation = useMemo(() => getClipPresentation(clipColor, isSelected), [clipColor, isSelected]);
+
+  const fadeInCurve = clip.fadeInCurve ?? 'linear';
+  const fadeOutCurve = clip.fadeOutCurve ?? 'linear';
+  // Local override for live curve point during drag (same store-bypass pattern
+  // as fade duration drag). Cleared on commit in the callback below.
+  const [liveFadeInCurvePoint, setLiveFadeInCurvePoint] = useState<{ x: number; y: number } | null>(null);
+  const [liveFadeOutCurvePoint, setLiveFadeOutCurvePoint] = useState<{ x: number; y: number } | null>(null);
+  const fadeInCurvePoint = liveFadeInCurvePoint ?? clip.fadeInCurvePoint;
+  const fadeOutCurvePoint = liveFadeOutCurvePoint ?? clip.fadeOutCurvePoint;
+  const waveformFadeEnvelope = useMemo(() => {
+    if (fadeInWidth <= 0 && fadeOutWidth <= 0) return undefined;
+    return {
+      totalWidthPx: width,
+      fadeInPx: fadeInWidth,
+      fadeOutPx: fadeOutWidth,
+      fadeInCurve,
+      fadeOutCurve,
+      fadeInCurvePoint,
+      fadeOutCurvePoint,
+    };
+  }, [width, fadeInWidth, fadeOutWidth, fadeInCurve, fadeOutCurve, fadeInCurvePoint, fadeOutCurvePoint]);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -232,20 +277,28 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
   return (
     <>
+      {/* Mount animation wrapper — CSS-only, no timers, doesn't conflict with animate-pulse */}
+      <div
+        className="absolute top-1 bottom-1 clip-mount-animation"
+        style={{
+          left,
+          width: Math.max(width, 4),
+          zIndex: 1,
+          animation: 'clip-mount-fade 200ms ease-out',
+        }}
+        data-testid={`clip-mount-wrapper-${clip.id}`}
+      >
       <div
         ref={clipBlockRef}
-        className={`absolute top-1 bottom-1 rounded-[3px] select-none overflow-hidden
+        className={`rounded-[3px] select-none overflow-hidden w-full h-full
           daw-clip-interactive
           active:brightness-95
           ${clip.muted ? 'opacity-40' : (statusStyles[clip.generationStatus] ?? '')}
         `}
         style={{
-          left,
-          width: Math.max(width, 4),
           boxShadow: clipPresentation.containerShadow,
           border: clipPresentation.clipBorder,
           contain: 'layout style paint',
-          zIndex: 1,
         }}
         data-clip-block
         data-clip-id={clip.id}
@@ -278,9 +331,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           style={{
             top: HEADER_RAIL_HEIGHT_PX,
             background: clipPresentation.bodyBackground,
-            borderTop: `1px solid ${hexToRgba(clipColor, 0.08)}`,
-            borderBottom: `1px solid ${clipPresentation.bodyBorderColor}`,
-            boxShadow: clipPresentation.bodyInnerShadow,
           }}
         />
 
@@ -315,8 +365,9 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           className="absolute left-0 right-0 bottom-0 overflow-hidden"
           style={{ top: HEADER_RAIL_HEIGHT_PX }}
         >
-          <ClipWaveform
+          <CanvasClipWaveform
             peaks={peaks}
+            audioKey={clip.isolatedAudioKey ?? clip.cumulativeMixKey ?? null}
             audioDuration={audioDuration}
             audioOffset={audioOffset}
             clipDuration={clip.duration}
@@ -327,23 +378,68 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             color={clipPresentation.waveformColor}
             opacityClassName={isSelected ? 'opacity-95' : 'opacity-90'}
             trackVolume={track.volume}
+            fadeEnvelope={waveformFadeEnvelope}
           />
         </div>
 
-        {/* Fade handles and overlays */}
+        {/* Fade handles — small grab targets only; the fade itself is shown
+            by the waveform amplitude envelope via CanvasClipWaveform. */}
         {!isMidiClip && hasAudioBody && (
           <ClipFadeHandles
             clipId={clip.id}
             clipDuration={clip.duration}
+            clipStartTime={clip.startTime}
             width={width}
             fadeInDuration={fadeInDuration}
             fadeOutDuration={fadeOutDuration}
-            fadeInWidth={fadeInWidth}
-            fadeOutWidth={fadeOutWidth}
+            fadeInCurve={fadeInCurve}
+            fadeOutCurve={fadeOutCurve}
+            fadeInCurvePoint={fadeInCurvePoint}
+            fadeOutCurvePoint={fadeOutCurvePoint}
             showFadeInHandle={showFadeInHandle}
             showFadeOutHandle={showFadeOutHandle}
             pixelsPerSecond={pixelsPerSecond}
             clipBlockRef={clipBlockRef}
+            clipColor={clipColor}
+            onFadeDragLive={(edge, value) => {
+              if (edge === 'in') setLiveFadeIn(value);
+              else setLiveFadeOut(value);
+            }}
+            onFadeDragCommit={(edge, value) => {
+              if (edge === 'in') {
+                setLiveFadeIn(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeInDuration: value });
+              } else {
+                setLiveFadeOut(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeOutDuration: value });
+              }
+            }}
+            onFadeDragCancel={(edge) => {
+              if (edge === 'in') setLiveFadeIn(null);
+              else setLiveFadeOut(null);
+            }}
+            onCurvePointDragLive={(edge, point) => {
+              if (edge === 'in') setLiveFadeInCurvePoint(point);
+              else setLiveFadeOutCurvePoint(point);
+            }}
+            onCurvePointDragCommit={(edge, point) => {
+              if (edge === 'in') {
+                setLiveFadeInCurvePoint(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeInCurvePoint: point });
+              } else {
+                setLiveFadeOutCurvePoint(null);
+                useProjectStore.getState().setClipFade(clip.id, { fadeOutCurvePoint: point });
+              }
+            }}
+            onCurvePointDragCancel={(edge) => {
+              if (edge === 'in') setLiveFadeInCurvePoint(null);
+              else setLiveFadeOutCurvePoint(null);
+            }}
+            onCurvePointReset={(edge) => {
+              useProjectStore.getState().setClipFade(clip.id, edge === 'in'
+                ? { fadeInCurvePoint: undefined }
+                : { fadeOutCurvePoint: undefined });
+            }}
           />
         )}
 
@@ -365,12 +461,13 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             clipDuration={clip.duration}
             width={width}
             markers={clip.warpMarkers}
+            allowAdd
           />
         )}
 
         {/* MIDI thumbnail */}
         {isMidiClip && clip.midiData && (
-          <ClipMidiThumbnail
+          <CanvasClipMidiThumbnail
             midiData={clip.midiData}
             width={width}
             duration={clip.duration}
@@ -401,6 +498,33 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           hoveredResizeEdge={hoveredResizeEdge}
           canRegenerate={clip.source === 'generated' && !!(clip.generationParams || track.trackType === 'mix')}
         />
+
+        {/* AI-generated clip badge — subtle sparkle in bottom-left corner */}
+        {hasGeneratedClipBadge && (
+          <div
+            data-testid="ai-generated-badge"
+            className="absolute z-10 pointer-events-none"
+            style={{
+              bottom: 3,
+              left: 4,
+              width: 8,
+              height: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: 0.5,
+            }}
+            aria-hidden="true"
+          >
+            <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+              <path
+                d="M5 0L6.1 3.9L10 5L6.1 6.1L5 10L3.9 6.1L0 5L3.9 3.9L5 0Z"
+                fill="currentColor"
+                style={{ color: 'rgba(255, 255, 255, 0.9)' }}
+              />
+            </svg>
+          </div>
+        )}
 
         <ClipStatusOverlay clip={clip} generatingProgress={generatingProgress} generationJob={generationJob} isMidiClip={isMidiClip} />
 
@@ -458,6 +582,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             }}
           />
         )}
+      </div>
       </div>
 
       {/* Context menu */}

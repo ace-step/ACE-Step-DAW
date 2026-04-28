@@ -14,24 +14,24 @@ vi.mock('../../../hooks/useToast', () => ({
 }));
 
 describe('Toast slide-in animation', () => {
-  it('renders with initial transform for entrance animation', () => {
+  it('renders with initial transform class for entrance animation', () => {
     render(<ToastContainer />);
     const toastItem = screen.getByTestId('toast-item');
-    // Initial state uses inline style for slide-in animation
-    expect(toastItem.style.transform).toContain('translateX');
+    // Initial state uses Tailwind translate-x-full for slide-in animation
+    expect(toastItem.className).toContain('translate-x-full');
   });
 
-  it('applies transition styles for smooth entrance', () => {
+  it('applies transition classes for smooth entrance', () => {
     render(<ToastContainer />);
     const toastItem = screen.getByTestId('toast-item');
-    expect(toastItem.style.transition).toContain('transform');
-    expect(toastItem.style.transition).toContain('200ms');
+    expect(toastItem.className).toContain('transition-');
+    expect(toastItem.className).toContain('duration-200');
   });
 
   it('renders type-specific SVG icon', () => {
     render(<ToastContainer />);
     const toastItem = screen.getByTestId('toast-item');
-    expect(toastItem.querySelector('svg')).toBeTruthy();
+    expect(toastItem.querySelector('svg')).not.toBeNull();
   });
 
   it('renders progress bar', () => {
@@ -39,8 +39,8 @@ describe('Toast slide-in animation', () => {
     const toastItem = screen.getByTestId('toast-item');
     // Progress bar is the last child
     const progressTrack = toastItem.lastElementChild;
-    expect(progressTrack).toBeTruthy();
-    expect(progressTrack?.querySelector('div')).toBeTruthy();
+    expect(progressTrack).not.toBeNull();
+    expect(progressTrack?.querySelector('div')).not.toBeNull();
   });
 });
 

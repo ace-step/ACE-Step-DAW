@@ -13,8 +13,8 @@ describe('FM Presets', () => {
 
   it('all presets have valid settings', () => {
     for (const preset of FACTORY_FM_PRESETS) {
-      expect(preset.settings.carrier.waveform).toBeTruthy();
-      expect(preset.settings.modulator.waveform).toBeTruthy();
+      expect(preset.settings.carrier.waveform.length).toBeGreaterThan(0);
+      expect(preset.settings.modulator.waveform.length).toBeGreaterThan(0);
       expect(preset.settings.modulationIndex).toBeGreaterThanOrEqual(0);
       expect(preset.settings.harmonicity).toBeGreaterThan(0);
       expect(['serial', 'parallel', 'stack', 'feedback']).toContain(preset.settings.algorithm);
@@ -25,7 +25,7 @@ describe('FM Presets', () => {
 
   it('getFmPresetById finds a preset', () => {
     const preset = getFmPresetById('fm-electric-piano');
-    expect(preset).toBeDefined();
+    expect(preset).not.toBeUndefined();
     expect(preset!.name).toBe('FM Electric Piano');
   });
 

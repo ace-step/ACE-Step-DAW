@@ -97,13 +97,13 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
     it('mute dot turns red when active', () => {
       renderHeader({ muted: true });
       const muteBtn = screen.getByTitle('Mute (M)');
-      expect(muteBtn.className).toContain('bg-red-500');
+      expect(muteBtn.className).toContain('text-red-400');
     });
 
     it('solo dot turns amber when active', () => {
       renderHeader({ soloed: true });
       const soloBtn = screen.getByTitle('Solo (S)');
-      expect(soloBtn.className).toContain('bg-amber-400');
+      expect(soloBtn.className).toContain('text-amber-400');
     });
   });
 

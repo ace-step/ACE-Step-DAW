@@ -139,6 +139,8 @@ export function DistortionCurve({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Distortion curve visualization"
       style={{ width, height }}
       className="rounded"
       data-testid="distortion-curve"

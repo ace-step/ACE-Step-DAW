@@ -6,6 +6,7 @@ import { generateBatch, type BatchTrackEntry } from '../../services/generationPi
 import { TRACK_CATALOG, TRACK_NAMES } from '../../constants/tracks';
 import type { Track } from '../../types/project';
 import type { StemsFormDraft } from '../../store/generationStore';
+import { TimbrePresetPicker } from './TimbrePresetPicker';
 
 const VOCAL_TRACKS = new Set(['vocals', 'backing_vocals']);
 const DEFAULT_MULTI_TRACK_NAMES = ['drums', 'bass', 'keyboard', 'vocals'] as const;
@@ -302,6 +303,7 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
               </span>
             )}
           </div>
+          <TimbrePresetPicker onSelect={(preset) => setGlobalCaption(preset.promptTemplate)} />
           <textarea
             value={globalCaption}
             onChange={(e) => setGlobalCaption(e.target.value)}

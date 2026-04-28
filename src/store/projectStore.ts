@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
+import { detectLfoAutomationConflict } from '../utils/automationLfoConflict';
 import { createMidiSlice, appendMidiNotesToClip, type MidiSliceActions } from './slices/midiSlice';
 import { type TrackHeightPreset, getTrackHeightForPreset } from '../constants/trackHeight';
 import type {
@@ -56,6 +57,8 @@ import type {
   MasteringState,
   DrumMachineConfig,
   DrumKitName,
+  DrumPadFilter,
+  DrumPadSend,
   SamplerConfig,
   FollowActionConfig,
   SessionClipSlot,
@@ -64,6 +67,7 @@ import type {
   SessionLaunchQuantization,
   SessionPendingLaunch,
   SceneFollowActionType,
+  SceneFollowActionConfig,
   SessionScene,
   SessionState,
   PlaybackLatencySettings,
@@ -72,8 +76,14 @@ import type {
   TrackInstrument,
   FmInstrumentSettings,
   WavetableSettings,
+  GranularSettings,
   VelocityLayer,
+  SampleZone,
+  VideoClipData,
+  VideoTrackSettings,
+  MarkerType,
 } from '../types/project';
+import { DEFAULT_VIDEO_TRACK_SETTINGS } from '../types/project';
 import type { PluginInstance, PluginParamValue } from '../types/plugin';
 import { pluginRegistry } from '../engine/PluginRegistry';
 import { automationParamEquals } from '../types/project';
@@ -94,24 +104,30 @@ import {
   DEFAULT_TIME_SIGNATURE,
   DEFAULT_MEASURES,
   MAX_PROJECT_TRACKS,
+  MAX_VIDEO_TRACKS,
   DEFAULT_PROJECT_NAME,
   DEFAULT_GENERATION,
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
 import { stripHeavyDataForPersist } from './projectPersistUtils';
-import { exportTrackStems, getStemExportTracks, trackHasExportableContent } from '../engine/exportMix';
 import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { generatePattern, type PatternOptions } from '../utils/midiPatternGenerator';
 import { loadAudioBlobByKey, saveAudioBlob } from '../services/audioFileManager';
-import * as audioEngineHooks from '../hooks/useAudioEngine';
-import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
-import { createSamplerConfig } from '../engine/SamplerEngine';
 import { DEFAULT_WAVETABLE_SETTINGS } from '../engine/wavetablePresets';
 import { audioBufferToWavBlob } from '../utils/wav';
-import { convertClipAudioToMidi } from '../services/audioToMidi';
+import { computeVideoSplit, computeLeftTrim, computeRightTrim } from '../utils/videoUtils';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
-import type { StemCount } from '../types/api';
-import { separateClipAudioToStems } from '../services/stemSeparation';
+import type { StemCount, StemSeparationEngine } from '../types/api';
+
+// ── Heavy modules: lazy-loaded to reduce initial bundle ──────────────────────
+// These are only needed for specific async operations (stem export, audio-to-MIDI, etc.)
+// The audio engine module is cached after first load for synchronous access.
+let _audioEngineModule: typeof import('../hooks/useAudioEngine') | null = null;
+async function getAudioEngineModule() {
+  if (!_audioEngineModule) _audioEngineModule = await import('../hooks/useAudioEngine');
+  return _audioEngineModule;
+}
+// Pre-load will happen on first use; detectPlaybackLatencyFromEngine falls back to defaults
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile, parseMidiFile } from '../utils/midi';
 import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from '../utils/midiEncoder';
@@ -119,6 +135,7 @@ import { clampClipFadeDurations } from '../utils/clipFade';
 import { getSynthPresetById } from '../data/synthPresets';
 import { getPresetById, type InstrumentPreset } from '../data/instrumentPresets';
 import { detectClipGroups, resolveFollowAction, rollFollowAction } from '../utils/followActions';
+import { resolveFollowAction as resolveSceneFollowAction } from '../utils/followActionResolver';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
 import type { GrooveTemplate } from '../types/project';
 import { DEFAULT_MODULATION_SETTINGS } from '../types/project';
@@ -128,14 +145,13 @@ import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateCli
 import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
 import {
-  CLIP_WAVEFORM_PEAK_COUNT,
   getClipAudibleEndTime,
   getClipAudibleStartTime,
   getClipContentOffset,
   getClipPlaybackRate,
   isClipRepitchStretched,
 } from '../utils/clipAudio';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { snapToGrid, beatsToSeconds } from '../utils/time';
 import {
   createDefaultPlaybackLatencySettings,
@@ -151,7 +167,6 @@ import {
 } from '../utils/trackInstrument';
 import { useTransportStore } from './transportStore';
 import { useCollaborationStore } from './collaborationStore';
-import { bounceTrackToAudioAsset } from '../services/bounceInPlace';
 import {
   ensurePlaybackLatencySettings,
 } from '../utils/playbackLatency';
@@ -597,6 +612,7 @@ function _applyHistorySnapshot(current: Project | null, snapshot: Project, entry
 
 export interface ProjectState extends MidiSliceActions {
   project: Project | null;
+  isViewerMode: () => boolean;
 
   setProject: (project: Project) => void;
   createProject: (params?: {
@@ -639,6 +655,14 @@ export interface ProjectState extends MidiSliceActions {
   bounceTrackToAudio: (trackId: string) => Promise<Clip | undefined>;
 
   addTrack: (trackName: TrackName | TrackType, trackType?: TrackType, options?: { order?: number; color?: string; displayName?: string }) => Track;
+  /** Add a video track (max 1 per project). Returns undefined if limit reached. */
+  addVideoTrack: () => Track | undefined;
+  /** Add a video clip with metadata to a video track. */
+  addVideoClip: (trackId: string, clipData: { startTime: number; duration: number; videoMeta: import('../types/project').VideoClipData }) => Clip | undefined;
+  /** Split a video clip at a given time, creating two clips referencing the same source. */
+  splitVideoClip: (clipId: string, splitTimeSeconds: number) => void;
+  /** Trim a video clip edge, snapping to frame boundaries. */
+  trimVideoClip: (clipId: string, edge: 'left' | 'right', newValue: number) => void;
   removeTrack: (trackId: string) => void;
   removeTracks: (trackIds: string[]) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
@@ -648,6 +672,8 @@ export interface ProjectState extends MidiSliceActions {
   setTrackFmSynth: (trackId: string, params: Partial<FmInstrumentSettings>) => void;
   /** Apply a synth preset definition to a track by preset ID, updating instrument params and legacy synthPreset. */
   loadSynthPreset: (trackId: string, presetId: string) => void;
+  /** Update oscillator waveform type on a synth track. */
+  updateSynthOscillatorType: (trackId: string, oscillatorType: 'sine' | 'triangle' | 'sawtooth' | 'square') => void;
   /** Update ADSR envelope on a synth track. */
   updateSynthEnvelope: (trackId: string, envelope: Partial<SynthEnvelope>) => void;
   /** Update filter settings on a synth track. */
@@ -666,12 +692,24 @@ export interface ProjectState extends MidiSliceActions {
   clearTrackSampler: (trackId: string) => void;
   /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
   updateSamplerConfig: (trackId: string, config: SamplerConfig | null) => void;
+  /** Update the granular synthesis config on a pianoRoll track. */
+  updateGranularConfig: (trackId: string, config: Partial<GranularSettings>) => void;
+  /** Clear the granular config from a track. */
+  clearGranularConfig: (trackId: string) => void;
   /** Add a velocity layer to a track's samplerConfig. */
   addVelocityLayer: (trackId: string, layer: VelocityLayer) => void;
   /** Remove a velocity layer by index from a track's samplerConfig. */
   removeVelocityLayer: (trackId: string, index: number) => void;
   /** Partially update a velocity layer at the given index. */
   updateVelocityLayer: (trackId: string, index: number, partial: Partial<VelocityLayer>) => void;
+  /** Add a sample zone to a track's samplerConfig. */
+  addSampleZone: (trackId: string, zone: SampleZone) => void;
+  /** Remove a sample zone by ID from a track's samplerConfig. */
+  removeSampleZone: (trackId: string, zoneId: string) => void;
+  /** Partially update a sample zone. */
+  updateSampleZone: (trackId: string, zoneId: string, partial: Partial<SampleZone>) => void;
+  /** Replace all zones on a track (e.g., from SFZ import). */
+  setSampleZones: (trackId: string, zones: SampleZone[]) => void;
   createQuickSamplerTrack: (input: {
     audioKey: string;
     sampleName?: string;
@@ -684,8 +722,8 @@ export interface ProjectState extends MidiSliceActions {
   createQuickSamplerFromAsset: (assetId: string, options?: { trackId?: string; rootNote?: number }) => Track | undefined;
   /** Recreate a new track from a persisted asset snapshot. */
   restoreAssetToNewTrack: (assetId: string, startTime: number, options?: { order?: number }) => Track | undefined;
-  saveTrackPreset: (trackId: string, presetName: string) => TrackPreset;
-  applyTrackPreset: (presetId: string) => Track | undefined;
+  saveTrackPreset: (trackId: string, presetName: string) => TrackPreset | undefined;
+  applyTrackPreset: (presetId: string, options?: { order?: number }) => Track | undefined;
   deleteTrackPreset: (presetId: string) => void;
   renameTrack: (trackId: string, newName: string) => void;
   setInputMonitoring: (trackId: string, mode: InputMonitoringMode) => void;
@@ -701,6 +739,8 @@ export interface ProjectState extends MidiSliceActions {
   updateClipColors: (clipIds: string[], color: string | undefined) => void;
   /** Toggle muted state on one or more clips. If any are active, mute all; if all muted, unmute all. */
   toggleClipMuted: (clipIds: string[]) => void;
+  addClipTag: (clipId: string, tag: string) => void;
+  removeClipTag: (clipId: string, tag: string) => void;
   removeClip: (clipId: string) => void;
   duplicateClip: (clipId: string) => Clip | undefined;
   updateClipStatus: (clipId: string, status: ClipGenerationStatus, extra?: Partial<Clip>) => void;
@@ -708,7 +748,7 @@ export interface ProjectState extends MidiSliceActions {
   saveClipVersion: (clipId: string) => void;
   /** Restore clip audio fields from a version by index. */
   setActiveVersion: (clipId: string, idx: number) => void;
-  setClipFade: (clipId: string, fade: Partial<Pick<Clip, 'fadeInDuration' | 'fadeOutDuration' | 'fadeInCurve' | 'fadeOutCurve'>>) => void;
+  setClipFade: (clipId: string, fade: Partial<Pick<Clip, 'fadeInDuration' | 'fadeOutDuration' | 'fadeInCurve' | 'fadeOutCurve' | 'fadeInCurvePoint' | 'fadeOutCurvePoint'>>) => void;
   setClipTimeStretch: (clipId: string, rate: number) => void;
   setClipPitchShift: (clipId: string, semitones: number) => void;
   setClipStretchMode: (clipId: string, mode: StretchMode) => void;
@@ -767,6 +807,8 @@ export interface ProjectState extends MidiSliceActions {
   setSessionSlotQuantization: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
   setSessionSlotLegato: (slotId: string, legato: boolean) => void;
   setSessionSlotLaunchMode: (slotId: string, launchMode: SessionLaunchMode) => void;
+  setSessionSlotTempo: (slotId: string, tempo: number | undefined) => void;
+  setSessionSlotTimeSignature: (slotId: string, timeSignature: [number, number] | undefined) => void;
   launchSessionClip: (trackId: string, sceneId: string) => void;
   launchSessionScene: (sceneId: string) => void;
   stopSessionTrack: (trackId: string) => void;
@@ -775,12 +817,25 @@ export interface ProjectState extends MidiSliceActions {
   setSessionSlotFollowAction: (slotId: string, config: Partial<import('../types/project').FollowActionConfig>) => void;
   setSessionFollowActionsEnabled: (enabled: boolean) => void;
   scheduleFollowAction: (trackId: string, currentSlotId: string, launchTime: number) => void;
+  scheduleSceneFollowAction: (sceneId: string, launchTime: number) => void;
   startSessionArrangementRecording: (startTime?: number) => void;
   stopSessionArrangementRecording: (endTime?: number) => Clip[];
   moveSessionSlotClip: (sourceSlotId: string, targetSlotId: string) => void;
   reorderSessionScenes: (fromIndex: number, toIndex: number) => void;
-  updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
+  updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'name' | 'color' | 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
   setSessionSceneFollowAction: (sceneId: string, action: SceneFollowActionType, bars?: number) => void;
+  /** Create a clip in an empty session slot, using context from adjacent clips. Returns the clip or null. */
+  aiFillSessionSlot: (slotId: string) => Clip | null;
+  setSessionSceneFollowActionConfig: (sceneId: string, config: SceneFollowActionConfig) => void;
+  clearSessionSceneFollowActionConfig: (sceneId: string) => void;
+  /** Mark a session slot as recording. */
+  startSessionSlotRecording: (slotId: string) => void;
+  /** Stop recording on a session slot. */
+  stopSessionSlotRecording: (slotId: string) => void;
+  /** Stop all session slot recordings. */
+  stopAllSessionSlotRecordings: () => void;
+  /** Set fixed-length recording duration in bars (null = manual stop). */
+  setSessionFixedLengthBars: (bars: number | null) => void;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -841,6 +896,11 @@ export interface ProjectState extends MidiSliceActions {
   setDrumPadSample: (trackId: string, padIndex: number, sampleKey: string) => void;
   setDrumPadVolume: (trackId: string, padIndex: number, volume: number) => void;
   setDrumPadPan: (trackId: string, padIndex: number, pan: number) => void;
+  setDrumPadTune: (trackId: string, padIndex: number, tune: number) => void;
+  setDrumPadDecay: (trackId: string, padIndex: number, decay: number) => void;
+  setDrumPadFilter: (trackId: string, padIndex: number, filter: Partial<DrumPadFilter>) => void;
+  setDrumPadDrive: (trackId: string, padIndex: number, drive: number) => void;
+  setDrumPadSend: (trackId: string, padIndex: number, send: Partial<DrumPadSend>) => void;
   renameDrumPad: (trackId: string, padIndex: number, name: string) => void;
   setDrumMachineKit: (trackId: string, kit: DrumKitName) => void;
   // MIDI actions: inherited from MidiSliceActions via extends
@@ -912,8 +972,12 @@ export interface ProjectState extends MidiSliceActions {
 
   // Markers
   addMarker: (time: number, name: string) => void;
+  /** Add a typed marker with automatic color assignment. */
+  addTypedMarker: (time: number, name: string, type: MarkerType) => void;
+  /** Batch-add scene markers from detected cut timestamps. Single undo step. */
+  addSceneMarkers: (cutTimes: number[]) => void;
   removeMarker: (id: string) => void;
-  updateMarker: (id: string, updates: Partial<Pick<Marker, 'time' | 'name' | 'color'>>) => void;
+  updateMarker: (id: string, updates: Partial<Pick<Marker, 'time' | 'name' | 'color' | 'type' | 'endTime'>>) => void;
 
   // Comping / takes
   addTake: (clipId: string, audioKey: string, waveformPeaks?: number[]) => void;
@@ -934,7 +998,7 @@ export interface ProjectState extends MidiSliceActions {
 
   /** Convert an audio clip to MIDI, creating a new piano roll track with detected notes. */
   convertAudioToMidi: (clipId: string, options?: { threshold?: number; minConfidence?: number; minNoteDuration?: number }) => Promise<{ trackId: string; clipId: string } | undefined>;
-  separateStems: (clipId: string, stemCount: StemCount) => Promise<Track[] | undefined>;
+  separateStems: (clipId: string, stemCount: StemCount, engine?: StemSeparationEngine) => Promise<Track[] | undefined>;
 
   /** Export each track as a separate WAV file (stem export). */
   exportStems: () => Promise<void>;
@@ -1446,6 +1510,14 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
       return { id, type, enabled: true, params: { reverbType: 'hall', decay: 2.5, preDelay: 20, damping: 0.4, size: 0.6, modRate: 0.3, modDepth: 0.2, erLevel: 0, lowCut: 80, highCut: 12000, mix: 0.25 } };
     case 'noiseReduction':
       return { id, type, enabled: true, params: { amount: 0.5, threshold: -50, mode: 'smooth', hfEmphasis: 0.5, mix: 1 } };
+    case 'spectralFreeze':
+      return { id, type, enabled: true, params: { frozen: false, mix: 1, decay: 1, brightness: 0, fftSize: 2048 } };
+    case 'spectralBlur':
+      return { id, type, enabled: true, params: { blurAmount: 0.5, frequencySpread: 0, mix: 0.5, brightness: 0, fftSize: 2048 } };
+    case 'spectralFilter':
+      return { id, type, enabled: true, params: { points: [{ frequency: 20, gain: 0 }, { frequency: 20000, gain: 0 }], resolution: 0.5, mix: 1, fftSize: 2048 } };
+    case 'spectralMorph':
+      return { id, type, enabled: true, params: { morphAmount: 0.5, frozen: false, mix: 0.5, fftSize: 2048 } };
   }
 }
 
@@ -1544,6 +1616,11 @@ function createDefaultDrumMachineConfig(kit: DrumKitName = '808'): DrumMachineCo
       color: d.color,
       volume: 0.8,
       pan: 0,
+      tune: 0,
+      decay: 1,
+      filter: { type: 'off' as const, cutoff: 20000 },
+      drive: 0,
+      send: { reverb: 0, delay: 0 },
     })),
   };
 }
@@ -1803,6 +1880,25 @@ function buildTrackOrderMapForMove(
   return orderMap;
 }
 
+function insertTrackPreservingOrder(existingTracks: Track[], track: Track): Track[] {
+  const requestedOrder = Number.isFinite(track.order) && track.order > 0
+    ? Math.floor(track.order)
+    : existingTracks.length + 1;
+  const hasOrderConflict = existingTracks.some((candidate) => candidate.order === requestedOrder);
+  const shiftedTracks = hasOrderConflict
+    ? existingTracks.map((candidate) => (
+        candidate.order >= requestedOrder
+          ? { ...candidate, order: candidate.order + 1 }
+          : candidate
+      ))
+    : existingTracks;
+
+  return [...shiftedTracks, { ...track, order: requestedOrder }]
+    .map((candidate, originalIndex) => ({ candidate, originalIndex }))
+    .sort((a, b) => a.candidate.order - b.candidate.order || a.originalIndex - b.originalIndex)
+    .map(({ candidate }) => candidate);
+}
+
 function createTrackPresetSnapshot(track: Track, name: string): TrackPreset {
   const settings: TrackPresetSettings = {
     color: track.color,
@@ -2043,6 +2139,33 @@ function ensureTrackDefaults(track: Track): Track {
     })),
   };
 
+  // Backfill drum pad fields added in #950 for older persisted projects.
+  // Validate/clamp numeric fields to prevent NaN from corrupted persisted data.
+  if (normalizedTrack.drumMachine?.pads) {
+    const validFilterTypes = new Set(['off', 'lowpass', 'highpass']);
+    normalizedTrack.drumMachine = {
+      ...normalizedTrack.drumMachine,
+      pads: normalizedTrack.drumMachine.pads.map((pad) => {
+        const tune = Number.isFinite(pad.tune) ? Math.max(-24, Math.min(24, pad.tune)) : 0;
+        const decay = Number.isFinite(pad.decay) ? Math.max(0, Math.min(1, pad.decay)) : 1;
+        const drive = Number.isFinite(pad.drive) ? Math.max(0, Math.min(1, pad.drive)) : 0;
+        const filterType = pad.filter && validFilterTypes.has(pad.filter.type) ? pad.filter.type : 'off';
+        const filterCutoff = pad.filter && Number.isFinite(pad.filter.cutoff)
+          ? Math.max(20, Math.min(20000, pad.filter.cutoff)) : 20000;
+        const reverbSend = pad.send && Number.isFinite(pad.send.reverb) ? Math.max(0, Math.min(1, pad.send.reverb)) : 0;
+        const delaySend = pad.send && Number.isFinite(pad.send.delay) ? Math.max(0, Math.min(1, pad.send.delay)) : 0;
+        return {
+          ...pad,
+          tune,
+          decay,
+          drive,
+          filter: { type: filterType as 'off' | 'lowpass' | 'highpass', cutoff: filterCutoff },
+          send: { reverb: reverbSend, delay: delaySend },
+        };
+      }),
+    };
+  }
+
   return {
     ...normalizedTrack,
     ...syncTrackInstrumentFields(normalizedTrack),
@@ -2061,10 +2184,10 @@ function applyMasteringPreferences(mastering: MasteringState): MasteringState {
 }
 
 function detectPlaybackLatencyFromEngine() {
-  const engine =
-    'getExistingAudioEngine' in audioEngineHooks
-      ? audioEngineHooks.getExistingAudioEngine?.() ?? null
-      : null;
+  const mod = _audioEngineModule;
+  const engine = mod && 'getExistingAudioEngine' in mod
+    ? mod.getExistingAudioEngine?.() ?? null
+    : null;
   if (!engine) return createDefaultPlaybackLatencySettings();
   return detectPlaybackLatencySettings(undefined, {
     baseLatency: engine.ctx.baseLatency,
@@ -2152,6 +2275,7 @@ export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
   project: null,
+  isViewerMode: _isViewerMode,
 
   setProject: (project) => {
     _clearHistory();
@@ -2717,6 +2841,7 @@ export const useProjectStore = create<ProjectState>()(
       ...options,
     };
 
+    const { bounceTrackToAudioAsset } = await import('../services/bounceInPlace');
     const bounced = await bounceTrackToAudioAsset(state.project, track, resolvedOptions);
     const latest = get();
     if (!latest.project) return;
@@ -2859,8 +2984,200 @@ export const useProjectStore = create<ProjectState>()(
     return track;
   },
 
+  addVideoTrack: () => {
+    const state = get();
+    if (_isViewerMode()) return undefined;
+    if (!state.project) return undefined;
+
+    // Enforce MAX_VIDEO_TRACKS limit
+    const existingVideoTracks = state.project.tracks.filter(t => t.trackType === 'video');
+    if (existingVideoTracks.length >= MAX_VIDEO_TRACKS) {
+      toastError(`Video track limit reached (${MAX_VIDEO_TRACKS} max)`);
+      return undefined;
+    }
+
+    // Create video track with videoSettings applied atomically via addTrack
+    // (addTrack → createTrackFromTemplate spreads overrides into the Track object)
+    const track = get().addTrack('custom', 'video', { displayName: 'Video' });
+    if (!track) return undefined;
+
+    // Apply videoSettings directly — addTrack already pushed undo history,
+    // so we update the track in-place without a new history entry
+    const project = get().project;
+    if (project) {
+      set({
+        project: {
+          ...project,
+          updatedAt: Date.now(),
+          tracks: project.tracks.map(t =>
+            t.id === track.id ? { ...t, videoSettings: { ...DEFAULT_VIDEO_TRACK_SETTINGS } } : t,
+          ),
+        },
+      });
+    }
+
+    return get().project?.tracks.find(t => t.id === track.id);
+  },
+
+  addVideoClip: (trackId, clipData) => {
+    const state = get();
+    if (_isViewerMode()) return undefined;
+    if (!state.project) return undefined;
+
+    const track = state.project.tracks.find(t => t.id === trackId);
+    if (!track || track.trackType !== 'video') {
+      toastError('Cannot add video clip to a non-video track');
+      return undefined;
+    }
+
+    const clip = get().addClip(trackId, {
+      startTime: clipData.startTime,
+      duration: clipData.duration,
+      prompt: '',
+      globalCaption: '',
+      lyrics: '',
+      source: 'uploaded',
+      videoMeta: clipData.videoMeta,
+    });
+
+    return clip;
+  },
+
+  splitVideoClip: (clipId, splitTimeSeconds) => {
+    const state = get();
+    if (!state.project) return;
+
+    let sourceClip: Clip | undefined;
+    let trackId: string | undefined;
+    for (const t of state.project.tracks) {
+      if (t.trackType !== 'video') continue;
+      const c = t.clips.find((c) => c.id === clipId);
+      if (c) { sourceClip = c; trackId = t.id; break; }
+    }
+    if (!sourceClip || !trackId || !sourceClip.videoMeta) return;
+
+    const result = computeVideoSplit(
+      sourceClip.startTime,
+      sourceClip.duration,
+      sourceClip.videoMeta.sourceOffset,
+      splitTimeSeconds,
+      sourceClip.videoMeta.frameRate,
+    );
+    if (!result) return;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Split video clip' });
+
+    const leftClip: Clip = {
+      ...sourceClip,
+      duration: result.left.duration,
+    };
+
+    const rightClip: Clip = {
+      ...sourceClip,
+      id: uuidv4(),
+      startTime: result.right.startTime,
+      duration: result.right.duration,
+      videoMeta: {
+        ...sourceClip.videoMeta,
+        sourceOffset: result.right.sourceOffset,
+      },
+    };
+
+    const newTracks = state.project.tracks.map((t) => {
+      if (t.id !== trackId) return t;
+      return {
+        ...t,
+        clips: t.clips.map((c) => (c.id === clipId ? leftClip : c)).concat(rightClip),
+      };
+    });
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  trimVideoClip: (clipId, edge, newValue) => {
+    const state = get();
+    if (!state.project) return;
+
+    let sourceClip: Clip | undefined;
+    let trackId: string | undefined;
+    for (const t of state.project.tracks) {
+      if (t.trackType !== 'video') continue;
+      const c = t.clips.find((c) => c.id === clipId);
+      if (c) { sourceClip = c; trackId = t.id; break; }
+    }
+    if (!sourceClip || !trackId || !sourceClip.videoMeta) return;
+
+    const meta = sourceClip.videoMeta;
+
+    if (edge === 'left') {
+      const result = computeLeftTrim(
+        sourceClip.startTime, sourceClip.duration, meta.sourceOffset,
+        newValue, meta.frameRate,
+      );
+      if (!result) return;
+
+      _pushHistory(state.project, { scope: 'arrangement', label: 'Trim video clip' });
+
+      const updatedClip: Clip = {
+        ...sourceClip,
+        startTime: result.startTime,
+        duration: result.duration,
+        videoMeta: { ...meta, sourceOffset: result.sourceOffset },
+      };
+
+      const newTracks = state.project.tracks.map((t) => {
+        if (t.id !== trackId) return t;
+        return { ...t, clips: t.clips.map((c) => (c.id === clipId ? updatedClip : c)) };
+      });
+
+      set({
+        project: {
+          ...state.project,
+          updatedAt: Date.now(),
+          totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+          tracks: newTracks,
+        },
+      });
+    } else {
+      const result = computeRightTrim(
+        sourceClip.startTime, meta.sourceOffset,
+        newValue, meta.frameRate, meta.fileDuration,
+      );
+      if (!result) return;
+
+      _pushHistory(state.project, { scope: 'arrangement', label: 'Trim video clip' });
+
+      const updatedClip: Clip = {
+        ...sourceClip,
+        duration: result.duration,
+      };
+
+      const newTracks = state.project.tracks.map((t) => {
+        if (t.id !== trackId) return t;
+        return { ...t, clips: t.clips.map((c) => (c.id === clipId ? updatedClip : c)) };
+      });
+
+      set({
+        project: {
+          ...state.project,
+          updatedAt: Date.now(),
+          totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+          tracks: newTracks,
+        },
+      });
+    }
+  },
+
   saveTrackPreset: (trackId, presetName) => {
     const state = get();
+    if (_isViewerMode()) return undefined;
     if (!state.project) throw new Error('No project');
     const track = state.project.tracks.find((candidate) => candidate.id === trackId);
     if (!track) throw new Error(`Track '${trackId}' not found`);
@@ -2880,8 +3197,9 @@ export const useProjectStore = create<ProjectState>()(
     return preset;
   },
 
-  applyTrackPreset: (presetId) => {
+  applyTrackPreset: (presetId, options) => {
     const state = get();
+    if (_isViewerMode()) return undefined;
     if (!state.project) return undefined;
     const preset = (state.project.trackPresets ?? []).find((candidate) => candidate.id === presetId);
     if (!preset) return undefined;
@@ -2895,10 +3213,11 @@ export const useProjectStore = create<ProjectState>()(
         ...preset.settings,
         effects: preset.effects,
         midiEffects: preset.midiEffects,
+        order: options?.order,
       },
     );
 
-    const newTracks = [...state.project.tracks, track];
+    const newTracks = insertTrackPreservingOrder(state.project.tracks, track);
     set({
       project: {
         ...state.project,
@@ -3096,6 +3415,7 @@ export const useProjectStore = create<ProjectState>()(
 
   deleteTrackPreset: (presetId) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({
@@ -3313,6 +3633,20 @@ export const useProjectStore = create<ProjectState>()(
         : unifiedPreset.instrument.kind === 'fm' ? unifiedPreset.instrument.fallbackPreset
         : unifiedPreset.instrument.kind === 'wavetable' ? unifiedPreset.instrument.fallbackPreset
         : 'piano';
+      // Extract editable params from the unified instrument for the parameter editor.
+      const inst = unifiedPreset.instrument;
+      const editableFields: Partial<Track> = {};
+      if (inst.kind === 'subtractive') {
+        editableFields.synthOscillatorType = inst.settings.oscillator.waveform;
+        editableFields.synthEnvelope = { ...inst.settings.ampEnvelope };
+        if (inst.settings.filter.enabled) {
+          editableFields.synthFilter = {
+            type: inst.settings.filter.type,
+            frequency: inst.settings.filter.cutoffHz,
+            Q: inst.settings.filter.resonance,
+          };
+        }
+      }
       set({
         project: {
           ...state.project,
@@ -3322,6 +3656,7 @@ export const useProjectStore = create<ProjectState>()(
               ? {
                   ...t,
                   synthPresetDefinitionId: presetId,
+                  ...editableFields,
                   ...syncTrackInstrumentFields(t, {
                     instrument: structuredClone(unifiedPreset.instrument),
                     synthPreset: legacyPreset,
@@ -3362,6 +3697,18 @@ export const useProjectStore = create<ProjectState>()(
         outputGain: presetDef.outputGain ?? base.settings.outputGain,
       },
     };
+    // Populate editable fields from legacy preset definition.
+    const legacyEditableFields: Partial<Track> = {
+      synthOscillatorType: presetDef.waveform,
+      synthEnvelope: { ...presetDef.envelope },
+    };
+    if (presetDef.filter?.enabled) {
+      legacyEditableFields.synthFilter = {
+        type: presetDef.filter.type ?? 'lowpass',
+        frequency: presetDef.filter.cutoffHz ?? 1000,
+        Q: presetDef.filter.resonance ?? 1,
+      };
+    }
     set({
       project: {
         ...state.project,
@@ -3371,6 +3718,7 @@ export const useProjectStore = create<ProjectState>()(
             ? {
                 ...t,
                 synthPresetDefinitionId: presetId,
+                ...legacyEditableFields,
                 ...syncTrackInstrumentFields(t, {
                   instrument,
                   synthPreset: presetDef.legacyPreset,
@@ -3378,6 +3726,39 @@ export const useProjectStore = create<ProjectState>()(
               }
             : t,
         ),
+      },
+    });
+  },
+
+  updateSynthOscillatorType: (trackId, oscillatorType) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update oscillator type', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId) return t;
+          const nextTrack: typeof t = { ...t, synthOscillatorType: oscillatorType };
+          // Keep the modern instrument model in sync with the legacy field.
+          if (t.instrument?.kind === 'subtractive') {
+            return {
+              ...nextTrack,
+              instrument: {
+                ...t.instrument,
+                settings: {
+                  ...t.instrument.settings,
+                  oscillator: {
+                    ...t.instrument.settings.oscillator,
+                    waveform: oscillatorType,
+                  },
+                },
+              },
+            };
+          }
+          return nextTrack;
+        }),
       },
     });
   },
@@ -3619,6 +4000,57 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  updateGranularConfig: (trackId, config) => {
+    const state = get();
+    if (!state.project) return;
+    let didChange = false;
+    const nextTracks = state.project.tracks.map((t) => {
+      if (t.id !== trackId) return t;
+      const existing = t.granularConfig;
+      if (!existing && !('audioKey' in config)) return t;
+      didChange = true;
+      return {
+        ...t,
+        granularConfig: existing ? { ...existing, ...config } : config as GranularSettings,
+        instrument: t.instrument?.kind === 'granular'
+          ? { ...t.instrument, settings: { ...(t.instrument as { settings: GranularSettings }).settings, ...config } }
+          : t.instrument,
+      };
+    });
+    if (!didChange) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Configure granular', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: nextTracks,
+      },
+    });
+  },
+
+  clearGranularConfig: (trackId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Clear granular config', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                granularConfig: undefined,
+                instrument: t.instrument?.kind === 'granular'
+                  ? createDefaultSubtractiveInstrument()
+                  : t.instrument,
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
   addVelocityLayer: (trackId, layer) => {
     const state = get();
     if (!state.project) return;
@@ -3690,6 +4122,108 @@ export const useProjectStore = create<ProjectState>()(
                   velocityLayers: t.samplerConfig!.velocityLayers!.map((l, i) =>
                     i === index ? { ...l, ...partial } : l,
                   ),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  addSampleZone: (trackId, zone) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Add sample zone', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones: [...(t.samplerConfig!.zones ?? []), zone],
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  removeSampleZone: (trackId, zoneId) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig?.zones) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Remove sample zone', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones: t.samplerConfig!.zones!.filter((z) => z.id !== zoneId),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateSampleZone: (trackId, zoneId, partial) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig?.zones) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update sample zone', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones: t.samplerConfig!.zones!.map((z) =>
+                    z.id === zoneId ? { ...z, ...partial } : z,
+                  ),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  setSampleZones: (trackId, zones) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Set sample zones', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones,
                 },
               }
             : t,
@@ -3866,6 +4400,7 @@ export const useProjectStore = create<ProjectState>()(
       source: clipData.source,
       starred: clipData.starred,
       midiData: clipData.midiData,
+      videoMeta: clipData.videoMeta,
     };
 
     const newTracks = state.project.tracks.map((t) =>
@@ -3963,6 +4498,61 @@ export const useProjectStore = create<ProjectState>()(
         ...state.project,
         updatedAt: Date.now(),
         totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  addClipTag: (clipId, tag) => {
+    const normalized = tag.trim();
+    if (!normalized) return;
+
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
+    if (!clip) return;
+    if (clip.tags?.includes(normalized)) return;
+
+    _pushHistory(state.project, { label: `Tag clip "${normalized}"`, scope: 'arrangement' });
+    const newTracks = state.project.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) =>
+        c.id === clipId ? { ...c, tags: [...(c.tags ?? []), normalized] } : c,
+      ),
+    }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  removeClipTag: (clipId, tag) => {
+    const normalized = tag.trim();
+    if (!normalized) return;
+
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
+    if (!clip || !clip.tags?.includes(normalized)) return;
+
+    _pushHistory(state.project, { label: `Untag clip "${normalized}"`, scope: 'arrangement' });
+    const newTracks = state.project.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) =>
+        c.id === clipId ? { ...c, tags: c.tags?.filter((label) => label !== normalized) } : c,
+      ),
+    }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
         tracks: newTracks,
       },
     });
@@ -4285,7 +4875,7 @@ export const useProjectStore = create<ProjectState>()(
         try {
           const blob = await loadAudioBlobByKey(audioKey);
           if (blob) {
-            const engine = audioEngineHooks.getAudioEngine();
+            const engine = (await getAudioEngineModule()).getAudioEngine();
             const buffer = await engine.decodeAudioData(blob);
             const samples = buffer.getChannelData(0);
             rangeStart = snapClipBoundaryToAudio(sourceClip, rangeStart, samples, buffer.sampleRate);
@@ -4504,7 +5094,7 @@ export const useProjectStore = create<ProjectState>()(
         return;
       }
 
-      const engine = audioEngineHooks.getAudioEngine();
+      const engine = (await getAudioEngineModule()).getAudioEngine();
       const buffer = await engine.decodeAudioData(blob);
       const samples = buffer.getChannelData(0);
 
@@ -4542,7 +5132,7 @@ export const useProjectStore = create<ProjectState>()(
       const blob = await loadAudioBlobByKey(audioKey);
       if (!blob) return;
 
-      const engine = audioEngineHooks.getAudioEngine();
+      const engine = (await getAudioEngineModule()).getAudioEngine();
       const buffer = await engine.decodeAudioData(blob);
       const samples = buffer.getChannelData(0);
       const audioOffset = clip.audioOffset ?? 0;
@@ -4628,7 +5218,14 @@ export const useProjectStore = create<ProjectState>()(
     const lyrics = clips.map((clip) => clip.lyrics.trim()).filter(Boolean).join('\n');
     const source = clips.every((clip) => clip.source === 'generated') ? 'generated' : 'uploaded';
 
+    const historyBucket = _history.arrangement[GLOBAL_HISTORY_BUCKET];
+    const previousHistoryTail = historyBucket?.[historyBucket.length - 1];
     _pushHistory(state.project);
+    // Capture only an entry actually pushed by this action so rollback does not
+    // remove a pre-existing drag-batch snapshot when _pushHistory is a no-op.
+    const pushedEntry = historyBucket?.[historyBucket.length - 1] !== previousHistoryTail
+      ? historyBucket?.[historyBucket.length - 1]
+      : undefined;
 
     let consolidatedClip: Clip;
     if (mediaType === 'midi') {
@@ -4670,7 +5267,10 @@ export const useProjectStore = create<ProjectState>()(
           audioOffset: 0,
         };
       } catch (error) {
-        _history.arrangement[GLOBAL_HISTORY_BUCKET]?.pop();
+        // Remove our entry if it's still the most recent (identity check)
+        if (pushedEntry && historyBucket && historyBucket.length > 0 && historyBucket[historyBucket.length - 1] === pushedEntry) {
+          historyBucket.pop();
+        }
         toastError(error instanceof Error ? error.message : 'Unable to consolidate the selected audio clips');
         return undefined;
       }
@@ -5262,6 +5862,42 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setSessionSlotTempo: (slotId, tempo) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const slotIndex = session.slots.findIndex((s) => s.id === slotId);
+    if (slotIndex === -1) return;
+    _pushHistory(state.project);
+    const nextSlots = [...session.slots];
+    nextSlots[slotIndex] = { ...nextSlots[slotIndex], tempo };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, slots: nextSlots },
+      },
+    });
+  },
+
+  setSessionSlotTimeSignature: (slotId, timeSignature) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const slotIndex = session.slots.findIndex((s) => s.id === slotId);
+    if (slotIndex === -1) return;
+    _pushHistory(state.project);
+    const nextSlots = [...session.slots];
+    nextSlots[slotIndex] = { ...nextSlots[slotIndex], timeSignature };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, slots: nextSlots },
+      },
+    });
+  },
+
   launchSessionClip: (trackId, sceneId) => {
     const state = get();
     if (!state.project) return;
@@ -5287,23 +5923,40 @@ export const useProjectStore = create<ProjectState>()(
       ? transport.currentTime
       : getQuantizedLaunchTime(transport.currentTime, getSessionQuantizationSeconds(state.project, effectiveQuantization));
 
+    // Apply per-slot tempo/time signature overrides
+    let projectWithOverrides = state.project;
+    if (slot.tempo) {
+      projectWithOverrides = { ...projectWithOverrides, bpm: slot.tempo, updatedAt: Date.now() };
+    }
+    if (slot.timeSignature) {
+      projectWithOverrides = {
+        ...projectWithOverrides,
+        timeSignature: slot.timeSignature[0],
+        timeSignatureDenominator: slot.timeSignature[1],
+        updatedAt: Date.now(),
+      };
+    }
+
     if (isImmediate) {
       set({
-        project: applySessionTrackLaunch(state.project, trackId, slot.clipId, executeAt, 'clip', sceneId),
+        project: applySessionTrackLaunch(projectWithOverrides, trackId, slot.clipId, executeAt, 'clip', sceneId),
       });
       return;
     }
 
     set({
       project: {
-        ...state.project,
-        session: queuePendingSessionLaunch(session, {
-          type: 'clip',
-          trackId,
-          sceneId,
-          clipId: slot.clipId,
-          executeAt,
-        }),
+        ...projectWithOverrides,
+        session: queuePendingSessionLaunch(
+          ensureProjectSession(projectWithOverrides).session!,
+          {
+            type: 'clip',
+            trackId,
+            sceneId,
+            clipId: slot.clipId,
+            executeAt,
+          },
+        ),
       },
     });
   },
@@ -5318,8 +5971,26 @@ export const useProjectStore = create<ProjectState>()(
       ? transport.currentTime
       : getQuantizedLaunchTime(transport.currentTime, getSessionQuantizationSeconds(state.project, session.quantization));
 
+    // Find the launched scene to apply tempo/time-signature overrides
+    const launchedScene = session.scenes.find((s) => s.id === sceneId);
+
     if (isImmediate) {
       let nextProject = state.project;
+
+      // Apply scene tempo override
+      if (launchedScene?.tempo != null) {
+        nextProject = { ...nextProject, bpm: launchedScene.tempo, updatedAt: Date.now() };
+      }
+      // Apply scene time signature override
+      if (launchedScene?.timeSignature != null) {
+        nextProject = {
+          ...nextProject,
+          timeSignature: launchedScene.timeSignature[0],
+          timeSignatureDenominator: launchedScene.timeSignature[1],
+          updatedAt: Date.now(),
+        };
+      }
+
       for (const slot of session.slots.filter((candidate) => candidate.sceneId === sceneId && candidate.clipId)) {
         nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, executeAt, 'scene', sceneId);
       }
@@ -5327,13 +5998,41 @@ export const useProjectStore = create<ProjectState>()(
       for (const slot of session.slots.filter((candidate) => candidate.sceneId === sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
         nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, executeAt, 'stop');
       }
+      // Apply scene tempo/timeSig overrides (using launchedScene from outer scope)
+      if (launchedScene?.tempo) {
+        nextProject = { ...nextProject, bpm: launchedScene.tempo };
+      }
+      if (launchedScene?.timeSignature) {
+        nextProject = {
+          ...nextProject,
+          timeSignature: launchedScene.timeSignature[0],
+          timeSignatureDenominator: launchedScene.timeSignature[1],
+        };
+      }
       set({ project: nextProject });
+      // Schedule scene follow action (e.g., auto-advance to next scene)
+      // Schedule scene follow action for immediate launch
+      get().scheduleSceneFollowAction(sceneId, executeAt);
       return;
+    }
+
+    // For quantized launches, apply overrides and queue the launch
+    let nextProject = state.project;
+    if (launchedScene?.tempo != null) {
+      nextProject = { ...nextProject, bpm: launchedScene.tempo, updatedAt: Date.now() };
+    }
+    if (launchedScene?.timeSignature != null) {
+      nextProject = {
+        ...nextProject,
+        timeSignature: launchedScene.timeSignature[0],
+        timeSignatureDenominator: launchedScene.timeSignature[1],
+        updatedAt: Date.now(),
+      };
     }
 
     set({
       project: {
-        ...state.project,
+        ...nextProject,
         session: queuePendingSessionLaunch(session, {
           type: 'scene',
           sceneId,
@@ -5411,6 +6110,7 @@ export const useProjectStore = create<ProjectState>()(
       .sort((a, b) => a.executeAt - b.executeAt || a.requestedAt - b.requestedAt);
     if (ready.length === 0) return;
 
+    const launchedSceneIds: Array<{ sceneId: string; executeAt: number }> = [];
     let nextProject: Project = {
       ...ensureProjectSession(state.project),
       session: {
@@ -5419,12 +6119,15 @@ export const useProjectStore = create<ProjectState>()(
       },
     };
 
+    // Collect scene launches that need follow action scheduling
+    const sceneLaunchesForFollowAction: Array<{ sceneId: string; executeAt: number }> = [];
+
     for (const launch of ready) {
       if (launch.type === 'clip' && launch.trackId) {
         nextProject = applySessionTrackLaunch(nextProject, launch.trackId, launch.clipId ?? null, launch.executeAt, 'clip', launch.sceneId ?? null);
         continue;
       }
-      if (launch.type === 'scene' && launch.sceneId) {
+      if ((launch.type === 'scene' || launch.type === 'scene-follow-action') && launch.sceneId) {
         const nextSession = ensureProjectSession(nextProject).session!;
         for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && candidate.clipId)) {
           nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, launch.executeAt, 'scene', launch.sceneId);
@@ -5433,6 +6136,21 @@ export const useProjectStore = create<ProjectState>()(
         for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
           nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, launch.executeAt, 'stop');
         }
+        // Apply scene tempo/timeSig overrides
+        const launchedScene = nextSession.scenes.find((s) => s.id === launch.sceneId);
+        if (launchedScene?.tempo) {
+          nextProject = { ...nextProject, bpm: launchedScene.tempo };
+        }
+        if (launchedScene?.timeSignature) {
+          nextProject = {
+            ...nextProject,
+            timeSignature: launchedScene.timeSignature[0],
+            timeSignatureDenominator: launchedScene.timeSignature[1],
+          };
+        }
+        sceneLaunchesForFollowAction.push({ sceneId: launch.sceneId, executeAt: launch.executeAt });
+        // Track launched scene for follow action scheduling
+        launchedSceneIds.push({ sceneId: launch.sceneId, executeAt: launch.executeAt });
         continue;
       }
       if (launch.type === 'stop-track' && launch.trackId) {
@@ -5448,6 +6166,25 @@ export const useProjectStore = create<ProjectState>()(
         }
         continue;
       }
+      if (launch.type === 'scene-follow-action') {
+        if (launch.sceneId) {
+          // Scene follow action: launch the target scene
+          const nextSession = ensureProjectSession(nextProject).session!;
+          for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && candidate.clipId)) {
+            nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, launch.executeAt, 'scene', launch.sceneId!);
+          }
+          for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
+            nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, launch.executeAt, 'stop');
+          }
+          launchedSceneIds.push({ sceneId: launch.sceneId, executeAt: launch.executeAt });
+        } else {
+          // Scene follow action resolved to stop-all
+          for (const track of nextProject.tracks) {
+            nextProject = applySessionTrackLaunch(nextProject, track.id, null, launch.executeAt, 'stop');
+          }
+        }
+        continue;
+      }
       if (launch.type === 'stop-all') {
         for (const track of nextProject.tracks) {
           nextProject = applySessionTrackLaunch(nextProject, track.id, null, launch.executeAt, 'stop');
@@ -5456,6 +6193,11 @@ export const useProjectStore = create<ProjectState>()(
     }
 
     set({ project: nextProject });
+
+    // Schedule scene follow actions after state is updated
+    for (const { sceneId, executeAt } of sceneLaunchesForFollowAction) {
+      get().scheduleSceneFollowAction(sceneId, executeAt);
+    }
   },
 
   setSessionSlotFollowAction: (slotId, config) => {
@@ -5732,6 +6474,239 @@ export const useProjectStore = create<ProjectState>()(
         },
       },
     });
+  },
+
+  aiFillSessionSlot: (slotId) => {
+    const state = get();
+    if (!state.project) return null;
+    const session = ensureProjectSession(state.project).session!;
+
+    const slot = session.slots.find((s) => s.id === slotId);
+    if (!slot || slot.clipId) return null;
+
+    const track = state.project.tracks.find((t) => t.id === slot.trackId);
+    if (!track) return null;
+
+    const sceneIndex = session.scenes.findIndex((s) => s.id === slot.sceneId);
+    const trackSlots = session.slots
+      .filter((s) => s.trackId === slot.trackId && s.clipId)
+      .map((s) => ({
+        ...s,
+        sceneIdx: session.scenes.findIndex((sc) => sc.id === s.sceneId),
+      }))
+      .sort((a, b) => a.sceneIdx - b.sceneIdx);
+
+    let contextPrompt = '';
+    let contextCaption = state.project.globalCaption ?? '';
+    const adjacentClips = trackSlots
+      .map((s) => ({ slot: s, clip: track.clips.find((c) => c.id === s.clipId), distance: Math.abs(s.sceneIdx - sceneIndex) }))
+      .filter((x) => x.clip)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 3);
+
+    if (adjacentClips.length > 0) {
+      const prompts = adjacentClips.map((x) => x.clip!.prompt).filter(Boolean);
+      contextPrompt = prompts.length > 0
+        ? `Continue from: ${prompts.join('; ')}`
+        : `${track.displayName} fill`;
+      if (!contextCaption && adjacentClips[0].clip!.globalCaption) {
+        contextCaption = adjacentClips[0].clip!.globalCaption;
+      }
+    } else {
+      contextPrompt = `${track.displayName} fill`;
+    }
+
+    const beatsPerBar = state.project.timeSignature ?? 4;
+    const clipBars = 4;
+    const beatDuration = 60 / Math.max(1, state.project.bpm);
+    const duration = clipBars * beatsPerBar * beatDuration;
+
+    const clip = get().addClip(slot.trackId, {
+      startTime: sceneIndex * duration,
+      duration,
+      prompt: contextPrompt,
+      globalCaption: contextCaption,
+      lyrics: '',
+      source: 'generated',
+    });
+
+    const updatedSession = get().project!.session!;
+    const updatedSlot = updatedSession.slots.find((s) => s.id === slotId);
+    if (updatedSlot && updatedSlot.clipId !== clip.id) {
+      const nextSlots = updatedSession.slots.map((s) => {
+        if (s.id === slotId) return { ...s, clipId: clip.id };
+        if (s.clipId === clip.id && s.id !== slotId) return { ...s, clipId: null };
+        return s;
+      });
+      set({
+        project: {
+          ...get().project!,
+          session: { ...updatedSession, slots: nextSlots },
+        },
+      });
+    }
+
+    return clip;
+  },
+
+  setSessionSceneFollowActionConfig: (sceneId, config) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    if (!session.scenes.some((s) => s.id === sceneId)) return;
+    _pushHistory(state.project);
+    const clampedChance = Math.max(0, Math.min(1, config.chanceA));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          scenes: session.scenes.map((scene) =>
+            scene.id === sceneId
+              ? { ...scene, followActionConfig: { ...config, chanceA: clampedChance } }
+              : scene,
+          ),
+        },
+      },
+    });
+  },
+
+  clearSessionSceneFollowActionConfig: (sceneId) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          scenes: session.scenes.map((scene) =>
+            scene.id === sceneId
+              ? { ...scene, followActionConfig: undefined }
+              : scene,
+          ),
+        },
+      },
+    });
+  },
+
+  startSessionSlotRecording: (slotId) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const existing = session.recordingSlotIds ?? [];
+    if (existing.includes(slotId)) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, recordingSlotIds: [...existing, slotId] },
+      },
+    });
+  },
+
+  stopSessionSlotRecording: (slotId) => {
+    const state = get();
+    if (!state.project?.session) return;
+    const session = state.project.session;
+    const existing = session.recordingSlotIds ?? [];
+    if (!existing.includes(slotId)) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, recordingSlotIds: existing.filter((id) => id !== slotId) },
+      },
+    });
+  },
+
+  stopAllSessionSlotRecordings: () => {
+    const state = get();
+    if (!state.project?.session) return;
+    const session = state.project.session;
+    if (!session.recordingSlotIds?.length) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, recordingSlotIds: [] },
+      },
+    });
+  },
+
+  setSessionFixedLengthBars: (bars) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, fixedLengthBars: bars },
+      },
+    });
+  },
+
+  scheduleSceneFollowAction: (sceneId, launchTime) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+
+    // Check global toggle (default true)
+    if (session.followActionsEnabled === false) return;
+
+    const scene = session.scenes.find((s) => s.id === sceneId);
+    if (!scene) return;
+
+    // Determine the follow action to use
+    let targetSceneIndex: number | null = null;
+
+    if (scene.followActionConfig) {
+      // Dual A/B with probability
+      targetSceneIndex = resolveSceneFollowAction(scene, session.scenes);
+    } else if (scene.followAction && scene.followAction !== 'none') {
+      // Legacy single follow action — construct a temp scene with followAction for the resolver
+      targetSceneIndex = resolveSceneFollowAction(scene, session.scenes);
+    } else {
+      return; // No follow action configured
+    }
+
+    if (targetSceneIndex === null) return;
+
+    // Calculate execute time: launchTime + followActionTime bars
+    const bars = scene.followActionTime ?? 4;
+    const beatDuration = 60 / Math.max(1, state.project.bpm);
+    const beatsPerBar = state.project.timeSignature ?? 4;
+    const executeAt = launchTime + bars * beatsPerBar * beatDuration;
+
+    if (targetSceneIndex === -1) {
+      // Stop all — use scene-follow-action to avoid wiping other pending launches
+      set({
+        project: {
+          ...state.project,
+          session: queuePendingSessionLaunch(session, {
+            type: 'scene-follow-action',
+            executeAt,
+          }),
+        },
+      });
+    } else {
+      // Launch target scene — use scene-follow-action to avoid wiping other pending launches
+      const targetScene = session.scenes[targetSceneIndex];
+      if (!targetScene) return;
+      set({
+        project: {
+          ...state.project,
+          session: queuePendingSessionLaunch(session, {
+            type: 'scene-follow-action',
+            sceneId: targetScene.id,
+            executeAt,
+          }),
+        },
+      });
+    }
   },
 
   removeAsset: (assetId) => {
@@ -6498,6 +7473,150 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setDrumPadTune: (trackId, padIndex, tune) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad tune', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, tune: Math.max(-24, Math.min(24, Number.isFinite(tune) ? tune : p.tune)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadDecay: (trackId, padIndex, decay) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad decay', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, decay: Math.max(0, Math.min(1, Number.isFinite(decay) ? decay : p.decay)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadFilter: (trackId, padIndex, filterUpdate) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad filter', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) => {
+                if (i !== padIndex) return p;
+                const merged = { ...p.filter, ...filterUpdate };
+                // Validate filter type against allowed values
+                const validTypes = new Set<string>(['off', 'lowpass', 'highpass']);
+                const safeType = validTypes.has(merged.type) ? merged.type : p.filter.type;
+                // Auto-adjust cutoff when filter type changes to avoid inaudible defaults
+                let cutoffSource = Number.isFinite(merged.cutoff) ? merged.cutoff : p.filter.cutoff;
+                if (filterUpdate.type && safeType !== p.filter.type && filterUpdate.cutoff === undefined) {
+                  cutoffSource = safeType === 'highpass' ? 200 : 20000;
+                }
+                return {
+                  ...p,
+                  filter: {
+                    type: safeType as 'off' | 'lowpass' | 'highpass',
+                    cutoff: Math.max(20, Math.min(20000, cutoffSource)),
+                  },
+                };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadDrive: (trackId, padIndex, drive) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad drive', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, drive: Math.max(0, Math.min(1, Number.isFinite(drive) ? drive : p.drive)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadSend: (trackId, padIndex, sendUpdate) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad sends', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) => {
+                if (i !== padIndex) return p;
+                const merged = { ...p.send, ...sendUpdate };
+                return {
+                  ...p,
+                  send: {
+                    reverb: Number.isFinite(merged.reverb) ? Math.max(0, Math.min(1, merged.reverb)) : p.send.reverb,
+                    delay: Number.isFinite(merged.delay) ? Math.max(0, Math.min(1, merged.delay)) : p.send.delay,
+                  },
+                };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
   renameDrumPad: (trackId, padIndex, name) => {
     const state = get();
     if (!state.project) return;
@@ -6604,7 +7723,7 @@ export const useProjectStore = create<ProjectState>()(
     const audioKey = await saveAudioBlob(get().project!.id, clipId, 'isolated', wavBlob);
 
     // Compute waveform peaks for visual display
-    const waveformPeaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const waveformPeaks = await computeWaveformWithMipmap(audioKey, audioBuffer);
 
     // Create a new stems track with the rendered audio clip
     const newTrack = createTrackFromTemplate(
@@ -7429,6 +8548,24 @@ export const useProjectStore = create<ProjectState>()(
       (lane) => lane.trackId === trackId && automationParamEquals(lane.parameter, parameter),
     );
     if (existingLane) return;
+
+    // Warn if this automation lane conflicts with an active LFO (#1023)
+    if (parameter.type === 'effect') {
+      const track = state.project.tracks.find((t) => t.id === trackId);
+      if (track) {
+        const effect = (track.effects ?? []).find((e) => e.id === parameter.effectId);
+        if (effect) {
+          const conflictLane = { id: '', trackId, parameter, points: [] as { time: number; value: number }[] };
+          if (detectLfoAutomationConflict(effect, conflictLane)) {
+            log.warn(
+              `Automation lane for ${parameter.param} on ${parameter.effectType} conflicts with active LFO. ` +
+              `Automation will control the LFO base value instead of the parameter directly.`,
+            );
+          }
+        }
+      }
+    }
+
     _pushHistory(state.project);
     const lanes = [
       ...(state.project.automationLanes ?? []),
@@ -7946,12 +9083,54 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     if (!state.project) return;
     _pushHistory(state.project);
-    const marker: Marker = { id: uuidv4(), time, name, color: '#facc15' };
+    const marker: Marker = { id: uuidv4(), time, name, color: '#facc15', type: 'generic' };
     set({
       project: {
         ...state.project,
         updatedAt: Date.now(),
         markers: [...(state.project.markers ?? []), marker],
+      },
+    });
+  },
+
+  addTypedMarker: (time, name, type) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const colorMap: Record<MarkerType, string> = {
+      generic: '#ffffff',
+      scene: '#3b82f6',
+      cue: '#facc15',
+      hit: '#ef4444',
+    };
+    const marker: Marker = { id: uuidv4(), time, name, color: colorMap[type] ?? '#ffffff', type };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        markers: [...(state.project.markers ?? []), marker],
+      },
+    });
+  },
+
+  addSceneMarkers: (cutTimes) => {
+    const state = get();
+    if (!state.project || cutTimes.length === 0) return;
+    _pushHistory(state.project);
+    // Sort chronologically and de-duplicate
+    const sorted = [...new Set(cutTimes)].sort((a, b) => a - b);
+    const newMarkers: Marker[] = sorted.map((time, i) => ({
+      id: uuidv4(),
+      time,
+      name: `Scene ${i + 1}`,
+      color: '#3b82f6',
+      type: 'scene' as const,
+    }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        markers: [...(state.project.markers ?? []), ...newMarkers],
       },
     });
   },
@@ -7977,9 +9156,16 @@ export const useProjectStore = create<ProjectState>()(
       project: {
         ...state.project,
         updatedAt: Date.now(),
-        markers: (state.project.markers ?? []).map((m) =>
-          m.id === id ? { ...m, ...updates } : m,
-        ),
+        markers: (state.project.markers ?? []).map((m) => {
+          if (m.id !== id) return m;
+          const updated = { ...m };
+          if (updates.time !== undefined) updated.time = updates.time;
+          if (updates.name !== undefined) updated.name = updates.name;
+          if (updates.color !== undefined) updated.color = updates.color;
+          if ('type' in updates) updated.type = updates.type;
+          if ('endTime' in updates) updated.endTime = updates.endTime;
+          return updated;
+        }),
       },
     });
   },
@@ -8166,7 +9352,7 @@ export const useProjectStore = create<ProjectState>()(
     return Math.max(MIN_TIMELINE_DURATION, maxEnd);
   },
 
-  separateStems: async (clipId, stemCount) => {
+  separateStems: async (clipId, stemCount, engine) => {
     const state = get();
     const project = state.project;
     if (!project) return undefined;
@@ -8191,11 +9377,13 @@ export const useProjectStore = create<ProjectState>()(
       throw new Error(`Audio for clip '${clipId}' not found`);
     }
 
+    const { separateClipAudioToStems } = await import('../services/stemSeparation');
     const preparedStems = await separateClipAudioToStems({
       clipId,
       sourceBlob,
       stemCount,
       sourceLabel: sourceTrack.displayName,
+      engine,
     });
 
     const latest = get();
@@ -8299,6 +9487,7 @@ export const useProjectStore = create<ProjectState>()(
     if (!audioKey) return undefined;
 
     const bpm = state.project.bpm;
+    const { convertClipAudioToMidi } = await import('../services/audioToMidi');
     const result = await convertClipAudioToMidi(audioKey, bpm, {
       threshold: options?.threshold ?? 0.15,
       minConfidence: options?.minConfidence ?? 0.5,
@@ -8329,7 +9518,8 @@ export const useProjectStore = create<ProjectState>()(
     const project = get().project;
     if (!project) return;
 
-    const engine = audioEngineHooks.getAudioEngine();
+    const engine = (await getAudioEngineModule()).getAudioEngine();
+    const { exportTrackStems, getStemExportTracks, trackHasExportableContent } = await import('../engine/exportMix');
     const exportableTracks = getStemExportTracks(project, { scope: 'all-audible' }).filter(trackHasExportableContent);
     const stemExports = await exportTrackStems(
       project,
@@ -8608,6 +9798,7 @@ export const useProjectStore = create<ProjectState>()(
 
   extractGrooveFromClip: (clipId, name, options) => {
     const state = get();
+    if (_isViewerMode()) return undefined;
     if (!state.project) return undefined;
 
     let notes: MidiNote[] | undefined;
@@ -8649,7 +9840,7 @@ export const useProjectStore = create<ProjectState>()(
 
     const bpm = state.project.bpm;
     const timeSig = state.project.timeSignature;
-    const bars = options?.bars ?? 4;
+    const bars = options?.bars ?? 8;
 
     const result = captureService.drain(trackId, captureTime, bpm, timeSig, bars);
     if (!result) return undefined;
@@ -8694,6 +9885,16 @@ export const useProjectStore = create<ProjectState>()(
       t.id === trackId ? { ...t, clips: [...t.clips, clip] } : t,
     );
 
+    // Auto-assign captured clip to session slot so it appears in the session grid.
+    // Reuse the existing normalized session when available to avoid the extra
+    // project-wide recomputation performed by ensureProjectSession(...).
+    const normalizedSession = state.project.session ?? ensureProjectSession(state.project).session!;
+    const session = autoAssignClipToSession(
+      normalizedSession,
+      trackId,
+      clip.id,
+    );
+
     set({
       project: {
         ...state.project,
@@ -8708,6 +9909,7 @@ export const useProjectStore = create<ProjectState>()(
           state.project.timeSignatureMap,
         ),
         tracks: newTracks,
+        session,
       },
     });
 
@@ -8717,6 +9919,7 @@ export const useProjectStore = create<ProjectState>()(
 
   applyGrooveToClip: (clipId, noteIds, grooveId, options) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
 
     const groove = state.project.groovePool?.find((g) => g.id === grooveId);
@@ -8747,6 +9950,7 @@ export const useProjectStore = create<ProjectState>()(
 
   addGrooveTemplate: (template) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({
@@ -8760,6 +9964,7 @@ export const useProjectStore = create<ProjectState>()(
 
   deleteGrooveTemplate: (grooveId) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({
@@ -8848,6 +10053,7 @@ export const useProjectStore = create<ProjectState>()(
 
   renameGrooveTemplate: (grooveId, name) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({

@@ -9,9 +9,11 @@
  * Left to other layers: human audible mix judgment and dense layout review.
  */
 import { test, expect } from '@playwright/test';
+import { dismissWelcomeOverlay } from '../support/e2eStartup';
 
-test.describe('Mixer Operations', () => {
+test.describe('Mixer Operations @critical', () => {
   test.beforeEach(async ({ page }) => {
+    await dismissWelcomeOverlay(page);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(() => typeof (window as any).__store !== 'undefined', null, { timeout: 10000 });
@@ -105,7 +107,13 @@ test.describe('Mixer Operations', () => {
   });
 
   test('keeps the AI Master panel and master fader separated at minimum mixer height', async ({ page }) => {
-    await page.getByText('Click anywhere to enable audio').click();
+    // Resume AudioContext programmatically (the old "Click anywhere to enable audio" overlay was removed)
+    await page.evaluate(async () => {
+      const engine = (window as any).__getAudioEngine();
+      if (engine?.ctx?.state === 'suspended') {
+        await engine.ctx.resume();
+      }
+    });
 
     await page.evaluate(async () => {
       const store = (window as any).__store;
@@ -186,10 +194,6 @@ test.describe('Mixer Operations', () => {
 
     const resetButton = page.getByRole('button', { name: `Reset clip indicator for ${trackId}` });
     await expect(resetButton).toBeVisible();
-    const enableAudioOverlay = page.getByText('Click anywhere to enable audio');
-    if (await enableAudioOverlay.isVisible()) {
-      await enableAudioOverlay.click();
-    }
     await resetButton.click();
     await expect(resetButton).toBeHidden();
   });

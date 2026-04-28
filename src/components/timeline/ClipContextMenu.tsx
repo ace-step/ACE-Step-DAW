@@ -1,6 +1,8 @@
 import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import { AIToolsSubmenu, type ClipAIContext } from './AIToolsSubmenu';
+import { WarpStretchSubmenu } from './WarpStretchSubmenu';
+import type { Clip } from '../../types/project';
 
 interface ClipContextMenuProps {
   x: number;
@@ -20,6 +22,7 @@ interface ClipContextMenuProps {
   onOpenMidi?: () => void;
   onExportMidi?: () => void;
   onConvertToStrudel?: () => void;
+  onExtractGroove?: () => void;
 
   /* Editing */
   onEdit: () => void;
@@ -49,6 +52,9 @@ interface ClipContextMenuProps {
   hasCustomColor: boolean;
   canConsolidate: boolean;
   isMidiClip: boolean;
+
+  /* Warp & Stretch (audio clips only) */
+  clip?: Clip;
 }
 
 export function ClipContextMenu({
@@ -63,6 +69,7 @@ export function ClipContextMenu({
   onOpenMidi,
   onExportMidi,
   onConvertToStrudel,
+  onExtractGroove,
   onEdit,
   onDuplicate,
   onSplitAtPlayhead,
@@ -84,6 +91,7 @@ export function ClipContextMenu({
   hasCustomColor,
   canConsolidate,
   isMidiClip,
+  clip,
 }: ClipContextMenuProps) {
   const openLeft = x + 190 + 140 + 20 > window.innerWidth;
 
@@ -117,6 +125,17 @@ export function ClipContextMenu({
           {onExportMidi && (
             <ContextMenuItem label="Export MIDI Clip..." onClick={onExportMidi} color="#a5f3fc" />
           )}
+          {onExtractGroove && (
+            <ContextMenuItem label="Extract Groove..." onClick={onExtractGroove} color="#6ee7b7" />
+          )}
+        </>
+      )}
+
+      {/* Warp & Stretch (audio clips only) */}
+      {clip && !isMidiClip && (
+        <>
+          <ContextMenuSeparator />
+          <WarpStretchSubmenu clip={clip} openLeft={openLeft} onClose={onClose} />
         </>
       )}
 

@@ -36,7 +36,7 @@ describe('ClipContextMenu split option', () => {
 
   it('renders "Split" button', () => {
     renderMenu();
-    expect(screen.getByText('Split')).toBeTruthy();
+    screen.getByText('Split'); // getBy* throws if not found
   });
 
   it('calls onSplitAtPlayhead when clicked', () => {
@@ -50,8 +50,8 @@ describe('ClipContextMenu split option', () => {
     renderMenu();
     const label = screen.getByText('Split');
     const button = label.closest('button')!;
-    const shortcutSpan = button.querySelectorAll('span')[1];
-    expect(shortcutSpan?.textContent).toBe('⌘E');
+    const shortcutKbd = button.querySelector('kbd');
+    expect(shortcutKbd?.textContent).toBe('⌘E');
   });
 });
 
@@ -63,7 +63,7 @@ describe('ClipContextMenu inline color swatches', () => {
   it('renders inline color swatches', () => {
     renderMenu();
     const palette = screen.getByTestId('color-swatch-palette');
-    expect(palette).toBeTruthy();
+    expect(palette).not.toBeNull();
     const buttons = palette.querySelectorAll('button');
     expect(buttons.length).toBe(TRACK_COLOR_PALETTE.length);
   });
@@ -78,7 +78,7 @@ describe('ClipContextMenu inline color swatches', () => {
   it('shows reset button when clip has custom color', () => {
     renderMenu({ hasCustomColor: true });
     const resetBtn = screen.getByLabelText('Reset to track color');
-    expect(resetBtn).toBeTruthy();
+    expect(resetBtn).not.toBeNull();
   });
 
   it('emits reset when reset button clicked', () => {
@@ -101,7 +101,7 @@ describe('ClipContextMenu AI Tools submenu', () => {
 
   it('renders AI Tools submenu trigger', () => {
     renderMenu();
-    expect(screen.getByText('AI Tools')).toBeTruthy();
+    screen.getByText('AI Tools'); // getBy* throws if not found
   });
 
   it('shows AI Tools submenu on hover', () => {
@@ -109,9 +109,9 @@ describe('ClipContextMenu AI Tools submenu', () => {
     const trigger = screen.getByTestId('ai-tools-submenu-trigger');
     fireEvent.mouseEnter(trigger);
     act(() => { vi.advanceTimersByTime(100); });
-    expect(screen.getByText('Inspire Me')).toBeTruthy();
-    expect(screen.getByText('Add a Layer')).toBeTruthy();
-    expect(screen.getByText('Music Enhancer')).toBeTruthy();
+    screen.getByText('Inspire Me'); // getBy* throws if not found
+    screen.getByText('Add a Layer');
+    screen.getByText('Music Enhancer');
   });
 
   it('shows clip-specific AI tools when clipAIContext is provided', () => {
@@ -126,7 +126,7 @@ describe('ClipContextMenu AI Tools submenu', () => {
     const trigger = screen.getByTestId('ai-tools-submenu-trigger');
     fireEvent.mouseEnter(trigger);
     act(() => { vi.advanceTimersByTime(100); });
-    expect(screen.getByText('Regenerate')).toBeTruthy();
-    expect(screen.getByText('Analyze Audio...')).toBeTruthy();
+    screen.getByText('Regenerate'); // getBy* throws if not found
+    screen.getByText('Analyze Audio...');
   });
 });

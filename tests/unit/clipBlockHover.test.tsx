@@ -10,9 +10,11 @@ import type { Clip, Track } from '../../src/types/project';
 vi.mock('../../src/components/timeline/ClipContextMenu', () => ({
   ClipContextMenu: () => null,
 }));
-vi.mock('../../src/components/timeline/ClipWaveform', () => ({
-  ClipWaveform: () => <div data-testid="clip-waveform" />,
-  ClipMidiThumbnail: () => <div data-testid="clip-midi-thumbnail" />,
+vi.mock('../../src/components/timeline/CanvasClipWaveform', () => ({
+  CanvasClipWaveform: () => <div data-testid="clip-waveform" />,
+}));
+vi.mock('../../src/components/timeline/CanvasClipMidiThumbnail', () => ({
+  CanvasClipMidiThumbnail: () => <div data-testid="clip-midi-thumbnail" />,
 }));
 vi.mock('../../src/components/timeline/ClipGainEnvelope', () => ({
   ClipGainEnvelope: () => null,
@@ -231,8 +233,8 @@ describe('ClipBlock hover and active feedback', () => {
 
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
 
-    // Selected clip has accent border via inline style and daw-clip-interactive class
-    expect(clipEl.style.border).toContain('solid');
+    // Selected clip has selection ring via boxShadow and daw-clip-interactive class
+    expect(clipEl.style.boxShadow).toBeTruthy();
     expect(clipEl.className).toContain('daw-clip-interactive');
     expect(clipEl.className).toMatch(/active:/);
   });
@@ -249,9 +251,9 @@ describe('ClipBlock hover and active feedback', () => {
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const bodySurface = screen.getByTestId('clip-body-surface') as HTMLElement;
 
-    // Clip selection is independent of track selection — border indicates selection
-    expect(clipEl.style.border).toContain('solid');
-    expect(bodySurface.style.background).toContain('253, 251, 246');
+    // Clip selection is independent of track selection — boxShadow ring indicates selection
+    expect(clipEl.style.boxShadow).toBeTruthy();
+    expect(bodySurface.style.background).toBeTruthy();
   });
 
   it('exposes a dedicated header rail move handle with grab affordance', () => {

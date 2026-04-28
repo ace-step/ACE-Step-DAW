@@ -16,7 +16,7 @@ describe('viewer mode enforcement', () => {
   describe('when viewer mode is OFF, mutations work normally', () => {
     it('addTrack creates a track', () => {
       const track = useProjectStore.getState().addTrack('drums');
-      expect(track).toBeDefined();
+      expect(track).not.toBeUndefined();
       expect(track.trackName).toBe('drums');
       expect(useProjectStore.getState().project!.tracks.length).toBeGreaterThan(0);
     });
@@ -134,7 +134,7 @@ describe('viewer mode enforcement', () => {
       const found = useProjectStore.getState().project!.tracks
         .flatMap(t => t.clips)
         .find(c => c.id === clip.id);
-      expect(found).toBeDefined();
+      expect(found).not.toBeUndefined();
     });
 
     it('duplicateClip returns undefined', () => {
@@ -236,7 +236,7 @@ describe('viewer mode enforcement', () => {
       const notes = useProjectStore.getState().project!.tracks
         .flatMap(t => t.clips)
         .find(c => c.id === clip.id)?.midiData?.notes;
-      expect(notes?.find(n => n.id === noteId)).toBeDefined();
+      expect(notes?.find(n => n.id === noteId)).not.toBeUndefined();
     });
   });
 
@@ -244,8 +244,8 @@ describe('viewer mode enforcement', () => {
     it('project state is readable', () => {
       useCollaborationStore.getState().setViewerMode(true);
       const project = useProjectStore.getState().project;
-      expect(project).toBeDefined();
-      expect(project!.name).toBeDefined();
+      expect(project).not.toBeUndefined();
+      expect(typeof project!.name).toBe('string');
     });
 
     it('tracks are readable', () => {

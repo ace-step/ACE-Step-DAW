@@ -31,6 +31,8 @@ export function FilterEnvelopeEditor({ envelope, onChange }: FilterEnvelopeEdito
       <div className="text-[10px] text-zinc-400 uppercase tracking-widest font-medium">Filter Envelope</div>
       <canvas
         ref={canvasRef}
+        role="application"
+        aria-label="Filter envelope editor"
         className="w-full h-20 rounded bg-[#1a1a1a] border border-[#333]"
       />
       <div className="flex items-center justify-around gap-1">

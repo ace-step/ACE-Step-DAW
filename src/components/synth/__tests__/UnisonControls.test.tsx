@@ -13,23 +13,23 @@ describe('UnisonControls', () => {
 
   it('renders voices, detune, and spread labels', () => {
     render(<UnisonControls settings={defaultSettings} onChange={mockOnChange} />);
-    expect(screen.getByText('Voices')).toBeDefined();
-    expect(screen.getByText('Detune')).toBeDefined();
-    expect(screen.getByText('Spread')).toBeDefined();
+    screen.getByText('Voices'); // getBy* throws if not found
+    screen.getByText('Detune');
+    screen.getByText('Spread');
   });
 
   it('displays current values', () => {
     const settings: UnisonSettings = { voices: 4, detune: 50, spread: 0.7 };
     render(<UnisonControls settings={settings} onChange={mockOnChange} />);
-    expect(screen.getByText('4')).toBeDefined();
-    expect(screen.getByText('50 ct')).toBeDefined();
-    expect(screen.getByText('70%')).toBeDefined();
+    screen.getByText('4'); // getBy* throws if not found
+    screen.getByText('50 ct');
+    screen.getByText('70%');
   });
 
   it('renders with data-testid for automation', () => {
     const { container } = render(
       <UnisonControls settings={defaultSettings} onChange={mockOnChange} />,
     );
-    expect(container.querySelector('[data-testid="unison-controls"]')).toBeDefined();
+    expect(container.querySelector('[data-testid="unison-controls"]')).not.toBeNull();
   });
 });

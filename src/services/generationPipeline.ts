@@ -17,12 +17,12 @@ import { saveAudioBlob, loadAudioBlobByKey } from './audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import { toastError, toastInfo, toastSuccess } from '../hooks/useToast';
 import { audioBufferToWavBlob } from '../utils/wav';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
-import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../constants/defaults';
 import { extractContextAudioLazy } from './lazyContextAudioExtractor';
 import { computeEta } from '../utils/generationProgress';
 import { createDebugLogger } from '../utils/debugLogger';
+import { extractServerPath, sanitizeServerPath } from '../utils/serverPath';
 
 const logger = createDebugLogger('ace-step:generation');
 
@@ -277,11 +277,12 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     if (!project) throw new Error('No project open');
 
     const defaults = project.generationDefaults;
-    const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
+    const activeModel = useModelStore.getState().getLoadedModelForCategory('text2music')
+      ?? useModelStore.getState().activeModelId ?? defaults.model;
 
     const taskParams: Text2MusicTaskParams = {
       task_type: 'text2music',
-      prompt: params.prompt,
+      prompt: prependStyleTags(params.prompt, params.styleTags),
       lyrics: params.lyrics,
       audio_duration: params.durationSeconds ?? 60,
       bpm: params.useProjectMeta ? (project.bpm ?? null) : null,
@@ -297,6 +298,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
       use_random_seed: true,
     };
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
+    if (params.negativePrompt?.trim()) taskParams.negative_prompt = params.negativePrompt.trim();
 
     const jobId = uuidv4();
     genStore.addJob({ id: jobId, clipId, trackName: 'Full Mix', status: 'queued', progress: 'Queued', stage: 'Queued', progressPercent: null, etaSeconds: null, etaConfidence: 'none' });
@@ -338,7 +340,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     const audioKey = await saveAudioBlob(project.id, clipId, 'isolated', audioBlob);
     const engine = getAudioEngine();
     const audioBuffer = await engine.decodeAudioData(audioBlob);
-    const peaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = await computeWaveformWithMipmap(audioKey, audioBuffer);
 
     const inferredMetas: InferredMetas | undefined = firstResult
       ? { bpm: firstResult.metas?.bpm, keyScale: firstResult.metas?.keyscale, timeSignature: firstResult.metas?.timesignature, genres: firstResult.metas?.genres, seed: firstResult.seed_value, ditModel: firstResult.dit_model }
@@ -349,6 +351,23 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     useProjectStore.getState().updateClip(clipId, { duration: actualDuration });
     genStore.updateJob(jobId, { status: 'done', progress: 'Done', stage: 'Complete' });
     useProjectStore.getState().saveClipVersion(clipId);
+
+    // Sync inferred metadata back to project when thinking was enabled
+    if (params.thinking && inferredMetas) {
+      const updates: Record<string, unknown> = {};
+      if (inferredMetas.bpm && inferredMetas.bpm > 0) updates.bpm = inferredMetas.bpm;
+      if (inferredMetas.keyScale) updates.keyScale = inferredMetas.keyScale;
+      if (inferredMetas.timeSignature) {
+        const ts = Number(inferredMetas.timeSignature);
+        if (Number.isFinite(ts) && ts > 0) updates.timeSignature = ts;
+      }
+      if (Object.keys(updates).length > 0) {
+        useProjectStore.getState().updateProject(updates);
+        const parts = Object.entries(updates).map(([k, v]) => `${k}=${v}`).join(', ');
+        toastInfo(`Project updated: ${parts}`);
+      }
+    }
+
     toastSuccess('Clip regenerated');
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Regeneration failed';
@@ -493,6 +512,12 @@ export async function generateVariationSession(
           });
           outcomes.push({ status: 'fulfilled', value: outcome });
         } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          useGenerationStore.getState().updateVariation(index, {
+            status: 'error',
+            error: `Generation failed: ${errorMsg}`,
+            completedAt: Date.now(),
+          });
           outcomes.push({ status: 'rejected', reason: err });
         }
 
@@ -537,12 +562,15 @@ export async function generateVariationSession(
         (variation) => variation.status === 'done' || variation.status === 'error' || variation.status === 'cancelled',
       );
       if (allTerminal) {
-        currentSession.variations.forEach((variation) => {
-          if ((variation.status === 'done' || variation.status === 'error') && variation.completedAt) return;
-          if (variation.status === 'done' || variation.status === 'error') {
-            useGenerationStore.getState().updateVariation(variation.index, { completedAt: Date.now() });
-          }
-        });
+        // Collect indices needing completedAt before mutating store to avoid stale state
+        const now = Date.now();
+        const indicesToComplete = currentSession.variations
+          .filter((v) => (v.status === 'done' || v.status === 'error') && !v.completedAt)
+          .map((v) => v.index);
+
+        for (const idx of indicesToComplete) {
+          useGenerationStore.getState().updateVariation(idx, { completedAt: now });
+        }
       }
     }
 
@@ -742,8 +770,16 @@ async function generateClipInternal(
       batch_size: 1,
       audio_format: 'wav',
       thinking: false, // lego is a pure DiT task — LM audio codes are out-of-distribution
-      model: project.generationDefaults.model,
+      model: useModelStore.getState().getLoadedModelForCategory('lego')
+        ?? useModelStore.getState().activeModelId
+        ?? project.generationDefaults.model,
     } as LegoTaskParams;
+
+    // Include negative prompt from generation form if present
+    const negPrompt = useGenerationStore.getState().generationForm.negativePrompt;
+    if (negPrompt?.trim()) {
+      params.negative_prompt = negPrompt.trim();
+    }
 
     // Always log critical generation params for debugging
     logger.info(
@@ -969,7 +1005,7 @@ async function generateClipInternal(
     const isolatedKey = await saveAudioBlob(project.id, clipId, 'isolated', isolatedBlob);
 
     // Compute waveform peaks from the trimmed buffer (full buffer = clip region)
-    const peaks = computeWaveformPeaks(trimmedBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = await computeWaveformWithMipmap(isolatedKey, trimmedBuffer);
 
     // Build inferred metadata from result
     const inferredMetas: InferredMetas | undefined = firstResult
@@ -1302,8 +1338,9 @@ export async function generateBatch(options: GenerateBatchOptions): Promise<void
           opts.srcAudioPath = contextAudioPath;
         } else if (!firstCall && prevClipId) {
           const prevClip = useProjectStore.getState().getClipById(prevClipId);
-          if (prevClip?.serverCumulativePath) {
-            opts.srcAudioPath = prevClip.serverCumulativePath;
+          const serverCumulativePath = sanitizeServerPath(prevClip?.serverCumulativePath);
+          if (serverCumulativePath) {
+            opts.srcAudioPath = serverCumulativePath;
           }
         }
         firstCall = false;
@@ -1469,6 +1506,20 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
       useGenerationStore.getState().setIsGenerating(false);
     }
   });
+}
+
+/** Prepend style tags to a raw prompt for text2music API requests.
+ *  Used by both generateText2Music and regenerateText2MusicClip. */
+export function prependStyleTags(prompt: string, styleTags?: string[]): string {
+  const trimmedPrompt = prompt.trim();
+  const normalized = (styleTags ?? []).map((t) => t.trim()).filter(Boolean);
+  if (normalized.length === 0) return trimmedPrompt;
+  if (!trimmedPrompt) return normalized.join(', ');
+  const prefix = `${normalized.join(', ')}. `;
+  const basePrompt = trimmedPrompt.startsWith(prefix)
+    ? trimmedPrompt.slice(prefix.length).trimStart()
+    : trimmedPrompt;
+  return `${prefix}${basePrompt}`;
 }
 
 function buildGenerationPanelPrompt(prompt: string, styleTags: string[]) {
@@ -1692,8 +1743,9 @@ export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): P
         };
         if (prevClipId) {
           const prevClip = useProjectStore.getState().getClipById(prevClipId);
-          if (prevClip?.serverCumulativePath) {
-            clipOpts.srcAudioPath = prevClip.serverCumulativePath;
+          const serverCumulativePath = sanitizeServerPath(prevClip?.serverCumulativePath);
+          if (serverCumulativePath) {
+            clipOpts.srcAudioPath = serverCumulativePath;
           }
         }
         prevClipId = clipId;
@@ -1858,9 +1910,9 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
       const coverBlob = await api.downloadAudio(resultAudioPath);
       const engine = getAudioEngine();
       const buffer = await engine.decodeAudioData(coverBlob);
-      const peaks = computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT);
 
       const isolatedKey = await saveAudioBlob(project.id, targetClipId, 'isolated', coverBlob);
+      const peaks = await computeWaveformWithMipmap(isolatedKey, buffer);
       const cumulativeKey = await saveAudioBlob(project.id, targetClipId, 'cumulative', coverBlob);
 
       store.updateClipStatus(targetClipId, 'ready', {
@@ -1871,6 +1923,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
         audioOffset: 0,
         generatedFromContext: false,
       });
+      store.updateClip(targetClipId, { duration: buffer.duration });
 
       genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
       store.saveClipVersion(targetClipId);
@@ -2057,7 +2110,7 @@ async function generateRepaintInternal(
 
     const isolatedBlob = audioBufferToWavBlob(trimmedBuffer);
     const isolatedKey = await saveAudioBlob(project.id, clipId, 'isolated', isolatedBlob);
-    const peaks = computeWaveformPeaks(trimmedBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = await computeWaveformWithMipmap(isolatedKey, trimmedBuffer);
 
     const inferredMetas: InferredMetas | undefined = firstResult
       ? {
@@ -2420,9 +2473,9 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
       const bgmBlob = await api.downloadAudio(resultAudioPath);
       const engine = getAudioEngine();
       const buffer = await engine.decodeAudioData(bgmBlob);
-      const peaks = computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT);
 
       const isolatedKey = await saveAudioBlob(project.id, newClip.id, 'isolated', bgmBlob);
+      const peaks = await computeWaveformWithMipmap(isolatedKey, buffer);
       const cumulativeKey = await saveAudioBlob(project.id, newClip.id, 'cumulative', bgmBlob);
 
       const inferredMetas: InferredMetas | undefined = firstResult
@@ -2445,6 +2498,7 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
         generatedFromContext: true,
       });
 
+      store.updateClip(newClip.id, { duration: buffer.duration });
       genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
       store.saveClipVersion(newClip.id);
       return true;
@@ -2459,21 +2513,198 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
   });
 }
 
-/**
- * Extract a server-local file path from the audio URL returned by the backend.
- * The backend URL is typically `/v1/audio?path=/tmp/.../output.wav`.
- */
-function extractServerPath(audioPath: string): string | null {
-  try {
-    const url = new URL(audioPath, 'http://localhost');
-    const p = url.searchParams.get('path');
-    if (p) return p;
-  } catch {
-    // not a valid URL — fall through
-  }
-  if (audioPath.startsWith('/') && !audioPath.includes('?')) return audioPath;
-  return null;
+// generateVocalReplacement — generates vocals from an instrumental reference clip
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface VocalReplacementOptions {
+  /** Source instrumental clip whose audio is used as context */
+  clipId: string;
+  /** Vocal style description (e.g., "warm, soulful, energetic") */
+  vocalStyle: string;
+  /** Lyrics for the generated vocals */
+  lyrics: string;
+  /** Target vocal track ID for the result (must be a vocals track) */
+  targetTrackId: string;
+  /** Optional BPM override (null = auto-detect) */
+  bpm: number | null;
+  /** Optional key override ('' = auto-detect) */
+  keyScale: string;
+  /** Vocal language hint (e.g., "en", "zh", "unknown") */
+  vocalLanguage?: string;
 }
+
+export async function generateVocalReplacement(opts: VocalReplacementOptions): Promise<void> {
+  const genStore = useGenerationStore.getState();
+  if (!genStore.tryAcquireGenerationLock()) return;
+  await withGenerationToast('AI generation', async () => {
+
+    const { clipId, vocalStyle, lyrics, targetTrackId } = opts;
+    const store = useProjectStore.getState();
+
+    const sourceClip = store.getClipById(clipId);
+    const sourceTrack = store.getTrackForClip(clipId);
+    if (!sourceClip || !sourceTrack) {
+      genStore.setIsGenerating(false);
+      return false;
+    }
+
+    // Load the instrumental audio as context
+    let instrumentalBlob: Blob | null = null;
+    if (sourceClip.isolatedAudioKey) {
+      instrumentalBlob = (await loadAudioBlobByKey(sourceClip.isolatedAudioKey)) ?? null;
+    }
+    if (!instrumentalBlob && sourceClip.cumulativeMixKey) {
+      instrumentalBlob = (await loadAudioBlobByKey(sourceClip.cumulativeMixKey)) ?? null;
+    }
+    if (!instrumentalBlob) {
+      genStore.setIsGenerating(false);
+      return false;
+    }
+
+    const project = store.project!;
+    const targetTrack = project.tracks.find((t) => t.id === targetTrackId);
+    if (!targetTrack) {
+      genStore.setIsGenerating(false);
+      return false;
+    }
+
+    // Create new clip on the vocal track
+    const newClip = store.addClip(targetTrackId, {
+      startTime: sourceClip.startTime,
+      duration: sourceClip.duration,
+      prompt: vocalStyle,
+      globalCaption: vocalStyle,
+      lyrics,
+    });
+
+    const jobId = uuidv4();
+    genStore.addJob({
+      id: jobId,
+      clipId: newClip.id,
+      trackName: targetTrack.trackName,
+      status: 'queued',
+      progress: 'Queued',
+    });
+    store.updateClipStatus(newClip.id, 'queued', { generationJobId: jobId });
+
+    try {
+      // Use lego task with track_name='vocals' so the backend applies vocal conditioning
+      const legoParams: LegoTaskParams = {
+        task_type: 'lego',
+        track_name: 'vocals',
+        prompt: vocalStyle,
+        global_caption: `vocals for: ${vocalStyle}`,
+        lyrics,
+        instruction: 'Generate a vocal track that matches the instrumental audio context:',
+        repainting_start: 0,
+        repainting_end: sourceClip.duration,
+        audio_duration: sourceClip.duration,
+        bpm: opts.bpm,
+        key_scale: opts.keyScale,
+        time_signature: project.timeSignature ? String(project.timeSignature) : '',
+        inference_steps: project.generationDefaults.inferenceSteps,
+        guidance_scale: project.generationDefaults.guidanceScale,
+        shift: project.generationDefaults.shift,
+        batch_size: 1,
+        audio_format: 'wav',
+        thinking: project.generationDefaults.thinking,
+        model: project.generationDefaults.model,
+        ...(opts.vocalLanguage ? { vocal_language: opts.vocalLanguage } : {}),
+      };
+
+      const vrStartedAt = Date.now();
+      genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...', startedAt: vrStartedAt });
+      store.updateClipStatus(newClip.id, 'generating');
+
+      const releaseResp = await api.releaseLegoTask(instrumentalBlob, legoParams);
+      const taskId = releaseResp.task_id;
+
+      const startTime = Date.now();
+      let resultAudioPath: string | null = null;
+      let firstResult: TaskResultItem | null = null;
+
+      while (Date.now() - startTime < MAX_POLL_DURATION_MS) {
+        await sleep(POLL_INTERVAL_MS);
+        const entries = await api.queryResult([taskId]);
+        const entry = entries?.[0];
+        if (!entry) continue;
+
+        let progressPercent: number | undefined;
+        let stage: string | undefined;
+        if (entry.status === 0 && entry.result) {
+          try {
+            const partial: TaskResultItem[] = JSON.parse(entry.result);
+            const first = partial?.[0];
+            if (first?.progress !== undefined) progressPercent = first.progress;
+            if (first?.stage) stage = first.stage;
+          } catch { /* not yet valid JSON */ }
+        }
+        const etaSeconds = computeEta(vrStartedAt, progressPercent) ?? undefined;
+
+        genStore.updateJob(jobId, {
+          progress: entry.progress_text || 'Generating vocals...',
+          ...(stage !== undefined && { stage }),
+          ...(progressPercent !== undefined && { progressPercent }),
+          ...(etaSeconds !== undefined && { etaSeconds }),
+        });
+        if (entry.status === 1) {
+          const items: TaskResultItem[] = JSON.parse(entry.result);
+          firstResult = items?.[0] ?? null;
+          resultAudioPath = firstResult?.file ?? null;
+          break;
+        } else if (entry.status === 2) {
+          throw new Error(`Vocal replacement failed: ${entry.result}`);
+        }
+      }
+
+      if (!resultAudioPath) throw new Error('Vocal replacement timed out — the server did not return a result within the time limit. Try again or check server status.');
+
+      genStore.updateJob(jobId, { status: 'processing', progress: 'Downloading audio...' });
+      store.updateClipStatus(newClip.id, 'processing');
+
+      const vocalBlob = await api.downloadAudio(resultAudioPath);
+      const engine = getAudioEngine();
+      const buffer = await engine.decodeAudioData(vocalBlob);
+
+      const isolatedKey = await saveAudioBlob(project.id, newClip.id, 'isolated', vocalBlob);
+      const peaks = await computeWaveformWithMipmap(isolatedKey, buffer);
+      const cumulativeKey = await saveAudioBlob(project.id, newClip.id, 'cumulative', vocalBlob);
+
+      const inferredMetas: InferredMetas | undefined = firstResult
+        ? {
+            bpm: firstResult.metas?.bpm,
+            keyScale: firstResult.metas?.keyscale,
+            genres: firstResult.metas?.genres,
+            seed: firstResult.seed_value,
+            ditModel: firstResult.dit_model,
+          }
+        : undefined;
+
+      store.updateClipStatus(newClip.id, 'ready', {
+        cumulativeMixKey: cumulativeKey,
+        isolatedAudioKey: isolatedKey,
+        waveformPeaks: peaks,
+        audioDuration: buffer.duration,
+        audioOffset: 0,
+        inferredMetas,
+        generatedFromContext: true,
+      });
+
+      store.updateClip(newClip.id, { duration: buffer.duration });
+      genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
+      store.saveClipVersion(newClip.id);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      store.updateClipStatus(newClip.id, 'error', { errorMessage: message });
+      genStore.updateJob(jobId, { status: 'error', progress: message, error: message });
+      return false;
+    } finally {
+      genStore.setIsGenerating(false);
+    }
+  });
+}
+
 
 // ---------------------------------------------------------------------------
 // Text2Music — Full-song generation
@@ -2493,6 +2724,7 @@ export interface Text2MusicRequest {
   // Advanced overrides
   inferenceSteps?: number;
   guidanceScale?: number;
+  temperature?: number;
   shift?: number;
   thinking?: boolean;
   seed?: number;
@@ -2506,6 +2738,10 @@ export interface Text2MusicRequest {
   instrumental?: boolean;
   /** Whether the generation used project BPM/key/timeSignature (for persisting) */
   useProjectMeta?: boolean;
+  /** Elements to exclude from generation */
+  negativePrompt?: string;
+  /** Style tags to prepend to prompt at generation time (persisted separately from prompt) */
+  styleTags?: string[];
 }
 
 export interface Text2MusicResult {
@@ -2591,7 +2827,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       useProjectMeta: request.useProjectMeta,
       inferenceSteps: request.inferenceSteps,
       guidanceScale: request.guidanceScale,
+      temperature: request.temperature,
       shift: request.shift,
+      negativePrompt: request.negativePrompt,
+      styleTags: request.styleTags,
     },
   });
 
@@ -2612,11 +2851,12 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
   try {
     const defaults = project.generationDefaults;
-    const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
+    const activeModel = useModelStore.getState().getLoadedModelForCategory('text2music')
+      ?? useModelStore.getState().activeModelId ?? defaults.model;
 
     const params: Text2MusicTaskParams = {
       task_type: 'text2music',
-      prompt: request.prompt,
+      prompt: prependStyleTags(request.prompt, request.styleTags),
       lyrics: request.lyrics,
       audio_duration: request.durationSeconds,
       bpm: request.bpm,
@@ -2644,6 +2884,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     if (request.vocalLanguage) {
       params.vocal_language = request.vocalLanguage;
+    }
+
+    if (request.negativePrompt?.trim()) {
+      params.negative_prompt = request.negativePrompt.trim();
     }
 
     // Submit — text2music doesn't need source audio, send silence as placeholder
@@ -2718,7 +2962,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     // Compute waveform
     const engine = getAudioEngine();
     const audioBuffer = await engine.decodeAudioData(audioBlob);
-    const peaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = await computeWaveformWithMipmap(audioKey, audioBuffer);
 
     // Build inferred metadata
     const inferredMetas: InferredMetas | undefined = firstResult

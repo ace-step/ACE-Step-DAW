@@ -90,6 +90,6 @@ describe('Delete track confirmation flow', () => {
 
     expect(useUIStore.getState().pendingDeleteTrackIds).toBeNull();
     // Track still exists
-    expect(useProjectStore.getState().project!.tracks.find((t) => t.id === track.id)).toBeDefined();
+    expect(useProjectStore.getState().project!.tracks.find((t) => t.id === track.id)).not.toBeUndefined();
   });
 });

@@ -12,7 +12,7 @@ describe('canvasTheme', () => {
   it('grid line color is subtle (low opacity)', () => {
     // Verify the grid is not too bright
     const match = CANVAS_GRID.lineColor.match(/[\d.]+\)$/);
-    expect(match).toBeTruthy();
+    expect(match).not.toBeNull();
     const opacity = parseFloat(match![0]);
     expect(opacity).toBeLessThan(0.15);
   });

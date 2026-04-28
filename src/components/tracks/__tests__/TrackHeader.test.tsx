@@ -166,14 +166,16 @@ describe('TrackHeader arm button', () => {
     mockArmedTrackIds = ['track-1'];
     render(<TrackHeader track={makeTrack({ id: 'track-1', armed: true })} {...defaultProps} />);
     const armBtn = screen.getByTitle('Record Arm');
-    expect(armBtn.className).toContain('bg-red-500');
+    const dot = armBtn.querySelector('div');
+    expect(dot!.className).toContain('bg-red-500');
   });
 
   it('shows muted style when track is not armed', () => {
     mockArmedTrackIds = [];
     render(<TrackHeader track={makeTrack({ id: 'track-1', armed: false })} {...defaultProps} />);
     const armBtn = screen.getByTitle('Record Arm');
-    expect(armBtn.className).not.toContain('bg-red-500');
+    const dot = armBtn.querySelector('div');
+    expect(dot!.className).not.toContain('bg-red-500');
   });
 
   it('arm button is inside the primary actions container', () => {

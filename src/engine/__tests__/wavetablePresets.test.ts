@@ -136,7 +136,7 @@ describe('factory wavetable presets', () => {
 
   it('getWavetablePresetById returns correct preset', () => {
     const basic = getWavetablePresetById('wt-basic');
-    expect(basic).toBeDefined();
+    expect(basic).not.toBeUndefined();
     expect(basic!.name).toBe('Basic');
   });
 

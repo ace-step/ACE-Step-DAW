@@ -18,6 +18,10 @@ import type {
   ModelCategory,
   CreateSampleRequest,
   CreateSampleResponse,
+  TrainModelRequest,
+  TrainModelResponse,
+  TrainingJobStatusResponse,
+  UploadTrainingTrackResponse,
 } from '../types/api';
 
 /** @deprecated Use AiTaskParams instead */
@@ -482,4 +486,91 @@ export async function downloadAudio(audioPath: string): Promise<Blob> {
   }
 
   throw lastError ?? new Error('downloadAudio failed after retries');
+}
+
+// ---------------------------------------------------------------------------
+// Custom Model Fine-Tuning API (#1089)
+// ---------------------------------------------------------------------------
+
+/** Upload a reference track for model fine-tuning */
+export async function uploadTrainingTrack(file: File): Promise<UploadTrainingTrackResponse> {
+  const base = getApiBase();
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${base}/v1/training/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`uploadTrainingTrack failed: ${res.status} - ${text}`);
+  }
+  const envelope: ApiEnvelope<UploadTrainingTrackResponse> = await res.json();
+  return envelope.data;
+}
+
+/** Submit a training job to fine-tune a custom model */
+export async function submitTrainingJob(req: TrainModelRequest): Promise<TrainModelResponse> {
+  const base = getApiBase();
+  const res = await fetch(`${base}/v1/training/train`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`submitTrainingJob failed: ${res.status} - ${text}`);
+  }
+  const envelope: ApiEnvelope<TrainModelResponse> = await res.json();
+  return envelope.data;
+}
+
+/** Poll training job status */
+export async function queryTrainingStatus(jobId: string): Promise<TrainingJobStatusResponse> {
+  const base = getApiBase();
+  const res = await fetch(`${base}/v1/training/status/${encodeURIComponent(jobId)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`queryTrainingStatus failed: ${res.status} - ${text}`);
+  }
+  const envelope: ApiEnvelope<TrainingJobStatusResponse> = await res.json();
+  return envelope.data;
+}
+
+/** Delete a custom model from the server */
+export async function deleteCustomModel(modelId: string): Promise<void> {
+  const base = getApiBase();
+  const res = await fetch(`${base}/v1/training/models/${encodeURIComponent(modelId)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`deleteCustomModel failed: ${res.status} - ${text}`);
+  }
+}
+
+/** List all custom models */
+export async function listCustomModels(): Promise<CustomModelListResponse> {
+  const base = getApiBase();
+  const res = await fetch(`${base}/v1/training/models`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`listCustomModels failed: ${res.status} - ${text}`);
+  }
+  const envelope: ApiEnvelope<CustomModelListResponse> = await res.json();
+  return envelope.data;
+}
+
+export interface CustomModelListResponse {
+  models: Array<{
+    id: string;
+    name: string;
+    description: string;
+    track_count: number;
+    style_tags: string[];
+    trained_at: number;
+    model_path: string;
+    training_job_id: string;
+  }>;
 }

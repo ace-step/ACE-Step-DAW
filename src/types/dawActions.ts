@@ -136,6 +136,69 @@ export interface DAWGlobals {
   __dawSummary: () => string;
   __dawStructure: () => unknown;
   __midiCaptureService: unknown;
+  __strudelApi: {
+    analyzePattern: (code: string, bars?: number) => Promise<{
+      noteCount: number;
+      instruments: string[];
+      hasMelodicContent: boolean;
+      pitchRange: [number, number];
+      cycleLengthBars: number;
+      rhythmicDensity: number;
+      suggestedPrompt: string;
+    }>;
+    getTrackSummary: () => Array<{
+      trackId: string;
+      displayName: string;
+      code: string;
+      versionCount: number;
+      cycleLength: number;
+    }>;
+    listPresets: () => Array<{
+      name: string;
+      genre: string;
+      code: string;
+      roles: { drums: string; bass: string; chords: string; melody: string };
+    }>;
+    updateTrackCode: (trackId: string, newCode: string, label?: string) => string | null;
+    diffCode: (before: string, after: string) => {
+      unified: string;
+      summary: string;
+      added: number;
+      removed: number;
+    };
+    diffTrackVersion: (trackId: string, versionIndex: number) => {
+      unified: string;
+      summary: string;
+      added: number;
+      removed: number;
+    } | null;
+    listTemplates: () => Array<{
+      id: string;
+      genre: string;
+      description: string;
+      code: string;
+      complexity: 'simple' | 'moderate' | 'complex';
+      bpmRange: { min: number; max: number };
+      instruments: string[];
+      agentInstructions: string;
+    }>;
+    getTemplateByGenre: (genre: string) => unknown;
+    getTemplatesByComplexity: (complexity: 'simple' | 'moderate' | 'complex') => unknown[];
+    getTemplatesByBpmRange: (minBpm: number, maxBpm: number) => unknown[];
+    getEventLog: (filter?: {
+      event?: string;
+      level?: 'debug' | 'info' | 'warn' | 'error';
+      since?: number;
+      limit?: number;
+    }) => Array<{
+      timestamp: number;
+      event: string;
+      level: string;
+      data: Record<string, unknown>;
+    }>;
+    clearEventLog: () => void;
+    subscribeToEvents: (callback: (entry: unknown) => void) => () => void;
+  };
 }
 
 // Re-export the full state interfaces for consumers that need both state + actions

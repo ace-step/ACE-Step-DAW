@@ -269,6 +269,56 @@ describe('Generation Advanced Controls — Style Tags', () => {
     expect(updatedClip?.generationParams?.audioInfluence).toBe(70);
     expect(updatedClip?.generationParams?.styleInfluence).toBe(30);
   });
+
+  it('clears stale selected voice when the edited clip has no saved voice', async () => {
+    useVoiceStore.setState({
+      voices: [{
+        id: 'stale-voice',
+        name: 'Stale Voice',
+        createdAt: 1,
+        updatedAt: 1,
+        audioKey: 'voice-audio:stale',
+        durationSeconds: 12,
+        skillLevel: 'professional',
+        tags: [],
+        defaultAudioInfluence: 95,
+        defaultStyleInfluence: 95,
+        source: 'upload',
+      }],
+      selectedVoiceId: 'stale-voice',
+      searchQuery: '',
+      filterTag: null,
+    });
+    const track = useProjectStore.getState().project!.tracks[0];
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0,
+      duration: 30,
+      prompt: 'plain prompt',
+      lyrics: 'plain lyrics',
+      source: 'generated',
+    });
+    useProjectStore.getState().updateClip(clip.id, {
+      generationParams: {
+        type: 'text2music',
+        prompt: 'plain prompt',
+        lyrics: 'plain lyrics',
+        durationSeconds: 30,
+      },
+    });
+    useUIStore.getState().setEditingText2MusicClipId(clip.id);
+
+    renderForm();
+
+    await waitFor(() => {
+      expect(useVoiceStore.getState().selectedVoiceId).toBeNull();
+    });
+    mockOnFooterChange.mock.calls.at(-1)?.[0].action();
+
+    const updatedClip = useProjectStore.getState().project!.tracks[0].clips.find((item) => item.id === clip.id);
+    expect(updatedClip?.generationParams?.voiceProfileId).toBeUndefined();
+    expect(updatedClip?.generationParams?.audioInfluence).toBeUndefined();
+    expect(updatedClip?.generationParams?.styleInfluence).toBeUndefined();
+  });
 });
 
 describe('prependStyleTags helper', () => {

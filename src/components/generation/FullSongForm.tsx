@@ -262,6 +262,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         } else {
           voiceStore.deselectVoice();
         }
+      } else {
+        useVoiceStore.getState().deselectVoice();
       }
     } else {
       // Backward compatibility: hydrate from basic clip fields

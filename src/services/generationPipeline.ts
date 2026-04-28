@@ -10,7 +10,7 @@ import {
 import { useModelStore } from '../store/modelStore';
 import { useUIStore } from '../store/uiStore';
 import type { LegoTaskParams, Text2MusicTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
-import type { Clip, InferredMetas } from '../types/project';
+import type { Clip, ClipGenerationStatus, InferredMetas } from '../types/project';
 import * as api from './aceStepApi';
 import { generateSilenceWav } from './silenceGenerator';
 import { saveAudioBlob, loadAudioBlobByKey } from './audioFileManager';
@@ -389,7 +389,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
   } catch (err) {
     if (_regenerateJobId) unregisterJobAbortController(_regenerateJobId);
     if (err instanceof DOMException && err.name === 'AbortError') {
-      useProjectStore.getState().updateClipStatus(clipId, 'ready', { generationJobId: undefined, errorMessage: undefined });
+      restoreClipAfterCancellation(clipId);
       if (_regenerateJobId) genStore.updateJob(_regenerateJobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
       logger.debug('regenerateText2MusicClip: cancelled by user');
     } else {
@@ -1106,7 +1106,7 @@ async function generateClipInternal(
 
     // Handle user cancellation via AbortController
     if (error instanceof DOMException && error.name === 'AbortError') {
-      useProjectStore.getState().updateClipStatus(clipId, 'ready', { generationJobId: undefined, errorMessage: undefined });
+      restoreClipAfterCancellation(clipId, clip);
       genStore.updateJob(jobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
       updateVariationProgress({ status: 'cancelled', progress: 'Cancelled', completedAt: Date.now() });
       return { cumulativeBlob: previousCumulativeBlob, succeeded: false, errorMessage: 'Cancelled' };
@@ -1427,6 +1427,16 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) {
     throw new DOMException('Aborted', 'AbortError');
   }
+}
+
+function restoreClipAfterCancellation(clipId: string, fallbackClip?: Clip): void {
+  const currentClip = useProjectStore.getState().getClipById(clipId);
+  const clip = currentClip ?? fallbackClip;
+  const status: ClipGenerationStatus = clip?.isolatedAudioKey || clip?.cumulativeMixKey ? 'ready' : 'empty';
+  useProjectStore.getState().updateClipStatus(clipId, status, {
+    generationJobId: undefined,
+    errorMessage: undefined,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1998,7 +2008,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
     } catch (error) {
       unregisterJobAbortController(jobId);
       if (error instanceof DOMException && error.name === 'AbortError') {
-        store.updateClipStatus(targetClipId, 'ready', { generationJobId: undefined, errorMessage: undefined });
+        restoreClipAfterCancellation(targetClipId);
         genStore.updateJob(jobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
         return false;
       }
@@ -2226,7 +2236,7 @@ async function generateRepaintInternal(
   } catch (error) {
     unregisterJobAbortController(jobId);
     if (error instanceof DOMException && error.name === 'AbortError') {
-      useProjectStore.getState().updateClipStatus(clipId, 'ready', { generationJobId: undefined, errorMessage: undefined });
+      restoreClipAfterCancellation(clipId);
       genStore.updateJob(jobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
       return { cumulativeBlob: null, succeeded: false, errorMessage: 'Cancelled' };
     }
@@ -2588,7 +2598,7 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
     } catch (error) {
       unregisterJobAbortController(jobId);
       if (error instanceof DOMException && error.name === 'AbortError') {
-        store.updateClipStatus(newClip.id, 'ready', { generationJobId: undefined, errorMessage: undefined });
+        restoreClipAfterCancellation(newClip.id, newClip);
         genStore.updateJob(jobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
         return false;
       }
@@ -2788,7 +2798,7 @@ export async function generateVocalReplacement(opts: VocalReplacementOptions): P
     } catch (error) {
       unregisterJobAbortController(jobId);
       if (error instanceof DOMException && error.name === 'AbortError') {
-        store.updateClipStatus(newClip.id, 'ready', { generationJobId: undefined, errorMessage: undefined });
+        restoreClipAfterCancellation(newClip.id, newClip);
         genStore.updateJob(jobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
         return false;
       }
@@ -3272,7 +3282,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     // Handle abort (user cancellation) differently from real errors
     if (error instanceof DOMException && error.name === 'AbortError') {
-      useProjectStore.getState().updateClipStatus(clipId, 'ready', { generationJobId: undefined, errorMessage: undefined });
+      restoreClipAfterCancellation(clipId, clip);
       genStore.updateJob(jobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
       logger.debug('Text2Music: cancelled by user');
       return {

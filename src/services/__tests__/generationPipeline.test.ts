@@ -637,6 +637,34 @@ describe('generateText2Music', () => {
     expect(result.errorMessage).toContain('CUDA out of memory');
     expect(useGenerationStore.getState().isGenerating).toBe(false);
   });
+
+  it('keeps an empty full-song placeholder empty when generation is cancelled before audio is saved', async () => {
+    mockInitModel.mockResolvedValue(undefined);
+    setupModelStore();
+    mockReleaseLegoTask.mockRejectedValue(new DOMException('Aborted', 'AbortError'));
+
+    const result = await generateText2Music({
+      prompt: 'test',
+      lyrics: '',
+      durationSeconds: 60,
+      bpm: null,
+      keyScale: '',
+      timeSignature: '',
+      splitToStems: false,
+    });
+
+    const clip = useProjectStore
+      .getState()
+      .project?.tracks.flatMap((track) => track.clips)
+      .find((candidate) => candidate.id === result.mixClipId);
+    const job = useGenerationStore.getState().jobs.find((candidate) => candidate.clipId === result.mixClipId);
+
+    expect(result.succeeded).toBe(false);
+    expect(result.errorMessage).toBe('Cancelled');
+    expect(clip?.generationStatus).toBe('empty');
+    expect(clip?.isolatedAudioKey).toBeNull();
+    expect(job?.status).toBe('cancelled');
+  });
 });
 
 // ─── generateVocalReplacement ───────────────────────────────────────────────

@@ -48,7 +48,7 @@ jobs:
 
   # Run Tauri app-shell Rust unit tests
   tauri-rust-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

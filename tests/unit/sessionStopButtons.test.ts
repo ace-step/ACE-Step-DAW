@@ -49,14 +49,14 @@ describe('session empty slot stop buttons', () => {
     const track1 = store.addTrack('drums');
 
     const session = useProjectStore.getState().project?.session;
-    expect(session).toBeDefined();
+    expect(session).not.toBeUndefined();
 
     const scenes = session!.scenes;
     expect(scenes.length).toBeGreaterThanOrEqual(2);
 
     const scene1 = scenes[0];
     const track1Scene1Slot = session!.slots.find(s => s.trackId === track1.id && s.sceneId === scene1.id);
-    expect(track1Scene1Slot).toBeDefined();
+    expect(track1Scene1Slot).not.toBeUndefined();
     expect(track1Scene1Slot!.clipId).toBeNull();
     expect(track1Scene1Slot!.hasStopButton).toBe(true);
 
@@ -89,12 +89,12 @@ describe('session empty slot stop buttons', () => {
     const track1 = store.addTrack('drums');
 
     const session = useProjectStore.getState().project?.session;
-    expect(session).toBeDefined();
+    expect(session).not.toBeUndefined();
 
     const scenes = session!.scenes;
     const scene1 = scenes[0];
     const track1Scene1Slot = session!.slots.find(s => s.trackId === track1.id && s.sceneId === scene1.id);
-    expect(track1Scene1Slot).toBeDefined();
+    expect(track1Scene1Slot).not.toBeUndefined();
 
     // Remove stop button
     useProjectStore.getState().setSessionSlotStopButton(track1Scene1Slot!.id, false);

@@ -5,9 +5,12 @@ import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { Knob } from '../ui/Knob';
 import { LevelMeter } from './LevelMeter';
 import { MasteringPanel } from './MasteringPanel';
+import { AiMixPanel } from './AiMixPanel';
+import { useAiMixStore } from '../../store/aiMixStore';
 import { SpectrumAnalyzer } from './SpectrumAnalyzer';
 import { VerticalFader } from './VerticalFader';
 import { SidechainRoutingOverlay } from './SidechainRoutingOverlay';
+import { EmptyState } from '../ui/EmptyState';
 import type { Track, ReturnTrack, TrackEffectType } from '../../types/project';
 
 const MIXER_MIN_VISIBLE_HEIGHT = 360;
@@ -461,6 +464,9 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
   const updateProject = useProjectStore((s) => s.updateProject);
   const showSpectrum = useUIStore((s) => s.showSpectrumAnalyzer);
   const toggleSpectrum = useUIStore((s) => s.toggleSpectrumAnalyzer);
+  const aiMixPanelOpen = useAiMixStore((s) => s.panelOpen);
+  const openAiMixPanel = useAiMixStore((s) => s.openPanel);
+  const closeAiMixPanel = useAiMixStore((s) => s.closePanel);
   if (!project) return null;
   const masterVol = project.masterVolume ?? 1.0;
   const handleChange = (v: number) => { updateProject({ masterVolume: v }); getAudioEngine().masterVolume = v; };
@@ -474,8 +480,18 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
       <div className="flex w-full shrink-0 items-center gap-2">
         <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">Master</span>
         <button
-          onClick={toggleSpectrum}
+          onClick={() => aiMixPanelOpen ? closeAiMixPanel() : openAiMixPanel()}
           className={`ml-auto rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors ${
+            aiMixPanelOpen ? 'bg-violet-600 text-white' : 'bg-[#444] text-zinc-400 hover:bg-[#555]'
+          }`}
+          title="Toggle AI Mix panel"
+          data-testid="ai-mix-toggle"
+        >
+          AI MIX
+        </button>
+        <button
+          onClick={toggleSpectrum}
+          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors ${
             showSpectrum ? 'bg-blue-600 text-white' : 'bg-[#444] text-zinc-400 hover:bg-[#555]'
           }`}
           title="Toggle spectrum analyzer & LUFS meter"
@@ -486,6 +502,7 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
       </div>
       <div data-testid="master-controls-region" className="mt-1 flex min-h-0 flex-1 flex-col overflow-y-auto">
         {showSpectrum && <SpectrumAnalyzer width={220} height={120} />}
+        {aiMixPanelOpen && <AiMixPanel />}
         <MasteringPanel />
       </div>
       <div data-testid="master-fader-region" className="mt-1 flex shrink-0 min-h-[96px] flex-col items-center justify-end gap-1 self-stretch pb-1" style={{ height: faderHeight + 24 }}>
@@ -596,11 +613,22 @@ export function MixerPanel() {
         <SidechainRoutingOverlay containerRef={channelStripContainerRef} />
         <div ref={channelStripContainerRef} className="flex items-stretch h-full">
           {project.tracks.length === 0 && (
-            <div className="flex-1 flex items-center justify-center text-sm text-zinc-600">
-              Add tracks to see mixer channels
+            <div className="flex-1">
+              <EmptyState
+                icon={
+                  <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="4" y="2" width="3" height="20" rx="1" />
+                    <rect x="10.5" y="6" width="3" height="16" rx="1" />
+                    <rect x="17" y="4" width="3" height="18" rx="1" />
+                  </svg>
+                }
+                title="No mixer channels"
+                description="Add tracks to your project to see mixer channels here"
+                compact
+              />
             </div>
           )}
-          {[...project.tracks].sort((a, b) => a.order - b.order).map((track) => (
+          {[...project.tracks].filter((t) => t.trackType !== 'video').sort((a, b) => a.order - b.order).map((track) => (
             <ChannelStrip key={track.id} track={track} faderHeight={faderHeight} returnTracks={returnTracks} anySoloed={anySoloed} />
           ))}
           {returnTracks.length > 0 && (

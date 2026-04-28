@@ -86,7 +86,7 @@ describe('applyPreset', () => {
     expect(state.activePresetId).toBe('ableton-live');
     // Ableton sets clips.split to Cmd+E
     const splitCombo = state.overrides['clips.split'];
-    expect(splitCombo).toBeDefined();
+    expect(splitCombo).not.toBeUndefined();
     expect(splitCombo.code).toBe('KeyE');
     expect(splitCombo.mod).toBe(true);
   });
@@ -214,7 +214,7 @@ describe('SHORTCUT_PRESETS', () => {
   it('each preset only references valid action ids', () => {
     for (const preset of SHORTCUT_PRESETS) {
       for (const actionId of Object.keys(preset.map)) {
-        expect(SHORTCUT_ACTION_MAP[actionId]).toBeDefined();
+        expect(SHORTCUT_ACTION_MAP[actionId]).not.toBeUndefined();
       }
     }
   });

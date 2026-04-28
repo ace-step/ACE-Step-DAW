@@ -18,7 +18,7 @@ describe('Playhead blink animation', () => {
     expect(line).not.toBeNull();
     expect(line.style.backgroundColor).toBe('rgb(255, 255, 255)');
     expect(line.style.transform).toBe('translateX(300px)');
-    expect(line.style.minHeight).toBe('100vh');
+    expect(line.style.height).toBe('100%');
   });
 
   it('renders nothing when stopped, unfocused, and currentTime equals playStartTime', () => {
@@ -60,7 +60,7 @@ describe('Playhead blink animation', () => {
     const cursor = children.find(
       (el) => (el as HTMLElement).style.top === '50px' && (el as HTMLElement).style.height === '80px',
     ) as HTMLElement | undefined;
-    expect(cursor).toBeTruthy();
+    expect(cursor).not.toBeNull();
     expect(cursor!.style.left).toBe('200px'); // playStartTime=2 * pps=100
   });
 

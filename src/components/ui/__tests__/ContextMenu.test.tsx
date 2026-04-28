@@ -13,7 +13,7 @@ describe('ContextMenuWrapper', () => {
         <span>Menu content</span>
       </ContextMenuWrapper>,
     );
-    expect(screen.getByText('Menu content')).toBeDefined();
+    screen.getByText('Menu content'); // getBy* throws if not found
   });
 
   it('has role="menu"', () => {
@@ -22,7 +22,7 @@ describe('ContextMenuWrapper', () => {
         <span>Menu content</span>
       </ContextMenuWrapper>,
     );
-    expect(screen.getByRole('menu')).toBeDefined();
+    screen.getByRole('menu'); // getBy* throws if not found
   });
 
   it('calls onClose when backdrop is clicked', () => {
@@ -53,12 +53,12 @@ describe('ContextMenuWrapper', () => {
 describe('ContextMenuItem', () => {
   it('renders label text', () => {
     render(<ContextMenuItem label="Copy" onClick={vi.fn()} />);
-    expect(screen.getByText('Copy')).toBeDefined();
+    screen.getByText('Copy'); // getBy* throws if not found
   });
 
   it('has role="menuitem"', () => {
     render(<ContextMenuItem label="Copy" onClick={vi.fn()} />);
-    expect(screen.getByRole('menuitem')).toBeDefined();
+    screen.getByRole('menuitem'); // getBy* throws if not found
   });
 
   it('fires onClick when clicked', () => {
@@ -77,7 +77,7 @@ describe('ContextMenuItem', () => {
 
   it('renders shortcut text', () => {
     render(<ContextMenuItem label="Copy" onClick={vi.fn()} shortcut="Cmd+C" />);
-    expect(screen.getByText('Cmd+C')).toBeDefined();
+    screen.getByText('Cmd+C'); // getBy* throws if not found
   });
 
   it('renders icon when provided', () => {
@@ -88,7 +88,7 @@ describe('ContextMenuItem', () => {
         icon={<span data-testid="trash-icon">🗑</span>}
       />,
     );
-    expect(screen.getByTestId('trash-icon')).toBeDefined();
+    screen.getByTestId('trash-icon'); // getBy* throws if not found
   });
 
   it('applies opacity-40 when disabled', () => {
@@ -101,6 +101,6 @@ describe('ContextMenuItem', () => {
 describe('ContextMenuSeparator', () => {
   it('renders a separator with role', () => {
     render(<ContextMenuSeparator />);
-    expect(screen.getByRole('separator')).toBeDefined();
+    screen.getByRole('separator'); // getBy* throws if not found
   });
 });

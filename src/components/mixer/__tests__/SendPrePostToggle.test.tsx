@@ -41,7 +41,7 @@ describe('send pre/post fader toggle UI', () => {
     setupWithTrackAndSend();
     render(<MixerPanel />);
     const toggleBtn = screen.getByTestId('send-prepost-0');
-    expect(toggleBtn).toBeDefined();
+    expect(toggleBtn).not.toBeUndefined();
     expect(toggleBtn.textContent).toBe('POST');
   });
 

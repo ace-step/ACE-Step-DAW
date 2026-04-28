@@ -237,11 +237,11 @@ describe('transportStore', () => {
       expect(useTransportStore.getState().countInBars).toBe(2);
     });
 
-    it('setCountInBars clamps to 0-4 range', () => {
+    it('setCountInBars clamps to 0-2 range', () => {
       useTransportStore.getState().setCountInBars(0);
       expect(useTransportStore.getState().countInBars).toBe(0);
-      useTransportStore.getState().setCountInBars(5);
-      expect(useTransportStore.getState().countInBars).toBe(4);
+      useTransportStore.getState().setCountInBars(3);
+      expect(useTransportStore.getState().countInBars).toBe(2);
       useTransportStore.getState().setCountInBars(-1);
       expect(useTransportStore.getState().countInBars).toBe(0);
     });

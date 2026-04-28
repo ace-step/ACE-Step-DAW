@@ -10,9 +10,11 @@
  * Left to other layers: backend-dependent success quality and human music judgment.
  */
 import { expect, test } from '@playwright/test';
+import { dismissWelcomeOverlay } from '../support/e2eStartup';
 
-test.describe('Generation Panel', () => {
+test.describe('Generation Panel @critical', () => {
   test.beforeEach(async ({ page }) => {
+    await dismissWelcomeOverlay(page);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(() => typeof (window as any).__store !== 'undefined');
@@ -35,7 +37,6 @@ test.describe('Generation Panel', () => {
       browserWindow.__store.getState().addTrack('drums');
       browserWindow.__store.getState().setShowGenerationPanel(true);
     });
-    await page.mouse.click(24, 24);
   });
 
   test('submits the visible generation controls through the shared store payload', async ({ page }) => {

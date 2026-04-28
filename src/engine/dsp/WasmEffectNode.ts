@@ -4,6 +4,9 @@
  * Provides the same interface as EffectsEngine effect nodes, but routes
  * audio through the Rust DSP engine via WASM in an AudioWorkletProcessor.
  */
+import { createDebugLogger } from '../../utils/debugLogger';
+
+const logger = createDebugLogger('ace-step:wasm-effect-node');
 
 export interface WasmMeterData {
   rmsL: number;
@@ -85,7 +88,7 @@ export class WasmEffectNode {
             }
             break;
           case 'error':
-            console.error('[WasmEffectNode]', msg.message);
+            logger.error(msg.message);
             break;
         }
       };

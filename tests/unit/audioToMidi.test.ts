@@ -74,8 +74,8 @@ describe('detectedNotesToMidi', () => {
 
     const midiNotes = detectedNotesToMidi(detected, 120, 0, 0.5);
 
-    expect(midiNotes[0].id).toBeDefined();
-    expect(midiNotes[1].id).toBeDefined();
+    expect(typeof midiNotes[0].id).toBe('string');
+    expect(typeof midiNotes[1].id).toBe('string');
     expect(midiNotes[0].id).not.toBe(midiNotes[1].id);
   });
 
@@ -136,7 +136,7 @@ describe('convertSamplesToMidi', () => {
 
     // Notes should have valid MIDI properties
     for (const note of result.notes) {
-      expect(note.id).toBeDefined();
+      expect(typeof note.id).toBe('string');
       expect(note.pitch).toBeGreaterThanOrEqual(0);
       expect(note.pitch).toBeLessThanOrEqual(127);
       expect(note.startBeat).toBeGreaterThanOrEqual(0);

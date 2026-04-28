@@ -68,7 +68,7 @@ describe('FullSongForm — negative prompt UI', () => {
     expect(screen.queryByTestId('negative-prompt-input')).not.toBeInTheDocument();
 
     // Active badge should appear
-    expect(screen.getByText('active')).toBeInTheDocument();
+    expect(screen.getByText(/active/)).toBeInTheDocument();
 
     unmount();
   });

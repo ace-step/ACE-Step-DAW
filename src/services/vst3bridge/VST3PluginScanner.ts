@@ -1,9 +1,15 @@
 /**
  * VST3 Plugin Scanner Service
  *
- * Triggers plugin scans via the bridge client, caches results in localStorage,
- * and provides search/filter utilities for the scanned plugin list.
+ * Triggers plugin scans via the bridge client, caches results in IndexedDB
+ * (with localStorage fallback), and provides search/filter utilities.
+ *
+ * Cache invalidation triggers:
+ * - Companion app version changes
+ * - Cache older than 24 hours
+ * - User triggers manual "Rescan" (force flag)
  */
+import { VST3ScanCache } from './VST3ScanCache';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,6 +43,8 @@ export class VST3PluginScanner {
   private bridgeClient: VST3BridgeClientLike | null = null;
   private cachedPlugins: VST3PluginInfo[] = [];
   private lastScanTimestamp: number | null = null;
+  private companionVersion: string | null = null;
+  private readonly idbCache = new VST3ScanCache();
 
   constructor() {
     this.loadFromLocalStorage();
@@ -47,10 +55,43 @@ export class VST3PluginScanner {
     this.bridgeClient = client;
   }
 
-  /** Trigger a full plugin scan. Returns scanned plugins. */
+  /** Set companion version for cache invalidation. */
+  setCompanionVersion(version: string): void {
+    this.companionVersion = version;
+  }
+
+  /**
+   * Load plugins from IndexedDB cache if valid, otherwise return null.
+   * Validates companion version match and cache age (<24h).
+   */
+  async loadFromCache(): Promise<VST3PluginInfo[] | null> {
+    if (!this.companionVersion) return null;
+
+    // Single retrieve call to avoid redundant IndexedDB opens
+    const entry = await this.idbCache.retrieve();
+    if (!entry) return null;
+    if (entry.companionVersion !== this.companionVersion) return null;
+    if (Date.now() - entry.timestamp > 24 * 60 * 60 * 1000) return null;
+
+    this.cachedPlugins = entry.plugins;
+    this.lastScanTimestamp = entry.timestamp;
+    return entry.plugins;
+  }
+
+  /**
+   * Trigger a full plugin scan. Returns scanned plugins.
+   * @param onProgress - Progress callback receiving (found, currentPlugin)
+   * @param force - Skip cache and force a fresh scan
+   */
   async scan(
     onProgress?: (found: number, current: string) => void,
+    force?: boolean,
   ): Promise<VST3PluginInfo[]> {
+    // Try cache first unless force rescan
+    if (!force && this.companionVersion) {
+      const cached = await this.loadFromCache();
+      if (cached) return cached;
+    }
     if (!this.bridgeClient) {
       throw new Error('Bridge client not set');
     }
@@ -75,6 +116,14 @@ export class VST3PluginScanner {
       this.cachedPlugins = plugins;
       this.lastScanTimestamp = Date.now();
       this.saveToLocalStorage();
+
+      // Also persist to IndexedDB with companion version
+      if (this.companionVersion) {
+        this.idbCache.store(plugins, this.companionVersion).catch(() => {
+          // IndexedDB write failed — localStorage is still available
+        });
+      }
+
       return plugins;
     } finally {
       unsubscribe?.();
@@ -118,7 +167,7 @@ export class VST3PluginScanner {
     return [...new Set(this.cachedPlugins.map((p) => p.subcategory))];
   }
 
-  /** Clear cache. */
+  /** Clear cache (both localStorage and IndexedDB). */
   clearCache(): void {
     this.cachedPlugins = [];
     this.lastScanTimestamp = null;
@@ -127,6 +176,9 @@ export class VST3PluginScanner {
     } catch {
       // localStorage unavailable — ignore
     }
+    this.idbCache.clear().catch(() => {
+      // IndexedDB clear failed — ignore
+    });
   }
 
   // ─── Private ────────────────────────────────────────────────────────────

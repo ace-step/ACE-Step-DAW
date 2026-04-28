@@ -219,7 +219,8 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
       {/* CENTER: meter canvas + peak glow overlay */}
       <canvas
         ref={canvasRef}
-        aria-label={label}
+        role="img"
+        aria-label={label || "Audio level meter"}
         data-testid="meter-canvas"
         className="absolute inset-y-0 rounded-sm"
         style={{ width: totalBarWidth, height: '100%', left: meterLeft }}

@@ -38,7 +38,7 @@ describe('projectStore.removeTracks', () => {
     // Create a group track and assign children
     store.createGroupTrack([child1.id, child2.id]);
     const groupTrack = useProjectStore.getState().project!.tracks.find((t) => t.isGroup);
-    expect(groupTrack).toBeDefined();
+    expect(groupTrack).not.toBeUndefined();
 
     useProjectStore.getState().removeTracks([groupTrack!.id]);
     const tracks = useProjectStore.getState().project!.tracks;

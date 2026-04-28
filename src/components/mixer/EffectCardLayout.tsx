@@ -7,6 +7,14 @@
  */
 import type { ReactNode } from 'react';
 
+/**
+ * Two-tier knob sizing system for visual parameter hierarchy.
+ * Primary: main parameters (threshold, ratio, freq, etc.)
+ * Secondary: supporting/fine-tune controls (knee, Q, etc.)
+ */
+export const KNOB_PRIMARY = 56;
+export const KNOB_SECONDARY = 44;
+
 interface EffectCardLayoutProps {
   mode?: ReactNode;
   visualization?: ReactNode;
@@ -85,5 +93,38 @@ export function ParamGroup({ label, children }: ParamGroupProps) {
       )}
       <div className="flex items-center gap-3">{children}</div>
     </div>
+  );
+}
+
+/**
+ * Standardized mode toggle button for effect type/mode selectors.
+ * Ensures consistent sizing, color, and padding across all effect cards.
+ */
+interface ModeButtonProps {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  color?: string;
+  ariaLabel?: string;
+}
+
+export function ModeButton({ active, onClick, children, color, ariaLabel }: ModeButtonProps) {
+  return (
+    <button
+      className={`px-2 py-0.5 text-[10px] rounded capitalize transition-colors ${
+        active
+          ? 'text-white/80 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]'
+          : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
+      }`}
+      style={active ? {
+        backgroundColor: color ? `${color}20` : 'rgba(255,255,255,0.08)',
+        color: color ? `${color}cc` : undefined,
+      } : undefined}
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={ariaLabel}
+    >
+      {children}
+    </button>
   );
 }

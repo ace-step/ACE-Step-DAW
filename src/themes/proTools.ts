@@ -43,7 +43,7 @@ export const proToolsTheme: ThemeDefinition = {
     'daw-hover': '#3e3d34',
     'daw-hover-subtle': '#33322a',
     // Warm muted text — distinctly NOT cool grey
-    'daw-text-muted': '#8a8678',
+    'daw-text-muted': '#a09c8e',
     // Amber/gold accent — VU meter illumination color
     'daw-accent': '#d4a843',
     'daw-accent-hover': '#e0ba58',

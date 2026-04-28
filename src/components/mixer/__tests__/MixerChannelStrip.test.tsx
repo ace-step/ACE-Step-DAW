@@ -97,8 +97,7 @@ describe('Channel strip improvements', () => {
       render(<MixerPanel />);
       const nameEl = screen.getAllByTestId('channel-name')[0];
       fireEvent.doubleClick(nameEl);
-      const input = screen.getByTestId('channel-rename-input');
-      expect(input).toBeDefined();
+      const input = screen.getByTestId('channel-rename-input'); // getBy* throws if not found
       expect((input as HTMLInputElement).value).toBe(
         useProjectStore.getState().project!.tracks[0].displayName,
       );
@@ -161,7 +160,7 @@ describe('Channel strip improvements', () => {
       render(<MixerPanel />);
       const strip = screen.getAllByTestId('track-color-strip-top')[0];
       // backgroundColor is set via inline style; jsdom converts hex to rgb
-      expect(strip.style.backgroundColor).toBeTruthy();
+      expect(strip.style.backgroundColor).not.toBe('');
       // Verify it's actually a color value (not empty)
       expect(strip.style.backgroundColor.length).toBeGreaterThan(0);
     });
@@ -178,7 +177,7 @@ describe('Channel strip improvements', () => {
     function getGroupStrip(trackId: string): HTMLElement {
       const strips = screen.getAllByTestId('channel-strip');
       const strip = strips.find((el) => el.getAttribute('data-track-id') === trackId);
-      expect(strip).toBeDefined();
+      expect(strip).not.toBeUndefined();
       return strip!;
     }
 
@@ -227,21 +226,20 @@ describe('Channel strip improvements', () => {
     it('renders master strip with data-testid', () => {
       setupWithTrack();
       render(<MixerPanel />);
-      const masterStrip = screen.getByTestId('master-strip');
-      expect(masterStrip).toBeDefined();
+      screen.getByTestId('master-strip'); // getBy* throws if not found
     });
 
     it('renders master label text', () => {
       setupWithTrack();
       render(<MixerPanel />);
-      expect(screen.getByText('Master')).toBeDefined();
+      screen.getByText('Master'); // getBy* throws if not found
     });
 
     it('renders IN and OUT meter labels', () => {
       setupWithTrack();
       render(<MixerPanel />);
-      expect(screen.getByText('IN')).toBeDefined();
-      expect(screen.getByText('OUT')).toBeDefined();
+      screen.getByText('IN'); // getBy* throws if not found
+      screen.getByText('OUT');
     });
   });
 });

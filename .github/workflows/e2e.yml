@@ -1,4 +1,4 @@
-name: E2E Tests (non-blocking)
+name: E2E Tests
 
 on:
   push:
@@ -12,9 +12,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-test:
+  # Critical E2E tests — BLOCKS PR merges.
+  e2e-critical:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Run critical E2E tests
+        id: e2e-critical
+        run: |
+          npx playwright test --grep '@critical' --retries=1 --reporter=list,html 2>&1 | tee /tmp/e2e-critical-output.txt
+        continue-on-error: true
+
+      - name: Post test results to job summary
+        if: always()
+        run: |
+          echo '## E2E Critical Test Results' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -80 /tmp/e2e-critical-output.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No output captured" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if tests failed
+        if: steps.e2e-critical.outcome == 'failure'
+        run: exit 1
+
+      - name: Upload critical test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-critical
+          path: playwright-report/
+          retention-days: 7
+
+  # Extended E2E tests — non-blocking, creates issues on failure
+  e2e-extended:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -25,18 +65,20 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
 
-      - name: Run E2E tests
+      - name: Run extended E2E tests
         id: e2e
         run: |
-          npx playwright test 2>&1 | tee /tmp/e2e-output.txt
-          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -o pipefail
+          npx playwright test --grep-invert '@critical' 2>&1 | tee /tmp/e2e-output.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
         continue-on-error: true
 
-      - name: Upload test report
+      - name: Upload extended test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-extended
           path: playwright-report/
           retention-days: 7
 

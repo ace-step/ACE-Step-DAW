@@ -15,13 +15,13 @@ describe('LevelMeter', () => {
   it('renders with level-meter testid', () => {
     render(<LevelMeter trackId="track-1" />);
     const meter = screen.getByTestId('level-meter');
-    expect(meter).toBeDefined();
+    expect(meter).not.toBeUndefined();
   });
 
   it('renders a canvas element for meter display', () => {
     render(<LevelMeter trackId="track-1" />);
     const canvas = screen.getByTestId('meter-canvas');
-    expect(canvas).toBeDefined();
+    expect(canvas).not.toBeNull();
     expect(canvas.tagName.toLowerCase()).toBe('canvas');
   });
 

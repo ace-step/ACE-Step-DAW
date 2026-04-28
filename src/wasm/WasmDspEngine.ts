@@ -12,6 +12,10 @@
  *   node.setFilter(0, 1000, 0.707, 0); // lowpass at 1kHz
  */
 
+import { createDebugLogger } from '../utils/debugLogger';
+
+const logger = createDebugLogger('ace-step:wasm-dsp-engine');
+
 /** Filter type constants matching the Rust BiquadType enum. */
 export const FilterType = {
   Lowpass: 0,
@@ -556,7 +560,7 @@ export class WasmDspEngine {
 
     // Log initialization (async, don't block)
     readyPromise.catch((err) => {
-      console.warn(`[WasmDspEngine] WASM init failed for ${trackId}:`, err);
+      logger.error(`WASM init failed for ${trackId}:`, err);
     });
 
     return node;

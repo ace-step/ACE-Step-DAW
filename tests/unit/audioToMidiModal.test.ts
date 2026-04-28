@@ -85,7 +85,7 @@ describe('Audio-to-MIDI sensitivity controls', () => {
       minConfidence: 0.3,
     });
 
-    expect(result.detectedNotes).toBeDefined();
+    expect(result.detectedNotes).not.toBeUndefined();
     expect(Array.isArray(result.detectedNotes)).toBe(true);
 
     for (const note of result.detectedNotes) {

@@ -3,8 +3,7 @@ import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
 import { getAudioEngine } from './useAudioEngine';
 import { saveAudioBlob, loadAudioBlobByKey } from '../services/audioFileManager';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
-import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { parseMidiFile } from '../utils/midi';
 import { toastError, toastInfo, toastSuccess } from './useToast';
@@ -115,7 +114,7 @@ export function useAudioImport() {
     const trimmedBuffer = trimAudioBuffer(engine, audioBuffer, clipDuration);
     const wavBlob = audioBufferToWavBlob(trimmedBuffer);
     const isolatedKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
-    const peaks = computeWaveformPeaks(trimmedBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = await computeWaveformWithMipmap(isolatedKey, trimmedBuffer);
 
     updateClipStatus(clip.id, 'ready', {
       isolatedAudioKey: isolatedKey,
@@ -162,8 +161,8 @@ export function useAudioImport() {
     const wavBlob = audioBufferToWavBlob(trimmedBuffer);
     const isolatedKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
 
-    // Compute waveform peaks
-    const peaks = computeWaveformPeaks(trimmedBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    // Compute waveform peaks with mipmap
+    const peaks = await computeWaveformWithMipmap(isolatedKey, trimmedBuffer);
 
     // Mark clip as ready with uploaded source
     updateClipStatus(clip.id, 'ready', {
@@ -356,7 +355,7 @@ export function useAudioImport() {
 
     const wavBlob = audioBufferToWavBlob(audioBuffer);
     const isolatedKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
-    const peaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = await computeWaveformWithMipmap(isolatedKey, audioBuffer);
 
     updateClipStatus(clip.id, 'ready', {
       isolatedAudioKey: isolatedKey,
@@ -398,7 +397,7 @@ export function useAudioImport() {
 
     const wavBlob = audioBufferToWavBlob(audioBuffer);
     const isolatedKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
-    const peaks = asset.waveformPeaks ?? computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const peaks = asset.waveformPeaks ?? await computeWaveformWithMipmap(isolatedKey, audioBuffer);
 
     updateClipStatus(clip.id, 'ready', {
       isolatedAudioKey: isolatedKey,
@@ -463,6 +462,46 @@ export function useAudioImport() {
     await importAssetAsQuickSampler(assetId);
   }, [importAssetAsQuickSampler, restoreAssetToNewTrack]);
 
+  const openGranularFilePicker = useCallback((trackId: string) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'audio/*';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const project = useProjectStore.getState().project;
+      if (!project) return;
+
+      try {
+        const engine = getAudioEngine();
+        await engine.resume();
+
+        const arrayBuffer = await file.arrayBuffer();
+        const audioBuffer = await engine.ctx.decodeAudioData(arrayBuffer);
+        const wavBlob = audioBufferToWavBlob(audioBuffer);
+        const audioKey = await saveAudioBlob(project.id, `granular-${trackId}`, 'isolated', wavBlob);
+        const sampleName = file.name.replace(/\.[^.]+$/, '');
+
+        const { createGranularSettings } = await import('../engine/GranularEngine');
+        const granularConfig = createGranularSettings(audioKey);
+        const store = useProjectStore.getState();
+        store.updateTrack(trackId, {
+          instrument: {
+            kind: 'granular',
+            preset: 'granular',
+            name: sampleName,
+            settings: granularConfig,
+          },
+        });
+        store.updateGranularConfig(trackId, granularConfig);
+        toastSuccess(`Loaded granular source: ${sampleName}`);
+      } catch (err) {
+        toastError(`Failed to load granular source: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    };
+    input.click();
+  }, []);
+
   return {
     importAudioFile,
     importAudioBufferToTrack,
@@ -474,6 +513,7 @@ export function useAudioImport() {
     openFilePicker,
     openSamplerFilePicker,
     openQuickSamplerFilePicker,
+    openGranularFilePicker,
     importLoopToTrack,
     importAssetToTrack,
     importAssetAsQuickSampler,

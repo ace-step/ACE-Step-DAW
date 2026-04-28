@@ -29,7 +29,7 @@ describe('Unified Instrument Presets', () => {
 
   it('all presets have valid instrument config', () => {
     for (const preset of ALL_FACTORY_PRESETS) {
-      expect(preset.instrument).toBeDefined();
+      expect(preset.instrument).not.toBeUndefined();
       expect(preset.instrument.kind).toBe(preset.instrumentKind);
     }
   });
@@ -37,20 +37,20 @@ describe('Unified Instrument Presets', () => {
   describe('getPresetById', () => {
     it('finds a factory preset', () => {
       const preset = getPresetById('factory-sub-bass');
-      expect(preset).toBeDefined();
+      expect(preset).not.toBeUndefined();
       expect(preset!.name).toBe('Sub Bass');
       expect(preset!.instrumentKind).toBe('subtractive');
     });
 
     it('finds an FM preset', () => {
       const preset = getPresetById('fm-electric-piano');
-      expect(preset).toBeDefined();
+      expect(preset).not.toBeUndefined();
       expect(preset!.instrumentKind).toBe('fm');
     });
 
     it('finds a wavetable preset', () => {
       const preset = getPresetById('wt-basic');
-      expect(preset).toBeDefined();
+      expect(preset).not.toBeUndefined();
       expect(preset!.instrumentKind).toBe('wavetable');
     });
 

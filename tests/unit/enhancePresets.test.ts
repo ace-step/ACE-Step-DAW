@@ -17,10 +17,10 @@ describe('ENHANCE_PRESETS data structure', () => {
 
   it('every preset has required fields', () => {
     for (const preset of ENHANCE_PRESETS) {
-      expect(preset.id).toBeTruthy();
-      expect(preset.label).toBeTruthy();
-      expect(preset.icon).toBeTruthy();
-      expect(preset.caption).toBeTruthy();
+      expect(preset.id.length).toBeGreaterThan(0);
+      expect(preset.label.length).toBeGreaterThan(0);
+      expect(typeof preset.icon).toBe('string');
+      expect(preset.caption.length).toBeGreaterThan(0);
       expect(['low', 'medium', 'high']).toContain(preset.consistency);
       expect(preset.tags.length).toBeGreaterThan(0);
     }

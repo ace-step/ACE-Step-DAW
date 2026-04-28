@@ -183,11 +183,11 @@ describe('end-to-end: sine wave to notes', () => {
 
     // First note should be A4 (MIDI 69)
     const aNote = notes.find((n) => n.pitch === 69);
-    expect(aNote).toBeDefined();
+    expect(aNote).not.toBeUndefined();
     expect(aNote!.startTime).toBeCloseTo(0, 1);
 
     // Second note should be C5 (MIDI 72)
     const cNote = notes.find((n) => n.pitch === 72);
-    expect(cNote).toBeDefined();
+    expect(cNote).not.toBeUndefined();
   });
 });

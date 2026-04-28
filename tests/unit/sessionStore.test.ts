@@ -27,7 +27,7 @@ describe('session clip launcher store', () => {
 
     const session = useProjectStore.getState().project?.session;
     const firstScene = session?.scenes[0];
-    expect(firstScene).toBeDefined();
+    expect(firstScene).not.toBeUndefined();
     expect(session?.slots.find((slot) => slot.trackId === track.id && slot.sceneId === firstScene?.id)?.clipId).toBe(clip.id);
 
     useTransportStore.setState({ currentTime: 2.1, isPlaying: true });
@@ -56,7 +56,7 @@ describe('session clip launcher store', () => {
     });
     const session = useProjectStore.getState().project?.session;
     const firstScene = session?.scenes[0];
-    expect(firstScene).toBeDefined();
+    expect(firstScene).not.toBeUndefined();
 
     useTransportStore.setState({ currentTime: 0, isPlaying: false });
     store.startSessionArrangementRecording(0);

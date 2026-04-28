@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { StatusBar, _resetLastKnownConnection } from '../../src/components/layout/StatusBar';
 import { useGenerationStore } from '../../src/store/generationStore';
@@ -10,6 +10,10 @@ const healthCheckMock = vi.fn().mockResolvedValue(false);
 vi.mock('../../src/services/aceStepApi', () => ({
   healthCheck: () => healthCheckMock(),
 }));
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('StatusBar auto-hide', () => {
   beforeEach(() => {
@@ -70,37 +74,33 @@ describe('StatusBar auto-hide', () => {
     expect(saveDot).toBeInTheDocument();
   });
 
-  it('renders proximity sentinel div when auto-hide is enabled for easier hover target', () => {
+  it('does not render a proximity overlay that can intercept bottom-edge clicks', () => {
     useUIStore.setState({ statusBarAutoHide: true });
     render(<StatusBar />);
-    const sentinel = screen.getByTestId('status-bar-sentinel');
-    expect(sentinel).toBeInTheDocument();
+    expect(screen.queryByTestId('status-bar-sentinel')).not.toBeInTheDocument();
   });
 
-  it('expands when hovering the proximity sentinel', () => {
+  it('expands when the pointer moves within the bottom proximity zone', () => {
     useUIStore.setState({ statusBarAutoHide: true });
     render(<StatusBar />);
-    const sentinel = screen.getByTestId('status-bar-sentinel');
-    fireEvent.mouseEnter(sentinel);
+    fireEvent.pointerMove(window, { clientY: window.innerHeight - 12 });
     const bar = screen.getByTestId('status-bar');
     expect(bar.className).not.toContain('status-bar-collapsed');
   });
 
-  it('collapses after sentinel expansion when the hover zone is left', () => {
+  it('collapses after pointer proximity expansion when the pointer moves away', () => {
     useUIStore.setState({ statusBarAutoHide: true });
     render(<StatusBar />);
-    const hoverZone = screen.getByTestId('status-bar-hover-zone');
-    const sentinel = screen.getByTestId('status-bar-sentinel');
     const bar = screen.getByTestId('status-bar');
 
-    fireEvent.mouseEnter(sentinel);
+    fireEvent.pointerMove(window, { clientY: window.innerHeight - 12 });
     expect(bar.className).not.toContain('status-bar-collapsed');
 
-    fireEvent.mouseLeave(hoverZone);
+    fireEvent.pointerMove(window, { clientY: window.innerHeight - 48 });
     expect(bar.className).toContain('status-bar-collapsed');
   });
 
-  it('does NOT render sentinel when auto-hide is off', () => {
+  it('does not render sentinel when auto-hide is off', () => {
     render(<StatusBar />);
     expect(screen.queryByTestId('status-bar-sentinel')).not.toBeInTheDocument();
   });
@@ -122,7 +122,14 @@ describe('StatusBar overflow prevention', () => {
     _resetLastKnownConnection();
   });
 
-  it('outer container has overflow-hidden to prevent text overflow', () => {
+  it('expanded container does not clip popovers', () => {
+    render(<StatusBar />);
+    const bar = screen.getByTestId('status-bar');
+    expect(bar.className).not.toContain('overflow-hidden');
+  });
+
+  it('collapsed container clips to the mini-row', () => {
+    useUIStore.setState({ statusBarAutoHide: true });
     render(<StatusBar />);
     const bar = screen.getByTestId('status-bar');
     expect(bar.className).toContain('overflow-hidden');

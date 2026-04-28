@@ -10,6 +10,7 @@ import type { SaveStatus } from '../../hooks/useAutoSave';
 import { OnboardingProgress } from './OnboardingProgress';
 
 const HEALTH_POLL_INTERVAL_MS = 10_000;
+const STATUS_BAR_PROXIMITY_PX = 24;
 const DEFAULT_SOURCE_CODE_URL = 'https://github.com/ace-step/ACE-Step-DAW';
 const CURRENT_YEAR = new Date().getFullYear();
 const DEFAULT_COPYRIGHT_NOTICE = `ACE Studio © ${CURRENT_YEAR}`;
@@ -76,6 +77,20 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!statusBarAutoHide) {
+      setHovered(false);
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      setHovered(window.innerHeight - event.clientY <= STATUS_BAR_PROXIMITY_PX);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    return () => window.removeEventListener('pointermove', handlePointerMove);
+  }, [statusBarAutoHide]);
+
   const jobCount = activeJobs.length;
   const jobLabel = jobCount === 1 ? '1 job' : `${jobCount} jobs`;
   const hasActiveJobs = activeJobs.length > 0;
@@ -103,16 +118,8 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Proximity sentinel: larger hover target above the bar without taking layout space. */}
-      {statusBarAutoHide && (
-        <div
-          className="absolute bottom-full left-0 h-6 w-full"
-          data-testid="status-bar-sentinel"
-          aria-hidden="true"
-        />
-      )}
       <div
-        className={`status-bar border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted overflow-hidden ${isCollapsed ? 'status-bar-collapsed' : ''}`}
+        className={`status-bar border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted ${isCollapsed ? 'status-bar-collapsed overflow-hidden' : ''}`}
         data-testid="status-bar"
       >
         {/* Collapsed mini-row: only critical dots visible within the 8px clamp */}

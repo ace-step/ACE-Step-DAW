@@ -40,6 +40,8 @@ describe('TimeRuler loop region braces', () => {
       loopStart: 0,
       loopEnd: 0,
       currentTime: 0,
+      playStartTime: 0,
+      isPlaying: false,
       isScrubbing: false,
     });
     useUIStore.setState({ pixelsPerSecond: 50 });

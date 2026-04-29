@@ -367,7 +367,7 @@ select:focus-visible,
   opacity: 0.5;
 }
 
-/* Playhead glow — bright halo for visibility during playback */
+/* Playhead glow — subtle glow for visibility during playback */
 .playhead-glow {
   box-shadow: 0 0 2px rgba(255, 255, 255, 0.28);
 }

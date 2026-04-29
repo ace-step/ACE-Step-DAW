@@ -475,7 +475,7 @@ export function useTransport() {
           const trackNode = engine.getOrCreateTrackNode(track.id);
           await karplusStrongEngine.ensureTrack(
             track.id, track.instrument.settings,
-            trackNode.inputGain as unknown as Tone.InputNode,
+            trackInputAsAudioNode(trackNode.inputGain),
           );
         } else if (preset !== 'sampler') {
           synthEngine.ensureTrackSynth(track.id, preset);

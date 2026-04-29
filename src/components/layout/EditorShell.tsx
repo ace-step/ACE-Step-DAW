@@ -36,6 +36,7 @@ const ClipInspectorPanel = lazy(() => import('../timeline/ClipInspectorPanel').t
 const LoopBrowser = lazy(() => import('../assets/LoopBrowser').then(m => ({ default: m.LoopBrowser })));
 const SmartControlsPanel = lazy(() => import('../controls/SmartControlsPanel').then(m => ({ default: m.SmartControlsPanel })));
 const VST3SidePanel = lazy(() => import('../plugins/VST3SidePanel').then(m => ({ default: m.VST3SidePanel })));
+const WAMSidePanel = lazy(() => import('../plugins/WAMSidePanel').then(m => ({ default: m.WAMSidePanel })));
 
 // Lazy-loaded dialogs (code-split, loaded on first use)
 const InstrumentPicker = lazy(() => import('../dialogs/InstrumentPicker').then(m => ({ default: m.InstrumentPicker })));
@@ -203,6 +204,7 @@ export function EditorShell() {
       {project && <ErrorBoundary name="ArrangementAssistant"><Suspense fallback={null}><ArrangementAssistantPanel /></Suspense></ErrorBoundary>}
       {project && <ErrorBoundary name="ClipInspector"><Suspense fallback={null}><ClipInspectorPanel /></Suspense></ErrorBoundary>}
       {project && <Suspense fallback={null}><VST3SidePanel /></Suspense>}
+      {project && <Suspense fallback={null}><WAMSidePanel /></Suspense>}
       {project && showModelLibrary && <Suspense fallback={null}><ModelLibraryPanel /></Suspense>}
       {project && showCustomModels && <Suspense fallback={null}><CustomModelsPanel /></Suspense>}
       {project && showVirtualKeyboard && <Suspense fallback={null}><VirtualKeyboard /></Suspense>}

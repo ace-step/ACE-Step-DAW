@@ -9,11 +9,13 @@ import { useEffect, useRef } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
 import { useVST3Store } from '../store/vst3Store';
+import { useWAMStore } from '../store/wamStore';
 import { effectsEngine, initWasmDsp } from '../engine/EffectsEngine';
 import { pluginEngine } from '../engine/PluginEngine';
 import { getAudioEngine } from './useAudioEngine';
 import { createDebugLogger } from '../utils/debugLogger';
 import type { CompressorParams } from '../types/project';
+import type { WAMActiveInstance } from '../types/wam';
 
 const logger = createDebugLogger('ace-step:effects-sync');
 import type { VST3ActiveInstance } from '../types/vst3';
@@ -59,11 +61,20 @@ function selectVst3EffectChainKey(s: { instances: Record<string, VST3ActiveInsta
   return parts.sort().join('|');
 }
 
+function selectWamEffectChainKey(s: { instances: Record<string, WAMActiveInstance> }): string {
+  const parts: string[] = [];
+  for (const [id, inst] of Object.entries(s.instances)) {
+    parts.push(`${id}:${inst.trackId ?? ''}:${inst.enabled ? '1' : '0'}`);
+  }
+  return parts.sort().join('|');
+}
+
 export function useEffectsSync() {
   const tracks = useProjectStore((s) => s.project?.tracks);
   const dspBackend = useUIStore((s) => s.dspBackend);
   // Subscribe to a stable fingerprint so we only re-render on routing-relevant changes
   const vst3ChainKey = useVST3Store(selectVst3EffectChainKey);
+  const wamChainKey = useWAMStore(selectWamEffectChainKey);
   const wasmInitRef = useRef(false);
 
   // Initialize WASM DSP engine once when dspBackend allows it
@@ -88,10 +99,17 @@ export function useEffectsSync() {
 
     const engine = getAudioEngine();
 
-    // Pre-group VST3 instances by trackId to avoid O(tracks*instances) loop
+    // Pre-group plugin instances by trackId to avoid O(tracks*instances) loop
     const vst3Instances = useVST3Store.getState().instances;
+    const wamInstances = useWAMStore.getState().instances;
     const instancesByTrack = new Map<string, { instanceId: string; enabled: boolean }[]>();
     for (const inst of Object.values(vst3Instances)) {
+      if (!inst.trackId) continue;
+      const list = instancesByTrack.get(inst.trackId) ?? [];
+      list.push({ instanceId: inst.instanceId, enabled: inst.enabled });
+      instancesByTrack.set(inst.trackId, list);
+    }
+    for (const inst of Object.values(wamInstances)) {
       if (!inst.trackId) continue;
       const list = instancesByTrack.get(inst.trackId) ?? [];
       list.push({ instanceId: inst.instanceId, enabled: inst.enabled });
@@ -103,7 +121,7 @@ export function useEffectsSync() {
       const effects = track.effects ?? [];
       effectsEngine.rebuildChain(track.id, effects, track.effectsBypassed ?? false);
 
-      // Sync VST3 plugin bypass state with audio engine
+      // Sync external plugin bypass state with audio engine
       const trackInstances = instancesByTrack.get(track.id);
       if (trackInstances) {
         for (const inst of trackInstances) {
@@ -147,5 +165,5 @@ export function useEffectsSync() {
         }
       }
     }
-  }, [tracks, vst3ChainKey]);
+  }, [tracks, vst3ChainKey, wamChainKey]);
 }

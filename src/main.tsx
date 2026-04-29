@@ -11,6 +11,7 @@ import { useGenerationStore } from './store/generationStore';
 import { useSessionStore } from './store/sessionStore';
 import { useModelStore } from './store/modelStore';
 import { projectActionApi } from './services/actionApi';
+import { useWAMStore } from './store/wamStore';
 import { getDAWApi } from './api/dawApi';
 import { cloudStorage } from './services/cloudStorageService';
 import { createProjectShare } from './services/projectSharingService';
@@ -106,6 +107,7 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__collaborationStore = useCollaborationStore;
 (window as unknown as Record<string, unknown>).__generationStore = useGenerationStore;
 (window as unknown as Record<string, unknown>).__analysisStore = useAnalysisStore;
+(window as unknown as Record<string, unknown>).__wamStore = useWAMStore;
 (window as unknown as Record<string, unknown>).__analyzeClipLocally = analyzeClipLocally;
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
 (window as unknown as Record<string, unknown>).__modelStore = useModelStore;

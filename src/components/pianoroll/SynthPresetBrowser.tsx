@@ -18,9 +18,10 @@ const KIND_LABELS: Record<InstrumentKindFilter, string> = {
   subtractive: 'Synth',
   fm: 'FM',
   wavetable: 'Wavetable',
+  physical: 'Physical',
 };
 
-const KIND_FILTERS: InstrumentKindFilter[] = ['all', 'subtractive', 'fm', 'wavetable'];
+const KIND_FILTERS: InstrumentKindFilter[] = ['all', 'subtractive', 'fm', 'wavetable', 'physical'];
 
 interface SynthPresetBrowserProps {
   trackId: string;

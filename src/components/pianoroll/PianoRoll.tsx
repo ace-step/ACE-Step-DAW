@@ -22,6 +22,7 @@ import { useChordSuggestionStore } from '../../store/chordSuggestionStore';
 import { useMidiAiStore } from '../../store/midiAiStore';
 import { getPianoRollToolShortcut, type PianoRollTool } from './PianoRollConstants';
 import { SynthParameterEditor, PRESET_DEFAULT_OSCILLATOR } from '../synth/SynthParameterEditor';
+import { PhysicalModelingEditor } from '../synth/PhysicalModelingEditor';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -617,7 +618,11 @@ export function PianoRoll() {
         />
       )}
 
-      {showSynthParams && track.synthPreset !== 'sampler' && track.instrument?.kind !== 'granular' && (
+      {showSynthParams && track.instrument?.kind === 'physical' && (
+        <PhysicalModelingEditor trackId={track.id} />
+      )}
+
+      {showSynthParams && track.synthPreset !== 'sampler' && track.instrument?.kind !== 'granular' && track.instrument?.kind !== 'physical' && (
         <SynthParameterEditor trackId={track.id} />
       )}
 

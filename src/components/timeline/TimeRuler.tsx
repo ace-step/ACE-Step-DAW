@@ -423,7 +423,7 @@ const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerS
   const svgH = 12;
   return (
     <div
-      className="absolute bottom-[-1px] z-30 h-full w-5"
+      className="absolute bottom-[-2px] z-30 flex h-full w-5 items-end justify-center"
       style={{ left: x, transform: 'translateX(-50%)', cursor: CURSOR_BRACKET_RIGHT }}
       onPointerDown={handlePointerDown}
       data-testid="timeline-playhead-loop-handle"
@@ -433,7 +433,7 @@ const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerS
         height={svgH}
         viewBox={`0 0 ${svgW} ${svgH}`}
         className={blinking ? 'playhead-triangle-blink' : undefined}
-        style={{ display: 'block', margin: 'auto', pointerEvents: 'none' }}
+        style={{ display: 'block', pointerEvents: 'none' }}
       >
         <polygon
           points={`0.5,0.5 ${svgW - 0.5},0.5 ${svgW / 2},${svgH - 0.5}`}

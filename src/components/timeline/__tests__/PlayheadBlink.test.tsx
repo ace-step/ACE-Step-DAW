@@ -64,6 +64,27 @@ describe('Playhead blink animation', () => {
     expect(cursor!.style.left).toBe('200px'); // playStartTime=2 * pps=100
   });
 
+  it('keeps the selected-track anchor cursor static during playback', () => {
+    const rects = new Map([['track-a', { top: 50, height: 80 }]]);
+    useTransportStore.setState({ isPlaying: true, currentTime: 4, playStartTime: 2 });
+    useUIStore.setState({
+      pixelsPerSecond: 100,
+      timelineFocused: true,
+      selectedTrackIds: new Set(['track-a']),
+      trackLaneRects: rects,
+    });
+
+    const { container } = render(<Playhead />);
+    const cursor = Array.from(container.children).find(
+      (el) => (el as HTMLElement).style.top === '50px' && (el as HTMLElement).style.height === '80px',
+    ) as HTMLElement | undefined;
+
+    expect(cursor).not.toBeNull();
+    expect(cursor!.style.animation).toBe('');
+    expect(cursor!.style.backgroundColor).toBe('rgb(255, 255, 255)');
+    expect(cursor!.className).not.toContain('playhead-glow');
+  });
+
   it('does not render anchor cursor when trackLaneRects has no entry for the track', () => {
     useTransportStore.setState({ isPlaying: false, currentTime: 0, playStartTime: 2 });
     useUIStore.setState({

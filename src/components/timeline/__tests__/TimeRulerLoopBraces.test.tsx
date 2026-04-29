@@ -40,6 +40,8 @@ describe('TimeRuler loop region braces', () => {
       loopStart: 0,
       loopEnd: 0,
       currentTime: 0,
+      playStartTime: 0,
+      isPlaying: false,
       isScrubbing: false,
     });
     useUIStore.setState({ pixelsPerSecond: 50 });
@@ -138,6 +140,14 @@ describe('TimeRuler loop region braces', () => {
     const state = useTransportStore.getState();
     expect(state.loopEnabled).toBe(true);
     expect(state.loopEnd).toBeGreaterThan(state.loopStart);
+  });
+
+  it('positions the playhead triangle tip on the ruler divider', () => {
+    render(<TimeRuler />);
+    const handle = screen.getByTestId('timeline-playhead-loop-handle');
+
+    expect(handle.className).toContain('bottom-[-2px]');
+    expect(handle.className).toContain('items-end');
   });
 
   describe('store-level loop region interactions', () => {

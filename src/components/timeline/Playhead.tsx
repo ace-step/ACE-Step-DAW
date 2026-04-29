@@ -22,10 +22,11 @@ export function Playhead() {
   const showTransportLine = Math.abs(currentTime - playStartTime) > 0.001;
 
   // Anchor cursor on selected track rows — always at playStartTime
+  const anchorBlinking = !isPlaying && timelineFocused;
   const showAnchorCursor = selectedTrackIds.size > 0 && (isPlaying || timelineFocused);
   const anchorCursors = showAnchorCursor
     ? Array.from(selectedTrackIds).map((trackId) => (
-        <SelectedTrackCursor key={trackId} trackId={trackId} x={anchorX} blink />
+        <SelectedTrackCursor key={trackId} trackId={trackId} x={anchorX} blink={anchorBlinking} />
       ))
     : null;
 
@@ -56,7 +57,7 @@ function SelectedTrackCursor({ trackId, x, blink }: { trackId: string; x: number
 
   return (
     <div
-      className="absolute w-px z-20 pointer-events-none playhead-glow"
+      className="absolute w-px z-20 pointer-events-none"
       style={{
         left: x,
         top: laneRect.top,

@@ -369,7 +369,7 @@ select:focus-visible,
 
 /* Playhead glow — bright halo for visibility during playback */
 .playhead-glow {
-  box-shadow: 0 0 4px rgba(255, 255, 255, 0.5), 0 0 8px rgba(147, 197, 253, 0.3), 0 0 3px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 2px rgba(255, 255, 255, 0.28);
 }
 
 /* Clip mount fade-in animation */
@@ -526,12 +526,6 @@ select:focus-visible,
   width: 8px;
   height: 12px;
 }
-/* Playhead: thin white line, no blink, Ableton uses a simple static line */
-[data-theme="ableton"] .playhead-triangle-blink polygon {
-  animation: none !important;
-  fill: #e6e6e6 !important;
-  stroke: #e6e6e6 !important;
-}
 /* Toolbar separators: even thinner and more subtle */
 [data-theme="ableton"] .bg-white\/8 {
   opacity: 0.04;
@@ -610,12 +604,6 @@ select:focus-visible,
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.2);
 }
-/* Playhead: purple (Apple purple), smooth */
-[data-theme="logic-pro"] .playhead-triangle-blink polygon {
-  animation: none !important;
-  fill: #bf5af2 !important;
-  stroke: #bf5af2 !important;
-}
 /* Scrollbar: round, Apple style */
 [data-theme="logic-pro"] ::-webkit-scrollbar-thumb {
   border-radius: 10px;
@@ -666,12 +654,6 @@ select:focus-visible,
   width: 8px;
   height: 14px;
   border-radius: 2px;
-}
-/* Playhead: orange line (FL signature), no blink */
-[data-theme="fl-studio"] .playhead-triangle-blink polygon {
-  animation: none !important;
-  fill: #ff6e00 !important;
-  stroke: #ff6e00 !important;
 }
 /* Borders: slightly thicker, higher contrast */
 [data-theme="fl-studio"] .border-b,
@@ -733,12 +715,6 @@ select:focus-visible,
   height: 12px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.1);
-}
-/* Playhead: blue (broadcast standard), no blink */
-[data-theme="pro-tools"] .playhead-triangle-blink polygon {
-  animation: none !important;
-  fill: #4a7fbf !important;
-  stroke: #4a7fbf !important;
 }
 /* Track color strip: small radius */
 [data-theme="pro-tools"] .rounded-r-sm {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useVST3Store } from '../vst3Store';
+import { pluginEngine } from '../../engine/PluginEngine';
 import type { VST3ActiveInstance, VST3PluginInfo } from '../../types/vst3';
 
 const mockPlugin = (overrides: Partial<VST3PluginInfo> = {}): VST3PluginInfo => ({
@@ -38,6 +39,7 @@ describe('vst3Store', () => {
       scanning: false,
       scanProgress: null,
       instances: {},
+      pluginOrder: {},
     });
   });
 
@@ -158,10 +160,27 @@ describe('vst3Store', () => {
       expect(useVST3Store.getState().instances['inst-1']).toBeUndefined();
     });
 
+    it('removeInstance removes the live plugin from PluginEngine and track order', () => {
+      const removePluginSpy = vi.spyOn(pluginEngine, 'removePlugin').mockImplementation(() => undefined);
+      useVST3Store.getState()._upsertInstance(mockInstance());
+      useVST3Store.setState({ pluginOrder: { 'track-1': ['inst-1', 'inst-2'] } });
+
+      useVST3Store.getState().removeInstance('inst-1');
+
+      expect(removePluginSpy).toHaveBeenCalledWith('track-1', 'inst-1');
+      expect(useVST3Store.getState().instances['inst-1']).toBeUndefined();
+      expect(useVST3Store.getState().pluginOrder['track-1']).toEqual(['inst-2']);
+
+      removePluginSpy.mockRestore();
+    });
+
     it('removing non-existent instance is a no-op', () => {
+      const removePluginSpy = vi.spyOn(pluginEngine, 'removePlugin').mockImplementation(() => undefined);
       useVST3Store.getState()._upsertInstance(mockInstance());
       useVST3Store.getState().removeInstance('non-existent');
       expect(Object.keys(useVST3Store.getState().instances)).toHaveLength(1);
+      expect(removePluginSpy).not.toHaveBeenCalled();
+      removePluginSpy.mockRestore();
     });
 
     it('toggleInstance toggles enabled state', () => {

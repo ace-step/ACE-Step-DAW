@@ -174,6 +174,18 @@ describe('vst3Store', () => {
       removePluginSpy.mockRestore();
     });
 
+    it('_removeInstance also removes the live plugin for bridge callback paths', () => {
+      const removePluginSpy = vi.spyOn(pluginEngine, 'removePlugin').mockImplementation(() => undefined);
+      useVST3Store.getState()._upsertInstance(mockInstance());
+
+      useVST3Store.getState()._removeInstance('inst-1');
+
+      expect(removePluginSpy).toHaveBeenCalledWith('track-1', 'inst-1');
+      expect(useVST3Store.getState().instances['inst-1']).toBeUndefined();
+
+      removePluginSpy.mockRestore();
+    });
+
     it('removing non-existent instance is a no-op', () => {
       const removePluginSpy = vi.spyOn(pluginEngine, 'removePlugin').mockImplementation(() => undefined);
       useVST3Store.getState()._upsertInstance(mockInstance());

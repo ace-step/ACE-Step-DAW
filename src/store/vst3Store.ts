@@ -234,15 +234,6 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
   },
 
   removeInstance: (instanceId: string) => {
-    const inst = get().instances[instanceId];
-    if (!inst) return;
-
-    try {
-      pluginEngine.removePlugin(inst.trackId, instanceId);
-    } catch {
-      // Store removal should still succeed if the live audio chain is already gone.
-    }
-
     get()._removeInstance(instanceId);
   },
 
@@ -409,6 +400,12 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
     if (!inst) {
       set({ instances: next });
       return;
+    }
+
+    try {
+      pluginEngine.removePlugin(inst.trackId, instanceId);
+    } catch {
+      // Store removal should still succeed if the live audio chain is already gone.
     }
 
     const order = (pluginOrder[inst.trackId] ?? []).filter((id) => id !== instanceId);

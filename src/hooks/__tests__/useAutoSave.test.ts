@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react';
 
 // Mock idb-keyval before importing anything that uses it
 vi.mock('idb-keyval', () => ({
+  createStore: vi.fn(() => ({})),
   get: vi.fn().mockResolvedValue(null),
   set: vi.fn().mockResolvedValue(undefined),
   del: vi.fn().mockResolvedValue(undefined),

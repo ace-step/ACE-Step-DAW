@@ -58,33 +58,16 @@ export function ClipWaveform({
   const columnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
   const columnWidth = waveformLayout.widthPx / columnCount;
 
-  // Each channel occupies its own vertical half.
-  // Left channel: y = 0..50, center at y = 25
-  // Right channel: y = 50..100, center at y = 75
-  // Scale maxAmplitude by track volume so waveform visually reflects output level
-  const scaledAmplitude = 23 * Math.min(1, trackVolume);
+  // Mono merged display: single waveform centered at y=50, using full height
+  const scaledAmplitude = 44 * Math.min(1, trackVolume);
 
-  const leftPath = buildChannelPath(
+  const monoPath = buildMonoMergedPath(
     peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    0, // channelOffset in stride: 0 = Lmax, 1 = Lmin
-    25, // centerY for left channel
-    scaledAmplitude,
+    50, scaledAmplitude,
   );
-  const rightPath = buildChannelPath(
+  const monoPeakLine = buildMonoMergedEnvelopeLine(
     peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    2, // channelOffset in stride: 2 = Rmax, 3 = Rmin
-    75, // centerY for right channel
-    scaledAmplitude,
-  );
-
-  // Peak envelope lines — brighter outline on top of the filled waveform
-  const leftPeakLine = buildPeakEnvelopeLine(
-    peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    0, 25, scaledAmplitude,
-  );
-  const rightPeakLine = buildPeakEnvelopeLine(
-    peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    2, 75, scaledAmplitude,
+    50, scaledAmplitude,
   );
 
   return (
@@ -96,81 +79,60 @@ export function ClipWaveform({
         preserveAspectRatio="none"
         className={opacityClassName}
       >
-        {/* Thin center divider between channels */}
-        <line
-          x1={waveformLayout.leftPx}
-          y1={50}
-          x2={waveformLayout.leftPx + waveformLayout.widthPx}
-          y2={50}
-          stroke={color}
-          strokeOpacity={0.2}
-          strokeWidth={0.5}
-        />
-        {/* Filled waveform shapes */}
-        <path d={leftPath} fill={color} fillOpacity={0.6} data-testid="waveform-left-channel" />
-        <path d={rightPath} fill={color} fillOpacity={0.6} data-testid="waveform-right-channel" />
-        {/* Peak envelope highlight lines — brighter outline on top */}
-        <path d={leftPeakLine} fill="none" stroke={color} strokeOpacity={1} strokeWidth={0.8} data-testid="waveform-left-peak" />
-        <path d={rightPeakLine} fill="none" stroke={color} strokeOpacity={1} strokeWidth={0.8} data-testid="waveform-right-peak" />
+        <path d={monoPath} fill={color} fillOpacity={0.85} data-testid="waveform-mono" />
+        <path d={monoPeakLine} fill="none" stroke={color} strokeOpacity={1} strokeWidth={1.0} data-testid="waveform-mono-peak" />
       </svg>
     </div>
   );
 }
 
 /**
- * Build an SVG path for one channel's waveform.
- * Draws the positive envelope (max) left-to-right, then negative envelope (min) right-to-left,
- * creating a filled shape around the channel's center line.
+ * Build mono merged SVG path: max(L,R) for upper, min(L,R) for lower.
  */
-function buildChannelPath(
+function buildMonoMergedPath(
   peaks: number[],
   peakSlice: { startPeakIdx: number; numBars: number },
   columnCount: number,
   columnWidth: number,
   leftPx: number,
-  channelOffset: number, // 0 for left (Lmax at +0, Lmin at +1), 2 for right (Rmax at +2, Rmin at +3)
   centerY: number,
   maxAmplitude: number,
 ): string {
-  // Upper contour (max values, positive peaks going upward from center)
   const upperPoints: string[] = [];
-  // Lower contour (min values, negative peaks going downward from center)
   const lowerPoints: string[] = [];
 
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { max, min } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    // max >= 0, maps upward from center; min <= 0, maps downward from center
-    const yTop = centerY - max * maxAmplitude;
-    const yBottom = centerY - min * maxAmplitude; // min is negative, so this goes below center
-    upperPoints.push(`${x} ${yTop}`);
-    lowerPoints.push(`${x} ${yBottom}`);
+    const l = getMinMaxForColumn(peaks, peakSlice, i, columnCount, 0);
+    const r = getMinMaxForColumn(peaks, peakSlice, i, columnCount, 2);
+    const maxVal = Math.max(l.max, r.max);
+    const minVal = Math.min(l.min, r.min);
+    upperPoints.push(`${x} ${centerY - maxVal * maxAmplitude}`);
+    lowerPoints.push(`${x} ${centerY - minVal * maxAmplitude}`);
   }
 
-  // Build closed path: upper left-to-right, then lower right-to-left
   return `M ${upperPoints[0]} L ${upperPoints.join(' L ')} L ${lowerPoints.reverse().join(' L ')} Z`;
 }
 
 /**
- * Build an SVG path for the peak envelope line (positive peaks only).
- * This draws a single polyline along the top of the waveform for a brighter highlight.
+ * Build mono merged peak envelope line (positive peaks only).
  */
-function buildPeakEnvelopeLine(
+function buildMonoMergedEnvelopeLine(
   peaks: number[],
   peakSlice: { startPeakIdx: number; numBars: number },
   columnCount: number,
   columnWidth: number,
   leftPx: number,
-  channelOffset: number,
   centerY: number,
   maxAmplitude: number,
 ): string {
   const points: string[] = [];
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { max } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    const yTop = centerY - max * maxAmplitude;
-    points.push(`${x} ${yTop}`);
+    const l = getMinMaxForColumn(peaks, peakSlice, i, columnCount, 0);
+    const r = getMinMaxForColumn(peaks, peakSlice, i, columnCount, 2);
+    const maxVal = Math.max(l.max, r.max);
+    points.push(`${x} ${centerY - maxVal * maxAmplitude}`);
   }
   if (points.length === 0) return '';
   return `M ${points.join(' L ')}`;

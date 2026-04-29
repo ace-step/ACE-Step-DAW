@@ -78,6 +78,7 @@ import type {
   WavetableSettings,
   GranularSettings,
   VelocityLayer,
+  MixSnapshot,
   SampleZone,
   VideoClipData,
   VideoTrackSettings,
@@ -87,6 +88,13 @@ import { DEFAULT_VIDEO_TRACK_SETTINGS } from '../types/project';
 import type { PluginInstance, PluginParamValue } from '../types/plugin';
 import { pluginRegistry } from '../engine/PluginRegistry';
 import { automationParamEquals } from '../types/project';
+import {
+  captureMixState,
+  captureTrackMixState,
+  captureReturnTrackMixState,
+  applyTrackMixState,
+  applyReturnTrackMixState,
+} from '../services/mixSnapshotService';
 import { quantizeNotes as applyQuantize, type QuantizeOptions } from '../utils/midiQuantize';
 import { detectTransients, computeWarpMarkers } from '../utils/audioQuantize';
 import {
@@ -110,20 +118,24 @@ import {
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
 import { stripHeavyDataForPersist } from './projectPersistUtils';
-import { exportTrackStems, getStemExportTracks, trackHasExportableContent } from '../engine/exportMix';
 import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { generatePattern, type PatternOptions } from '../utils/midiPatternGenerator';
 import { loadAudioBlobByKey, saveAudioBlob } from '../services/audioFileManager';
-import * as audioEngineHooks from '../hooks/useAudioEngine';
-import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
-import { createSamplerConfig } from '../engine/SamplerEngine';
 import { DEFAULT_WAVETABLE_SETTINGS } from '../engine/wavetablePresets';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { computeVideoSplit, computeLeftTrim, computeRightTrim } from '../utils/videoUtils';
-import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
 import type { StemCount, StemSeparationEngine } from '../types/api';
-import { separateClipAudioToStems } from '../services/stemSeparation';
+
+// ── Heavy modules: lazy-loaded to reduce initial bundle ──────────────────────
+// These are only needed for specific async operations (stem export, audio-to-MIDI, etc.)
+// The audio engine module is cached after first load for synchronous access.
+let _audioEngineModule: typeof import('../hooks/useAudioEngine') | null = null;
+async function getAudioEngineModule() {
+  if (!_audioEngineModule) _audioEngineModule = await import('../hooks/useAudioEngine');
+  return _audioEngineModule;
+}
+// Pre-load will happen on first use; detectPlaybackLatencyFromEngine falls back to defaults
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile, parseMidiFile } from '../utils/midi';
 import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from '../utils/midiEncoder';
@@ -141,14 +153,16 @@ import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateCli
 import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
 import {
-  CLIP_WAVEFORM_PEAK_COUNT,
+  canDestructivelyProcessClipAudio,
   getClipAudibleEndTime,
   getClipAudibleStartTime,
+  getClipAudibleTimelineDuration,
   getClipContentOffset,
   getClipPlaybackRate,
+  getClipSourceSpan,
   isClipRepitchStretched,
 } from '../utils/clipAudio';
-import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { computeWaveformWithMipmap } from '../utils/waveformPeaks';
 import { snapToGrid, beatsToSeconds } from '../utils/time';
 import {
   createDefaultPlaybackLatencySettings,
@@ -164,7 +178,6 @@ import {
 } from '../utils/trackInstrument';
 import { useTransportStore } from './transportStore';
 import { useCollaborationStore } from './collaborationStore';
-import { bounceTrackToAudioAsset } from '../services/bounceInPlace';
 import {
   ensurePlaybackLatencySettings,
 } from '../utils/playbackLatency';
@@ -402,6 +415,41 @@ const _future = createHistoryBuckets<ProjectHistoryEntry[]>(() => []);
 const MAX_HISTORY = 50;
 let _isDragging = false;
 let _historyOrder = 0;
+// A/B comparison state — stores the mix state from before toggling, so it can be restored
+type AbMixState = {
+  trackStates: import('../types/project').MixSnapshotTrackState[];
+  returnTrackStates: import('../types/project').MixSnapshotReturnTrackState[];
+  masterVolume?: number;
+};
+let _abPreviousMixState: AbMixState | null = null;
+let _abActiveSnapshotId: string | null = null;
+
+function _clearAbCompareState() {
+  _abPreviousMixState = null;
+  _abActiveSnapshotId = null;
+}
+
+function _applyMixStateToProject(project: Project, mixState: AbMixState, cloneCollections = true): Project {
+  const trackMap = new Map(mixState.trackStates.map((s) => [s.trackId, s]));
+  const returnMap = new Map(mixState.returnTrackStates.map((s) => [s.returnTrackId, s]));
+  return {
+    ...project,
+    masterVolume: mixState.masterVolume ?? project.masterVolume,
+    tracks: project.tracks.map((track) => {
+      const trackState = trackMap.get(track.id);
+      return trackState ? applyTrackMixState(track, trackState, { cloneCollections }) : track;
+    }),
+    returnTracks: (project.returnTracks ?? []).map((rt) => {
+      const rtState = returnMap.get(rt.id);
+      return rtState ? applyReturnTrackMixState(rt, rtState, { cloneCollections }) : rt;
+    }),
+  };
+}
+
+function _getProjectForPersist(project: Project): Project {
+  if (!_abPreviousMixState) return project;
+  return _applyMixStateToProject(project, _abPreviousMixState, false);
+}
 
 function _getHistoryBucketKey(scope: HistoryScope, target: HistoryTarget = {}) {
   switch (scope) {
@@ -594,14 +642,21 @@ function _applyHistorySnapshot(current: Project | null, snapshot: Project, entry
       if (entry.clipId) return _replaceClipFromSnapshot(current, snapshot, entry.clipId);
       if (entry.trackId) return _replaceTrackFromSnapshot(current, snapshot, entry.trackId);
       return structuredClone(snapshot);
-    case 'mixer':
+    case 'mixer': {
       if (entry.trackId) return _replaceTrackFromSnapshot(current, snapshot, entry.trackId);
+      const trackMixStates = new Map(snapshot.tracks.map((track) => [track.id, captureTrackMixState(track)]));
       return {
         ...current,
         updatedAt: Date.now(),
+        masterVolume: snapshot.masterVolume ?? current.masterVolume,
+        tracks: current.tracks.map((track) => {
+          const trackState = trackMixStates.get(track.id);
+          return trackState ? applyTrackMixState(track, trackState) : track;
+        }),
         mastering: structuredClone(snapshot.mastering),
         returnTracks: structuredClone(snapshot.returnTracks ?? []),
       };
+    }
     case 'arrangement':
     default:
       return structuredClone(snapshot);
@@ -610,6 +665,8 @@ function _applyHistorySnapshot(current: Project | null, snapshot: Project, entry
 
 export interface ProjectState extends MidiSliceActions {
   project: Project | null;
+  abCompareRevision: number;
+  isViewerMode: () => boolean;
 
   setProject: (project: Project) => void;
   createProject: (params?: {
@@ -627,6 +684,10 @@ export interface ProjectState extends MidiSliceActions {
   beginDrag: (options?: HistoryOptions) => void;
   /** Call when a drag/continuous operation ends to re-enable normal history. */
   endDrag: () => void;
+  /** Returns the snapshot ID currently being A/B compared, or null. */
+  getAbActiveSnapshotId: () => string | null;
+  /** Returns true if A/B comparison mode is active. */
+  isAbComparing: () => boolean;
 
   updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'timeSignatureDenominator' | 'name' | 'masterVolume' | 'measures'>>) => void;
   detectPlaybackLatency: (latency: { baseLatency?: number | null; outputLatency?: number | null }) => void;
@@ -663,7 +724,7 @@ export interface ProjectState extends MidiSliceActions {
   removeTrack: (trackId: string) => void;
   removeTracks: (trackIds: string[]) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
-  updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig' | 'drumKit' | 'color'>>) => void;
+  updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig' | 'drumKit' | 'color' | 'voiceProfileId'>>) => void;
   setTrackInstrument: (trackId: string, instrument: TrackInstrument) => void;
   /** Configure FM synthesis parameters on a track, creating or updating the FM instrument. */
   setTrackFmSynth: (trackId: string, params: Partial<FmInstrumentSettings>) => void;
@@ -719,9 +780,15 @@ export interface ProjectState extends MidiSliceActions {
   createQuickSamplerFromAsset: (assetId: string, options?: { trackId?: string; rootNote?: number }) => Track | undefined;
   /** Recreate a new track from a persisted asset snapshot. */
   restoreAssetToNewTrack: (assetId: string, startTime: number, options?: { order?: number }) => Track | undefined;
-  saveTrackPreset: (trackId: string, presetName: string) => TrackPreset;
-  applyTrackPreset: (presetId: string) => Track | undefined;
+  saveTrackPreset: (trackId: string, presetName: string) => TrackPreset | undefined;
+  applyTrackPreset: (presetId: string, options?: { order?: number }) => Track | undefined;
   deleteTrackPreset: (presetId: string) => void;
+  // ── Mix Snapshots ──
+  saveMixSnapshot: (name: string) => MixSnapshot;
+  loadMixSnapshot: (snapshotId: string) => void;
+  deleteMixSnapshot: (snapshotId: string) => void;
+  renameMixSnapshot: (snapshotId: string, newName: string) => void;
+  toggleAbCompare: (snapshotId: string) => void;
   renameTrack: (trackId: string, newName: string) => void;
   setInputMonitoring: (trackId: string, mode: InputMonitoringMode) => void;
   setTrackHeightPreset: (trackId: string, preset: TrackHeightPreset) => void;
@@ -736,6 +803,8 @@ export interface ProjectState extends MidiSliceActions {
   updateClipColors: (clipIds: string[], color: string | undefined) => void;
   /** Toggle muted state on one or more clips. If any are active, mute all; if all muted, unmute all. */
   toggleClipMuted: (clipIds: string[]) => void;
+  addClipTag: (clipId: string, tag: string) => void;
+  removeClipTag: (clipId: string, tag: string) => void;
   removeClip: (clipId: string) => void;
   duplicateClip: (clipId: string) => Clip | undefined;
   updateClipStatus: (clipId: string, status: ClipGenerationStatus, extra?: Partial<Clip>) => void;
@@ -743,8 +812,9 @@ export interface ProjectState extends MidiSliceActions {
   saveClipVersion: (clipId: string) => void;
   /** Restore clip audio fields from a version by index. */
   setActiveVersion: (clipId: string, idx: number) => void;
-  setClipFade: (clipId: string, fade: Partial<Pick<Clip, 'fadeInDuration' | 'fadeOutDuration' | 'fadeInCurve' | 'fadeOutCurve'>>) => void;
+  setClipFade: (clipId: string, fade: Partial<Pick<Clip, 'fadeInDuration' | 'fadeOutDuration' | 'fadeInCurve' | 'fadeOutCurve' | 'fadeInCurvePoint' | 'fadeOutCurvePoint'>>) => void;
   setClipTimeStretch: (clipId: string, rate: number) => void;
+  setClipSpeedPreset: (clipId: string, rate: number) => void;
   setClipPitchShift: (clipId: string, semitones: number) => void;
   setClipStretchMode: (clipId: string, mode: StretchMode) => void;
   tempoMatchClip: (clipId: string, sourceBpm: number) => void;
@@ -784,6 +854,23 @@ export interface ProjectState extends MidiSliceActions {
   batchMoveClips: (clipIds: string[], timeOffset: number) => void;
   /** Paste pre-built clips into their target tracks. Returns IDs of newly created clips. */
   pasteClipsToTracks: (clips: { clip: Clip; targetTrackId: string }[]) => string[];
+
+  // ── Arrangement operations (global time edits) ───────────────────────
+  /** Split every clip on every track at the given time. */
+  splitAllAtPlayhead: (splitTime: number) => void;
+  /** Insert silence at a time point, pushing everything after it forward. */
+  insertTime: (atTime: number, duration: number) => void;
+  /** Delete content in [startTime, endTime) and pull everything after backward (ripple delete). */
+  deleteTimeRange: (startTime: number, endTime: number) => void;
+  /** Duplicate all content in [startTime, endTime), inserting the copy immediately after and shifting subsequent content. */
+  duplicateTimeRange: (startTime: number, endTime: number) => void;
+
+  /** Destructive audio processing: reverse clip audio. */
+  reverseClip: (clipId: string) => Promise<void>;
+  /** Destructive audio processing: normalize clip audio to peak. */
+  normalizeClip: (clipId: string) => Promise<void>;
+  /** Destructive audio processing: apply gain adjustment in dB. */
+  adjustClipGain: (clipId: string, gainDb: number) => Promise<void>;
 
   // Session View / clip launcher
   createSessionScene: (name?: string) => SessionScene | undefined;
@@ -1868,6 +1955,25 @@ function buildTrackOrderMapForMove(
   return orderMap;
 }
 
+function insertTrackPreservingOrder(existingTracks: Track[], track: Track): Track[] {
+  const requestedOrder = Number.isFinite(track.order) && track.order > 0
+    ? Math.floor(track.order)
+    : existingTracks.length + 1;
+  const hasOrderConflict = existingTracks.some((candidate) => candidate.order === requestedOrder);
+  const shiftedTracks = hasOrderConflict
+    ? existingTracks.map((candidate) => (
+        candidate.order >= requestedOrder
+          ? { ...candidate, order: candidate.order + 1 }
+          : candidate
+      ))
+    : existingTracks;
+
+  return [...shiftedTracks, { ...track, order: requestedOrder }]
+    .map((candidate, originalIndex) => ({ candidate, originalIndex }))
+    .sort((a, b) => a.candidate.order - b.candidate.order || a.originalIndex - b.originalIndex)
+    .map(({ candidate }) => candidate);
+}
+
 function createTrackPresetSnapshot(track: Track, name: string): TrackPreset {
   const settings: TrackPresetSettings = {
     color: track.color,
@@ -2052,6 +2158,36 @@ function restoreClipFromAsset(asset: AssetClip, trackId: string, startTime: numb
   };
 }
 
+function syncAssetForClip(project: Project, clipId: string): Project {
+  if (!project.assets?.some((asset) => asset.clipId === clipId)) return project;
+
+  for (const track of project.tracks) {
+    const clip = track.clips.find((candidate) => candidate.id === clipId);
+    if (!clip) continue;
+    return {
+      ...project,
+      assets: project.assets.map((asset) => (
+        asset.clipId !== clipId
+          ? asset
+          : {
+              ...asset,
+              trackDisplayName: track.displayName,
+              prompt: clip.prompt,
+              source: clip.source ?? asset.source,
+              isolatedAudioKey: clip.isolatedAudioKey,
+              cumulativeMixKey: clip.cumulativeMixKey,
+              waveformPeaks: clip.waveformPeaks,
+              duration: clip.duration,
+              originTrackSnapshot: buildAssetTrackSnapshot(track),
+              originClipSnapshot: buildAssetClipSnapshot(clip, asset.starred),
+            }
+      )),
+    };
+  }
+
+  return project;
+}
+
 function hydrateAssetOriginSnapshots(project: Project): Project {
   const assets = project.assets ?? [];
   if (assets.length === 0) return project;
@@ -2153,10 +2289,10 @@ function applyMasteringPreferences(mastering: MasteringState): MasteringState {
 }
 
 function detectPlaybackLatencyFromEngine() {
-  const engine =
-    'getExistingAudioEngine' in audioEngineHooks
-      ? audioEngineHooks.getExistingAudioEngine?.() ?? null
-      : null;
+  const mod = _audioEngineModule;
+  const engine = mod && 'getExistingAudioEngine' in mod
+    ? mod.getExistingAudioEngine?.() ?? null
+    : null;
   if (!engine) return createDefaultPlaybackLatencySettings();
   return detectPlaybackLatencySettings(undefined, {
     baseLatency: engine.ctx.baseLatency,
@@ -2244,9 +2380,13 @@ export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
   project: null,
+  abCompareRevision: 0,
+  isViewerMode: _isViewerMode,
 
   setProject: (project) => {
     _clearHistory();
+    _clearAbCompareState();
+    const abCompareRevision = get().abCompareRevision + 1;
     // Migration: backfill trackType for projects created before the field existed
     const migratedBase: Project = hydrateAssetOriginSnapshots({
       ...project,
@@ -2280,7 +2420,7 @@ export const useProjectStore = create<ProjectState>()(
           ? normalizePlaybackLatencySettings(project.playbackLatency)
           : detectPlaybackLatencyFromEngine(),
     });
-    set({ project: ensureProjectSession(migratedBase) });
+    set({ project: ensureProjectSession(migratedBase), abCompareRevision });
   },
 
   undo: (scope, target) => {
@@ -2298,7 +2438,12 @@ export const useProjectStore = create<ProjectState>()(
         snapshot: structuredClone(state.project),
       });
     }
-    set({ project: _applyHistorySnapshot(state.project, prev.snapshot, prev) });
+    const wasAbComparing = _abPreviousMixState !== null || _abActiveSnapshotId !== null;
+    if (wasAbComparing) _clearAbCompareState();
+    set({
+      project: _applyHistorySnapshot(state.project, prev.snapshot, prev),
+      ...(wasAbComparing ? { abCompareRevision: state.abCompareRevision + 1 } : {}),
+    });
   },
 
   redo: (scope, target) => {
@@ -2317,12 +2462,21 @@ export const useProjectStore = create<ProjectState>()(
       });
       _trimHistory(historyBucket);
     }
-    set({ project: _applyHistorySnapshot(state.project, next.snapshot, next) });
+    const wasAbComparing = _abPreviousMixState !== null || _abActiveSnapshotId !== null;
+    if (wasAbComparing) _clearAbCompareState();
+    set({
+      project: _applyHistorySnapshot(state.project, next.snapshot, next),
+      ...(wasAbComparing ? { abCompareRevision: state.abCompareRevision + 1 } : {}),
+    });
   },
 
   getUndoHistory: (scope, target) => _getHistoryEntries(_history, scope, target),
 
   getRedoHistory: (scope, target) => _getHistoryEntries(_future, scope, target),
+
+  getAbActiveSnapshotId: () => _abActiveSnapshotId,
+
+  isAbComparing: () => _abActiveSnapshotId !== null && _abPreviousMixState !== null,
 
   jumpToHistoryEntry: (entryId, scope, target) => {
     const state = get();
@@ -2366,7 +2520,12 @@ export const useProjectStore = create<ProjectState>()(
       });
     }
     resolved.bucket.splice(idx);
-    set({ project: _applyHistorySnapshot(state.project, destination.snapshot, destination) });
+    const wasAbComparing = _abPreviousMixState !== null || _abActiveSnapshotId !== null;
+    if (wasAbComparing) _clearAbCompareState();
+    set({
+      project: _applyHistorySnapshot(state.project, destination.snapshot, destination),
+      ...(wasAbComparing ? { abCompareRevision: state.abCompareRevision + 1 } : {}),
+    });
   },
 
   beginDrag: (options) => {
@@ -2395,6 +2554,8 @@ export const useProjectStore = create<ProjectState>()(
 
   createProject: (params) => {
     _clearHistory();
+    _clearAbCompareState();
+    const abCompareRevision = get().abCompareRevision + 1;
     const bpm = params?.bpm ?? DEFAULT_BPM;
     const timeSig = params?.timeSignature ?? DEFAULT_TIME_SIGNATURE;
     const measures = DEFAULT_MEASURES;
@@ -2417,7 +2578,7 @@ export const useProjectStore = create<ProjectState>()(
       playbackLatency: detectPlaybackLatencyFromEngine(),
       session: createDefaultSessionState(),
     };
-    set({ project: ensureProjectSession(project) });
+    set({ project: ensureProjectSession(project), abCompareRevision });
   },
 
   updateProject: (updates) => {
@@ -2809,6 +2970,7 @@ export const useProjectStore = create<ProjectState>()(
       ...options,
     };
 
+    const { bounceTrackToAudioAsset } = await import('../services/bounceInPlace');
     const bounced = await bounceTrackToAudioAsset(state.project, track, resolvedOptions);
     const latest = get();
     if (!latest.project) return;
@@ -3144,6 +3306,7 @@ export const useProjectStore = create<ProjectState>()(
 
   saveTrackPreset: (trackId, presetName) => {
     const state = get();
+    if (_isViewerMode()) return undefined;
     if (!state.project) throw new Error('No project');
     const track = state.project.tracks.find((candidate) => candidate.id === trackId);
     if (!track) throw new Error(`Track '${trackId}' not found`);
@@ -3163,8 +3326,9 @@ export const useProjectStore = create<ProjectState>()(
     return preset;
   },
 
-  applyTrackPreset: (presetId) => {
+  applyTrackPreset: (presetId, options) => {
     const state = get();
+    if (_isViewerMode()) return undefined;
     if (!state.project) return undefined;
     const preset = (state.project.trackPresets ?? []).find((candidate) => candidate.id === presetId);
     if (!preset) return undefined;
@@ -3178,10 +3342,11 @@ export const useProjectStore = create<ProjectState>()(
         ...preset.settings,
         effects: preset.effects,
         midiEffects: preset.midiEffects,
+        order: options?.order,
       },
     );
 
-    const newTracks = [...state.project.tracks, track];
+    const newTracks = insertTrackPreservingOrder(state.project.tracks, track);
     set({
       project: {
         ...state.project,
@@ -3379,6 +3544,7 @@ export const useProjectStore = create<ProjectState>()(
 
   deleteTrackPreset: (presetId) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({
@@ -3388,6 +3554,143 @@ export const useProjectStore = create<ProjectState>()(
         trackPresets: (state.project.trackPresets ?? []).filter((preset) => preset.id !== presetId),
       },
     });
+  },
+
+  // ── Mix Snapshot implementations ──
+
+  saveMixSnapshot: (name) => {
+    const state = get();
+    if (_isViewerMode()) throw new Error('Cannot save mix snapshots in viewer mode');
+    if (!state.project) throw new Error('No project loaded');
+    const snapshot = captureMixState(state.project, name);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mixSnapshots: [...(state.project.mixSnapshots ?? []), snapshot],
+      },
+    });
+    return snapshot;
+  },
+
+  loadMixSnapshot: (snapshotId) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    const snapshot = (state.project.mixSnapshots ?? []).find((s) => s.id === snapshotId);
+    if (!snapshot) return;
+
+    const previousMixState = _abPreviousMixState;
+    const projectBase = previousMixState
+      ? _applyMixStateToProject(state.project, previousMixState)
+      : state.project;
+
+    _clearAbCompareState();
+    const abCompareRevision = state.abCompareRevision + 1;
+
+    _pushHistory(projectBase, { scope: 'mixer', label: `Load mix snapshot "${snapshot.name}"` });
+
+    const snapshotTrackMap = new Map(snapshot.trackStates.map((s) => [s.trackId, s]));
+    const snapshotReturnMap = new Map(snapshot.returnTrackStates.map((s) => [s.returnTrackId, s]));
+
+    set({
+      abCompareRevision,
+      project: {
+        ...projectBase,
+        updatedAt: Date.now(),
+        masterVolume: snapshot.masterVolume ?? projectBase.masterVolume,
+        tracks: projectBase.tracks.map((track) => {
+          const trackState = snapshotTrackMap.get(track.id);
+          return trackState ? applyTrackMixState(track, trackState) : track;
+        }),
+        returnTracks: (projectBase.returnTracks ?? []).map((rt) => {
+          const rtState = snapshotReturnMap.get(rt.id);
+          return rtState ? applyReturnTrackMixState(rt, rtState) : rt;
+        }),
+      },
+    });
+  },
+
+  deleteMixSnapshot: (snapshotId) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    // If this snapshot is the A/B target, exit A/B mode
+    const wasAbTarget = _abActiveSnapshotId === snapshotId;
+    const previousMixState = wasAbTarget ? _abPreviousMixState : null;
+    if (wasAbTarget) {
+      _clearAbCompareState();
+    }
+    const projectBase = previousMixState
+      ? _applyMixStateToProject(state.project, previousMixState)
+      : state.project;
+    set({
+      abCompareRevision: wasAbTarget ? state.abCompareRevision + 1 : state.abCompareRevision,
+      project: ensureProjectSession({
+        ...projectBase,
+        updatedAt: Date.now(),
+        mixSnapshots: (projectBase.mixSnapshots ?? []).filter((s) => s.id !== snapshotId),
+      }),
+    });
+  },
+
+  renameMixSnapshot: (snapshotId, newName) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mixSnapshots: (state.project.mixSnapshots ?? []).map((s) =>
+          s.id === snapshotId ? { ...s, name: newName } : s,
+        ),
+      },
+    });
+  },
+
+  toggleAbCompare: (snapshotId) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    const snapshot = (state.project.mixSnapshots ?? []).find((s) => s.id === snapshotId);
+    if (!snapshot) return;
+
+    if (_abActiveSnapshotId === snapshotId && _abPreviousMixState) {
+      // Toggle OFF: restore the previous mix state
+      const previousMixState = _abPreviousMixState;
+      _clearAbCompareState();
+      set({
+        abCompareRevision: state.abCompareRevision + 1,
+        project: ensureProjectSession({
+          ..._applyMixStateToProject(state.project, previousMixState),
+          updatedAt: Date.now(),
+        }),
+      });
+    } else {
+      // Toggle ON, or switch the compare target while keeping the original mix
+      // as the restore/persist source.
+      let compareBaseProject = state.project;
+      if (_abPreviousMixState) {
+        compareBaseProject = _applyMixStateToProject(state.project, _abPreviousMixState);
+      } else {
+        _abPreviousMixState = {
+          trackStates: state.project.tracks.map(captureTrackMixState),
+          returnTrackStates: (state.project.returnTracks ?? []).map(captureReturnTrackMixState),
+          masterVolume: state.project.masterVolume,
+        };
+      }
+      _abActiveSnapshotId = snapshotId;
+
+      set({
+        abCompareRevision: state.abCompareRevision + 1,
+        project: ensureProjectSession({
+          ..._applyMixStateToProject(compareBaseProject, snapshot),
+          updatedAt: Date.now(),
+        }),
+      });
+    }
   },
 
   removeTrack: (trackId) => {
@@ -4466,6 +4769,61 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  addClipTag: (clipId, tag) => {
+    const normalized = tag.trim();
+    if (!normalized) return;
+
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
+    if (!clip) return;
+    if (clip.tags?.includes(normalized)) return;
+
+    _pushHistory(state.project, { label: `Tag clip "${normalized}"`, scope: 'arrangement' });
+    const newTracks = state.project.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) =>
+        c.id === clipId ? { ...c, tags: [...(c.tags ?? []), normalized] } : c,
+      ),
+    }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  removeClipTag: (clipId, tag) => {
+    const normalized = tag.trim();
+    if (!normalized) return;
+
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
+    if (!clip || !clip.tags?.includes(normalized)) return;
+
+    _pushHistory(state.project, { label: `Untag clip "${normalized}"`, scope: 'arrangement' });
+    const newTracks = state.project.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) =>
+        c.id === clipId ? { ...c, tags: c.tags?.filter((label) => label !== normalized) } : c,
+      ),
+    }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: newTracks,
+      },
+    });
+  },
+
   toggleClipMuted: (clipIds) => {
     const state = get();
     if (_isViewerMode()) return;
@@ -4599,6 +4957,23 @@ export const useProjectStore = create<ProjectState>()(
 
   setClipTimeStretch: (clipId, rate) => {
     get().updateClip(clipId, { timeStretchRate: rate });
+  },
+
+  setClipSpeedPreset: (clipId, rate) => {
+    if (rate <= 0) return;
+    const clip = get().getClipById(clipId);
+    if (!clip) return;
+    const sourceSpan = getClipSourceSpan(clip);
+    if (sourceSpan <= 0) return;
+    const contentOffset = isClipRepitchStretched(clip) ? 0 : getClipContentOffset(clip);
+    get().updateClip(clipId, {
+      startTime: clip.startTime + contentOffset,
+      duration: Math.max(0.001, sourceSpan / rate),
+      timeStretchRate: rate,
+      stretchMode: 'repitch',
+      warpMarkers: undefined,
+      contentOffset: undefined,
+    });
   },
 
   setClipPitchShift: (clipId, semitones) => {
@@ -4783,7 +5158,7 @@ export const useProjectStore = create<ProjectState>()(
         try {
           const blob = await loadAudioBlobByKey(audioKey);
           if (blob) {
-            const engine = audioEngineHooks.getAudioEngine();
+            const engine = (await getAudioEngineModule()).getAudioEngine();
             const buffer = await engine.decodeAudioData(blob);
             const samples = buffer.getChannelData(0);
             rangeStart = snapClipBoundaryToAudio(sourceClip, rangeStart, samples, buffer.sampleRate);
@@ -5002,7 +5377,7 @@ export const useProjectStore = create<ProjectState>()(
         return;
       }
 
-      const engine = audioEngineHooks.getAudioEngine();
+      const engine = (await getAudioEngineModule()).getAudioEngine();
       const buffer = await engine.decodeAudioData(blob);
       const samples = buffer.getChannelData(0);
 
@@ -5040,7 +5415,7 @@ export const useProjectStore = create<ProjectState>()(
       const blob = await loadAudioBlobByKey(audioKey);
       if (!blob) return;
 
-      const engine = audioEngineHooks.getAudioEngine();
+      const engine = (await getAudioEngineModule()).getAudioEngine();
       const buffer = await engine.decodeAudioData(blob);
       const samples = buffer.getChannelData(0);
       const audioOffset = clip.audioOffset ?? 0;
@@ -5126,7 +5501,14 @@ export const useProjectStore = create<ProjectState>()(
     const lyrics = clips.map((clip) => clip.lyrics.trim()).filter(Boolean).join('\n');
     const source = clips.every((clip) => clip.source === 'generated') ? 'generated' : 'uploaded';
 
+    const historyBucket = _history.arrangement[GLOBAL_HISTORY_BUCKET];
+    const previousHistoryTail = historyBucket?.[historyBucket.length - 1];
     _pushHistory(state.project);
+    // Capture only an entry actually pushed by this action so rollback does not
+    // remove a pre-existing drag-batch snapshot when _pushHistory is a no-op.
+    const pushedEntry = historyBucket?.[historyBucket.length - 1] !== previousHistoryTail
+      ? historyBucket?.[historyBucket.length - 1]
+      : undefined;
 
     let consolidatedClip: Clip;
     if (mediaType === 'midi') {
@@ -5168,7 +5550,10 @@ export const useProjectStore = create<ProjectState>()(
           audioOffset: 0,
         };
       } catch (error) {
-        _history.arrangement[GLOBAL_HISTORY_BUCKET]?.pop();
+        // Remove our entry if it's still the most recent (identity check)
+        if (pushedEntry && historyBucket && historyBucket.length > 0 && historyBucket[historyBucket.length - 1] === pushedEntry) {
+          historyBucket.pop();
+        }
         toastError(error instanceof Error ? error.message : 'Unable to consolidate the selected audio clips');
         return undefined;
       }
@@ -5527,6 +5912,443 @@ export const useProjectStore = create<ProjectState>()(
     });
 
     return newClipIds;
+  },
+
+  // ── Arrangement operations (global time edits) ───────────────────────
+
+  splitAllAtPlayhead: (splitTime) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    // Check if any clip actually overlaps the split point
+    let anyOverlap = false;
+    for (const track of state.project.tracks) {
+      for (const clip of track.clips) {
+        if (splitTime > clip.startTime && splitTime < clip.startTime + clip.duration) {
+          anyOverlap = true;
+          break;
+        }
+      }
+      if (anyOverlap) break;
+    }
+    if (!anyOverlap) return;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Split all at playhead' });
+
+    const newTracks = state.project.tracks.map((track) => {
+      const newClips: Clip[] = [];
+      for (const clip of track.clips) {
+        const clipEnd = clip.startTime + clip.duration;
+        if (splitTime > clip.startTime && splitTime < clipEnd) {
+          const origAudioOffset = clip.audioOffset ?? 0;
+          const leftDuration = splitTime - clip.startTime;
+          const isReady = clip.generationStatus === 'ready' && !!clip.isolatedAudioKey;
+
+          const leftClip: Clip = { ...clip, duration: leftDuration };
+          const rightClip: Clip = {
+            ...clip,
+            id: uuidv4(),
+            startTime: splitTime,
+            duration: clipEnd - splitTime,
+            audioOffset: origAudioOffset + leftDuration,
+            generationStatus: isReady ? 'ready' : 'empty',
+            generationJobId: null,
+            isolatedAudioKey: isReady ? clip.isolatedAudioKey : null,
+            waveformPeaks: isReady && clip.waveformPeaks ? [...clip.waveformPeaks] : null,
+            audioDuration: clip.audioDuration,
+          };
+          newClips.push(leftClip, rightClip);
+        } else {
+          newClips.push(clip);
+        }
+      }
+      return { ...track, clips: newClips };
+    });
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  insertTime: (atTime, duration) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project || duration <= 0) return;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Insert time' });
+
+    const newTracks = state.project.tracks.map((track) => {
+      const newClips: Clip[] = [];
+      for (const clip of track.clips) {
+        const clipEnd = clip.startTime + clip.duration;
+        if (clip.startTime >= atTime) {
+          // Clip is entirely after insert point → shift forward
+          newClips.push({ ...clip, startTime: clip.startTime + duration });
+        } else if (clipEnd > atTime) {
+          // Clip spans the insert point → split it
+          const origAudioOffset = clip.audioOffset ?? 0;
+          const leftDuration = atTime - clip.startTime;
+          const rightDuration = clipEnd - atTime;
+          const isReady = clip.generationStatus === 'ready' && !!clip.isolatedAudioKey;
+
+          const leftClip: Clip = { ...clip, duration: leftDuration };
+          const rightClip: Clip = {
+            ...clip,
+            id: uuidv4(),
+            startTime: atTime + duration,
+            duration: rightDuration,
+            audioOffset: origAudioOffset + leftDuration,
+            generationStatus: isReady ? 'ready' : 'empty',
+            generationJobId: null,
+            isolatedAudioKey: isReady ? clip.isolatedAudioKey : null,
+            waveformPeaks: isReady && clip.waveformPeaks ? [...clip.waveformPeaks] : null,
+            audioDuration: clip.audioDuration,
+          };
+          newClips.push(leftClip, rightClip);
+        } else {
+          // Clip is entirely before insert point → no change
+          newClips.push(clip);
+        }
+      }
+
+      return { ...track, clips: newClips };
+    });
+
+    // Shift markers
+    const newMarkers = (state.project.markers ?? []).map((m) =>
+      m.time >= atTime ? { ...m, time: m.time + duration } : m,
+    );
+
+    // Shift automation points at project level
+    const newAutoLanes = (state.project.automationLanes ?? []).map((lane) => ({
+      ...lane,
+      points: lane.points.map((p) =>
+        p.time >= atTime ? { ...p, time: p.time + duration } : p,
+      ),
+    }));
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+        markers: newMarkers,
+        automationLanes: newAutoLanes,
+      },
+    });
+  },
+
+  deleteTimeRange: (startTime, endTime) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project || startTime >= endTime) return;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Delete time range' });
+
+    const rangeDuration = endTime - startTime;
+
+    const newTracks = state.project.tracks.map((track) => {
+      const newClips: Clip[] = [];
+      for (const clip of track.clips) {
+        const clipEnd = clip.startTime + clip.duration;
+        const origAudioOffset = clip.audioOffset ?? 0;
+        const isReady = clip.generationStatus === 'ready' && !!clip.isolatedAudioKey;
+
+        if (clipEnd <= startTime) {
+          // Clip entirely before range → keep unchanged
+          newClips.push(clip);
+        } else if (clip.startTime >= endTime) {
+          // Clip entirely after range → shift backward
+          newClips.push({ ...clip, startTime: clip.startTime - rangeDuration });
+        } else if (clip.startTime >= startTime && clipEnd <= endTime) {
+          // Clip entirely inside range → delete (skip)
+        } else if (clip.startTime < startTime && clipEnd > endTime) {
+          // Clip spans the entire range → split into left + right (with right shifted)
+          const leftDuration = startTime - clip.startTime;
+          const leftClip: Clip = { ...clip, duration: leftDuration };
+
+          const rightStart = startTime; // shifted: endTime - rangeDuration = startTime
+          const rightDuration = clipEnd - endTime;
+          const rightClip: Clip = {
+            ...clip,
+            id: uuidv4(),
+            startTime: rightStart,
+            duration: rightDuration,
+            audioOffset: origAudioOffset + (endTime - clip.startTime),
+            generationStatus: isReady ? 'ready' : 'empty',
+            generationJobId: null,
+            isolatedAudioKey: isReady ? clip.isolatedAudioKey : null,
+            waveformPeaks: isReady && clip.waveformPeaks ? [...clip.waveformPeaks] : null,
+            audioDuration: clip.audioDuration,
+          };
+          newClips.push(leftClip, rightClip);
+        } else if (clip.startTime < startTime && clipEnd <= endTime) {
+          // Clip starts before range, ends inside → trim right side
+          newClips.push({ ...clip, duration: startTime - clip.startTime });
+        } else if (clip.startTime >= startTime && clipEnd > endTime) {
+          // Clip starts inside range, ends after → trim left side and shift
+          const trimmedStart = endTime;
+          const trimmedDuration = clipEnd - endTime;
+          newClips.push({
+            ...clip,
+            startTime: trimmedStart - rangeDuration,
+            duration: trimmedDuration,
+            audioOffset: origAudioOffset + (endTime - clip.startTime),
+          });
+        }
+      }
+
+      return { ...track, clips: newClips };
+    });
+
+    // Filter and shift markers
+    const newMarkers = (state.project.markers ?? [])
+      .filter((m) => m.time < startTime || m.time >= endTime)
+      .map((m) => (m.time >= endTime ? { ...m, time: m.time - rangeDuration } : m));
+
+    // Filter and shift automation points at project level
+    const newAutoLanes = (state.project.automationLanes ?? []).map((lane) => ({
+      ...lane,
+      points: lane.points
+        .filter((p) => p.time < startTime || p.time >= endTime)
+        .map((p) => (p.time >= endTime ? { ...p, time: p.time - rangeDuration } : p)),
+    }));
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+        markers: newMarkers,
+        automationLanes: newAutoLanes,
+      },
+    });
+  },
+
+  duplicateTimeRange: (startTime, endTime) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project || startTime >= endTime) return;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Duplicate time range' });
+
+    const rangeDuration = endTime - startTime;
+
+    const newTracks = state.project.tracks.map((track) => {
+      const newClips: Clip[] = [];
+      const duplicatedClips: Clip[] = [];
+
+      /** Create a derived clip with proper field normalization (matching splitClip semantics). */
+      const deriveClip = (source: Clip, overrides: Partial<Clip>): Clip => {
+        const isReady = source.generationStatus === 'ready' && !!source.isolatedAudioKey;
+        return {
+          ...source,
+          id: uuidv4(),
+          generationStatus: isReady ? 'ready' : 'empty',
+          generationJobId: null,
+          isolatedAudioKey: isReady ? source.isolatedAudioKey : null,
+          waveformPeaks: isReady && source.waveformPeaks ? [...source.waveformPeaks] : null,
+          audioDuration: source.audioDuration,
+          cumulativeMixKey: source.cumulativeMixKey,
+          ...overrides,
+        };
+      };
+
+      for (const clip of track.clips) {
+        const clipEnd = clip.startTime + clip.duration;
+        const origAudioOffset = clip.audioOffset ?? 0;
+
+        if (clipEnd <= startTime) {
+          // Before range → keep unchanged
+          newClips.push(clip);
+        } else if (clip.startTime >= endTime) {
+          // After range → shift forward
+          newClips.push({ ...clip, startTime: clip.startTime + rangeDuration });
+        } else if (clip.startTime >= startTime && clipEnd <= endTime) {
+          // Fully inside range → keep original, duplicate shifted
+          newClips.push(clip);
+          duplicatedClips.push(deriveClip(clip, {
+            startTime: clip.startTime + rangeDuration,
+          }));
+        } else if (clip.startTime < startTime && clipEnd <= endTime) {
+          // Starts before, ends inside → keep original, duplicate overlapping portion
+          newClips.push(clip);
+          duplicatedClips.push(deriveClip(clip, {
+            startTime: startTime + rangeDuration,
+            duration: clipEnd - startTime,
+            audioOffset: origAudioOffset + (startTime - clip.startTime),
+          }));
+        } else if (clip.startTime >= startTime && clipEnd > endTime) {
+          // Starts inside, ends after → split into head (in-range) + tail (beyond),
+          // keep head in place, shift tail, duplicate head after range
+          const insideDuration = endTime - clip.startTime;
+          const tailDuration = clipEnd - endTime;
+
+          const headClip: Clip = { ...clip, duration: insideDuration };
+          const tailClip = deriveClip(clip, {
+            startTime: endTime + rangeDuration,
+            duration: tailDuration,
+            audioOffset: origAudioOffset + insideDuration,
+          });
+          newClips.push(headClip, tailClip);
+
+          duplicatedClips.push(deriveClip(clip, {
+            startTime: clip.startTime + rangeDuration,
+            duration: insideDuration,
+          }));
+        } else if (clip.startTime < startTime && clipEnd > endTime) {
+          // Spans entire range → split at endTime, shift tail, duplicate inside portion
+          const leftClip: Clip = { ...clip, duration: endTime - clip.startTime };
+          const rightClip = deriveClip(clip, {
+            startTime: endTime + rangeDuration,
+            duration: clipEnd - endTime,
+            audioOffset: origAudioOffset + (endTime - clip.startTime),
+          });
+          newClips.push(leftClip, rightClip);
+
+          duplicatedClips.push(deriveClip(clip, {
+            startTime: endTime,
+            duration: rangeDuration,
+            audioOffset: origAudioOffset + (startTime - clip.startTime),
+          }));
+        }
+      }
+
+      return { ...track, clips: [...newClips, ...duplicatedClips] };
+    });
+
+    // Duplicate markers inside range and shift markers after
+    const existingMarkers = state.project.markers ?? [];
+    const newMarkers = [
+      ...existingMarkers.map((m) =>
+        m.time >= endTime ? { ...m, time: m.time + rangeDuration } : m,
+      ),
+      ...existingMarkers
+        .filter((m) => m.time >= startTime && m.time < endTime)
+        .map((m) => ({ ...m, id: uuidv4(), time: m.time + rangeDuration })),
+    ].sort((a, b) => a.time - b.time);
+
+    // Shift and duplicate automation points at project level
+    const newAutoLanes = (state.project.automationLanes ?? []).map((lane) => ({
+      ...lane,
+      points: [
+        ...lane.points.map((p) =>
+          p.time >= endTime ? { ...p, time: p.time + rangeDuration } : p,
+        ),
+        ...lane.points
+          .filter((p) => p.time >= startTime && p.time < endTime)
+          .map((p) => ({ ...p, time: p.time + rangeDuration })),
+      ].sort((a, b) => a.time - b.time),
+    }));
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+        markers: newMarkers,
+        automationLanes: newAutoLanes,
+      },
+    });
+  },
+
+  reverseClip: async (clipId) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    const clip = state.getClipById(clipId);
+    if (!clip || !state.project) return;
+    const hasAudio = clip.isolatedAudioKey || clip.cumulativeMixKey;
+    if (!hasAudio || clip.generationStatus !== 'ready') return;
+    if (!canDestructivelyProcessClipAudio(clip)) return;
+    try {
+      const { reverseClipAudio } = await import('../services/clipAudioProcessing');
+      const result = await reverseClipAudio(state.project.id, clip);
+      get().updateClip(clipId, {
+        startTime: getClipAudibleStartTime(clip),
+        duration: Math.max(0.001, getClipAudibleTimelineDuration(clip)),
+        isolatedAudioKey: result.audioKey,
+        cumulativeMixKey: null,
+        serverCumulativePath: undefined,
+        generatedFromContext: false,
+        waveformPeaks: result.waveformPeaks,
+        audioDuration: result.audioDuration,
+        audioOffset: 0,
+        contentOffset: undefined,
+        warpMarkers: undefined,
+      });
+      set((current) => current.project ? { project: syncAssetForClip(current.project, clipId) } : current);
+    } catch (e) {
+      console.error('Failed to reverse clip:', e);
+    }
+  },
+
+  normalizeClip: async (clipId) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    const clip = state.getClipById(clipId);
+    if (!clip || !state.project) return;
+    const hasAudio = clip.isolatedAudioKey || clip.cumulativeMixKey;
+    if (!hasAudio || clip.generationStatus !== 'ready') return;
+    if (!canDestructivelyProcessClipAudio(clip)) return;
+    try {
+      const { normalizeClipAudio } = await import('../services/clipAudioProcessing');
+      const result = await normalizeClipAudio(state.project.id, clip);
+      get().updateClip(clipId, {
+        startTime: getClipAudibleStartTime(clip),
+        duration: Math.max(0.001, getClipAudibleTimelineDuration(clip)),
+        isolatedAudioKey: result.audioKey,
+        cumulativeMixKey: null,
+        serverCumulativePath: undefined,
+        generatedFromContext: false,
+        waveformPeaks: result.waveformPeaks,
+        audioDuration: result.audioDuration,
+        audioOffset: 0,
+        contentOffset: undefined,
+        warpMarkers: undefined,
+      });
+      set((current) => current.project ? { project: syncAssetForClip(current.project, clipId) } : current);
+    } catch (e) {
+      console.error('Failed to normalize clip:', e);
+    }
+  },
+
+  adjustClipGain: async (clipId, gainDb) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    const clip = state.getClipById(clipId);
+    if (!clip || !state.project) return;
+    const hasAudio = clip.isolatedAudioKey || clip.cumulativeMixKey;
+    if (!hasAudio || clip.generationStatus !== 'ready') return;
+    if (!canDestructivelyProcessClipAudio(clip)) return;
+    try {
+      const { adjustClipGain: adjustGain } = await import('../services/clipAudioProcessing');
+      const result = await adjustGain(state.project.id, clip, gainDb);
+      get().updateClip(clipId, {
+        startTime: getClipAudibleStartTime(clip),
+        duration: Math.max(0.001, getClipAudibleTimelineDuration(clip)),
+        isolatedAudioKey: result.audioKey,
+        cumulativeMixKey: null,
+        serverCumulativePath: undefined,
+        generatedFromContext: false,
+        waveformPeaks: result.waveformPeaks,
+        audioDuration: result.audioDuration,
+        audioOffset: 0,
+        contentOffset: undefined,
+        warpMarkers: undefined,
+      });
+      set((current) => current.project ? { project: syncAssetForClip(current.project, clipId) } : current);
+    } catch (e) {
+      console.error('Failed to adjust clip gain:', e);
+    }
   },
 
   createSessionScene: (name) => {
@@ -7564,7 +8386,7 @@ export const useProjectStore = create<ProjectState>()(
     const audioKey = await saveAudioBlob(get().project!.id, clipId, 'isolated', wavBlob);
 
     // Compute waveform peaks for visual display
-    const waveformPeaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+    const waveformPeaks = await computeWaveformWithMipmap(audioKey, audioBuffer);
 
     // Create a new stems track with the rendered audio clip
     const newTrack = createTrackFromTemplate(
@@ -9218,6 +10040,7 @@ export const useProjectStore = create<ProjectState>()(
       throw new Error(`Audio for clip '${clipId}' not found`);
     }
 
+    const { separateClipAudioToStems } = await import('../services/stemSeparation');
     const preparedStems = await separateClipAudioToStems({
       clipId,
       sourceBlob,
@@ -9327,6 +10150,7 @@ export const useProjectStore = create<ProjectState>()(
     if (!audioKey) return undefined;
 
     const bpm = state.project.bpm;
+    const { convertClipAudioToMidi } = await import('../services/audioToMidi');
     const result = await convertClipAudioToMidi(audioKey, bpm, {
       threshold: options?.threshold ?? 0.15,
       minConfidence: options?.minConfidence ?? 0.5,
@@ -9357,7 +10181,8 @@ export const useProjectStore = create<ProjectState>()(
     const project = get().project;
     if (!project) return;
 
-    const engine = audioEngineHooks.getAudioEngine();
+    const engine = (await getAudioEngineModule()).getAudioEngine();
+    const { exportTrackStems, getStemExportTracks, trackHasExportableContent } = await import('../engine/exportMix');
     const exportableTracks = getStemExportTracks(project, { scope: 'all-audible' }).filter(trackHasExportableContent);
     const stemExports = await exportTrackStems(
       project,
@@ -9636,6 +10461,7 @@ export const useProjectStore = create<ProjectState>()(
 
   extractGrooveFromClip: (clipId, name, options) => {
     const state = get();
+    if (_isViewerMode()) return undefined;
     if (!state.project) return undefined;
 
     let notes: MidiNote[] | undefined;
@@ -9756,6 +10582,7 @@ export const useProjectStore = create<ProjectState>()(
 
   applyGrooveToClip: (clipId, noteIds, grooveId, options) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
 
     const groove = state.project.groovePool?.find((g) => g.id === grooveId);
@@ -9786,6 +10613,7 @@ export const useProjectStore = create<ProjectState>()(
 
   addGrooveTemplate: (template) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({
@@ -9799,6 +10627,7 @@ export const useProjectStore = create<ProjectState>()(
 
   deleteGrooveTemplate: (grooveId) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({
@@ -9887,6 +10716,7 @@ export const useProjectStore = create<ProjectState>()(
 
   renameGrooveTemplate: (grooveId, name) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
     set({
@@ -9904,11 +10734,35 @@ export const useProjectStore = create<ProjectState>()(
       name: PROJECT_PERSIST_STORAGE_KEY,
       storage: projectPersistStorage,
       partialize: (state) => ({
-        project: state.project ? stripHeavyDataForPersist(state.project) : null,
+        project: state.project ? stripHeavyDataForPersist(_getProjectForPersist(state.project)) : null,
       }),
     },
   ),
 );
+
+function _externalSetStateMayReplaceProject(partial: unknown) {
+  if (!partial || typeof partial !== 'object') return false;
+  return 'project' in partial;
+}
+
+const _setProjectStoreState = useProjectStore.setState;
+useProjectStore.setState = ((...args: Parameters<typeof _setProjectStoreState>) => {
+  const [partial, replace] = args;
+  if (typeof partial === 'function') {
+    const wrappedPartial = ((state: ProjectState) => {
+      const result = partial(state);
+      if (replace || _externalSetStateMayReplaceProject(result)) {
+        _clearAbCompareState();
+      }
+      return result;
+    }) as typeof partial;
+    return _setProjectStoreState(wrappedPartial, replace);
+  }
+  if (replace || _externalSetStateMayReplaceProject(partial)) {
+    _clearAbCompareState();
+  }
+  return _setProjectStoreState(...args);
+}) as typeof useProjectStore.setState;
 
 // Auto-save to project library (IDB) on changes, debounced.
 // Uses requestIdleCallback to defer the IDB write until the browser is idle,
@@ -9920,6 +10774,7 @@ const _scheduleIdle: (cb: () => void) => void =
 
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 let _queuedProjectForLibrarySave: Project | null = null;
+let _lastSavedSourceProjectRef: Project | null = null;
 let _lastSavedProjectRef: Project | null = null;
 let _lastSavedProjectUpdatedAt = 0;
 useProjectStore.subscribe((state) => {
@@ -9931,10 +10786,18 @@ useProjectStore.subscribe((state) => {
     // drag, scroll, or other high-priority interactions.
     _scheduleIdle(() => {
       const proj = useProjectStore.getState().project;
-      if (!proj || (proj === _lastSavedProjectRef && proj.updatedAt === _lastSavedProjectUpdatedAt)) return;
-      _lastSavedProjectRef = proj;
-      _lastSavedProjectUpdatedAt = proj.updatedAt;
-      void saveProjectToIDB(proj);
+      if (!proj) return;
+      const projectForSave = _getProjectForPersist(proj);
+      if (
+        (proj === _lastSavedSourceProjectRef || projectForSave === _lastSavedProjectRef) &&
+        projectForSave.updatedAt === _lastSavedProjectUpdatedAt
+      ) {
+        return;
+      }
+      _lastSavedSourceProjectRef = proj;
+      _lastSavedProjectRef = projectForSave;
+      _lastSavedProjectUpdatedAt = projectForSave.updatedAt;
+      void saveProjectToIDB(projectForSave);
     });
   }, PROJECT_LIBRARY_AUTOSAVE_DEBOUNCE_MS);
 });

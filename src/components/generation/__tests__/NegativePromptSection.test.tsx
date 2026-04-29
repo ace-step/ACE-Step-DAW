@@ -42,7 +42,6 @@ describe('NegativePromptSection', () => {
   it('removes chip when already active', () => {
     const onChange = vi.fn();
     render(<NegativePromptSection value="distortion, noise" onChange={onChange} />);
-    fireEvent.click(screen.getByTestId('negative-prompt-toggle'));
     fireEvent.click(screen.getByTestId('chip-distortion'));
     expect(onChange).toHaveBeenCalledWith('noise');
   });

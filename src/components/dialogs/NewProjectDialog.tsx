@@ -22,7 +22,7 @@ import {
   type TemplateSummary,
 } from '../../services/projectStorage';
 import { ONBOARDING_STARTERS, getStarterTemplate, instantiateDemoProject } from '../../data/onboardingCatalog';
-import { toastSuccess } from '../../hooks/useToast';
+import { toastSuccess, toastError } from '../../hooks/useToast';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import type { ClipLayoutItem } from '../../utils/clipLayout';
 import { SoundDesignTemplateBrowser } from './SoundDesignTemplateBrowser';
@@ -112,8 +112,10 @@ export function NewProjectDialog() {
       setBpmText(String(DEFAULT_BPM));
       setKeyScale(DEFAULT_KEY_SCALE);
       setTimeSignature(DEFAULT_TIME_SIGNATURE);
-      listProjects().then((list) => setRecentProjects(list));
-      listTemplates().then((list) => setTemplates(list));
+      setRecentProjects([]);
+      setTemplates([]);
+      listProjects().then((list) => setRecentProjects(list)).catch(() => { /* storage unavailable — show empty list */ });
+      listTemplates().then((list) => setTemplates(list)).catch(() => { /* storage unavailable — show empty list */ });
     }
   }, [show]);
 
@@ -125,32 +127,48 @@ export function NewProjectDialog() {
   };
 
   const handleOpenRecent = async (id: string) => {
-    const project = await loadProject(id);
-    if (project) {
-      setProject(project);
-      toastSuccess('Project loaded');
-      setShow(false);
+    try {
+      const project = await loadProject(id);
+      if (project) {
+        setProject(project);
+        toastSuccess('Project loaded');
+        setShow(false);
+      }
+    } catch {
+      toastError('Failed to load project');
     }
   };
 
   const handleDeleteRecent = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    await deleteProject(id);
-    setRecentProjects((prev) => prev.filter((p) => p.id !== id));
+    try {
+      await deleteProject(id);
+      setRecentProjects((prev) => prev.filter((p) => p.id !== id));
+    } catch {
+      toastError('Failed to delete project');
+    }
   };
 
   const handleUseTemplate = async (templateId: string) => {
-    const template = await loadTemplate(templateId);
-    if (template) {
-      createProjectFromTemplate(template);
-      toastSuccess(`Project created from template "${template.name}"`);
-      setShow(false);
+    try {
+      const template = await loadTemplate(templateId);
+      if (template) {
+        createProjectFromTemplate(template);
+        toastSuccess(`Project created from template "${template.name}"`);
+        setShow(false);
+      }
+    } catch {
+      toastError('Failed to load template');
     }
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
-    await deleteTemplate(templateId);
-    setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+    try {
+      await deleteTemplate(templateId);
+      setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+    } catch {
+      toastError('Failed to delete template');
+    }
   };
 
   const handleSoundDesignTemplate = (template: SoundDesignTemplate) => {

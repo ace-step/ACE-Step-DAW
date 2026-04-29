@@ -28,11 +28,7 @@ vi.mock('../../../utils/wav', () => ({
 }));
 
 vi.mock('../../../utils/waveformPeaks', () => ({
-  computeWaveformPeaks: vi.fn().mockReturnValue([]),
-}));
-
-vi.mock('../../../utils/clipAudio', () => ({
-  CLIP_WAVEFORM_PEAK_COUNT: 512,
+  computeWaveformWithMipmap: vi.fn().mockResolvedValue([]),
 }));
 
 // Mock projectStore

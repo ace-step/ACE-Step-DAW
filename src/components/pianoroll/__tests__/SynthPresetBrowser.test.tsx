@@ -184,6 +184,33 @@ describe('SynthPresetBrowser', () => {
     expect(screen.getByText('FM Electric Piano')).toBeInTheDocument();
   });
 
+  it('filters presets to the physical modeling tab and category', () => {
+    render(
+      <SynthPresetBrowser
+        trackId="track-1"
+        currentPresetId={null}
+        onSelectPreset={mockOnSelect}
+        onSavePreset={mockOnSave}
+        userPresets={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /preset/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Physical' })[0]);
+
+    const physicalLabels = screen.getAllByText('Physical');
+    expect(physicalLabels).toHaveLength(2);
+    expect(screen.queryByText('Bass')).not.toBeInTheDocument();
+
+    fireEvent.click(physicalLabels[1]);
+
+    expect(screen.getByText('Acoustic Guitar')).toBeInTheDocument();
+    expect(screen.getByText('Harp')).toBeInTheDocument();
+    expect(screen.getByText('Kalimba')).toBeInTheDocument();
+    expect(screen.getByText('Marimba')).toBeInTheDocument();
+    expect(screen.getByText('Steel Drum')).toBeInTheDocument();
+    expect(screen.queryByText('Sub Bass')).not.toBeInTheDocument();
+  });
+
   it('shows kind badges when filter is All', () => {
     render(
       <SynthPresetBrowser

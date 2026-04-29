@@ -31,8 +31,8 @@ function makeClip(overrides: Partial<ClipAudioState> = {}): ClipAudioState {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 describe('CLIP_WAVEFORM_PEAK_COUNT', () => {
-  it('equals 1024', () => {
-    expect(CLIP_WAVEFORM_PEAK_COUNT).toBe(1024);
+  it('equals 8192', () => {
+    expect(CLIP_WAVEFORM_PEAK_COUNT).toBe(8192);
   });
 });
 

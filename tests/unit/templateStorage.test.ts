@@ -4,6 +4,7 @@ import type { ProjectTemplate } from '../../src/types/project';
 // Mock idb-keyval
 const mockStore = new Map<string, string>();
 vi.mock('idb-keyval', () => ({
+  createStore: vi.fn(() => ({})),
   get: vi.fn((key: string) => Promise.resolve(mockStore.get(key) ?? undefined)),
   set: vi.fn((key: string, value: string) => { mockStore.set(key, value); return Promise.resolve(); }),
   del: vi.fn((key: string) => { mockStore.delete(key); return Promise.resolve(); }),

@@ -9,6 +9,7 @@ import type { WAMActiveInstance, WAMPreset, WAMCatalogEntry } from '../types/wam
 import { wamHost } from '../services/wam/WAMHost';
 import { WAMPluginAdapter } from '../services/wam/WAMPluginAdapter';
 import { WAM_CATALOG, searchCatalog } from '../services/wam/WAMCatalog';
+import { pluginEngine } from '../engine/PluginEngine';
 
 export type WAMHostStatus = 'idle' | 'initializing' | 'ready' | 'error';
 
@@ -95,6 +96,8 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
 
       const instanceId = handle.instanceId;
       _adapters.set(instanceId, adapter);
+      const { getAudioEngine } = await import('../hooks/useAudioEngine');
+      pluginEngine.addPlugin(trackId, instanceId, adapter, getAudioEngine().ctx);
 
       // Build numeric parameter values from the adapter's cached values.
       // Adapter returns actual-range values (non-normalized), safe to store as numbers.
@@ -125,28 +128,30 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
         trackId,
         enabled: true,
         parameters: adapter.getParameterDescriptors().map((d) => {
-          const type = d.type === 'enum' ? 'choice' as const : d.type as 'float' | 'int' | 'boolean';
-          const descriptorStep = 'step' in d && typeof (d as any).step === 'number' && (d as any).step > 0 ? (d as any).step : undefined;
+          const type = d.type === 'enum'
+            ? 'choice' as const
+            : d.type === 'bool'
+              ? 'boolean' as const
+              : d.type as 'float' | 'int';
+          const descriptorStep = d.type === 'float' && typeof d.step === 'number' && d.step > 0 ? d.step : undefined;
           const discreteStep = descriptorStep ?? (
             d.type === 'enum' || d.type === 'int' || d.type === 'bool' ? 1 : 0
           );
 
-          const choices = d.type === 'enum' ? (d as any).options : undefined;
-          const defaultValue = !('defaultValue' in d) ? 0
-            : typeof d.defaultValue === 'number' ? d.defaultValue
-            : d.type === 'enum' && typeof d.defaultValue === 'string'
-              ? Math.max(0, choices?.indexOf(d.defaultValue) ?? -1)
-              : d.type === 'bool' && typeof d.defaultValue === 'boolean'
-                ? (d.defaultValue ? 1 : 0)
-                : 0;
+          const choices = d.type === 'enum' ? d.options : undefined;
+          const defaultValue = d.type === 'enum'
+            ? Math.max(0, d.options.indexOf(d.defaultValue))
+            : d.type === 'bool'
+              ? (d.defaultValue ? 1 : 0)
+              : d.defaultValue;
 
           return {
             id: d.id,
             label: d.name,
             type,
             defaultValue,
-            minValue: 'min' in d ? (d as any).min : 0,
-            maxValue: 'max' in d ? (d as any).max : 1,
+            minValue: d.type === 'float' || d.type === 'int' ? d.min : 0,
+            maxValue: d.type === 'float' || d.type === 'int' ? d.max : 1,
             discreteStep,
             exponent: 1,
             choices,
@@ -196,7 +201,11 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
 
     const adapter = _adapters.get(instanceId);
     if (adapter) {
-      adapter.dispose();
+      if (pluginEngine.getPlugin(instance.trackId, instanceId)) {
+        pluginEngine.removePlugin(instance.trackId, instanceId);
+      } else {
+        adapter.dispose();
+      }
       _adapters.delete(instanceId);
     }
 
@@ -218,10 +227,12 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
     set((state) => {
       const inst = state.instances[instanceId];
       if (!inst) return state;
+      const nextEnabled = !inst.enabled;
+      pluginEngine.setPluginBypassed(inst.trackId, instanceId, !nextEnabled);
       return {
         instances: {
           ...state.instances,
-          [instanceId]: { ...inst, enabled: !inst.enabled },
+          [instanceId]: { ...inst, enabled: nextEnabled },
         },
       };
     });

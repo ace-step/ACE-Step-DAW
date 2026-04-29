@@ -25,8 +25,8 @@ describe('StatusBar', () => {
 
     render(<StatusBar />);
 
-    // After the fix, there should be no "Offline" text — only a dot with title
-    expect(screen.queryByText('Offline')).not.toBeInTheDocument();
+    // Connection indicator shows "Offline" initially (before first health check)
+    expect(screen.getByText('Offline')).toBeInTheDocument();
     expect(healthCheckMock).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -51,11 +51,24 @@ describe('StatusBar', () => {
   });
 
   describe('connection status', () => {
-    it('does not render "Connected" or "Offline" text', () => {
+    it('renders connection indicator with Offline/Online text', () => {
       healthCheckMock.mockResolvedValue(false);
       render(<StatusBar />);
-      expect(screen.queryByText('Connected')).not.toBeInTheDocument();
-      expect(screen.queryByText('Offline')).not.toBeInTheDocument();
+      const indicator = screen.getByTestId('status-connection');
+      expect(indicator).toBeInTheDocument();
+      expect(indicator.textContent).toContain('Offline');
+    });
+
+    it('shows Online after successful health check', async () => {
+      healthCheckMock.mockResolvedValue(true);
+      render(<StatusBar />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_100);
+      });
+
+      const indicator = screen.getByTestId('status-connection');
+      expect(indicator.textContent).toContain('Online');
     });
 
     it('shows "No model" when disconnected and no models configured', () => {

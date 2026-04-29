@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockGet = vi.fn();
 const mockSet = vi.fn();
 vi.mock('idb-keyval', () => ({
+  createStore: vi.fn(() => ({})),
   get: (...args: unknown[]) => mockGet(...args),
   set: (...args: unknown[]) => mockSet(...args),
 }));

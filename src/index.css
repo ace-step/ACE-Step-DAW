@@ -54,7 +54,7 @@
   --color-daw-border-strong: #141414;
   --color-daw-hover: #40434b;
   --color-daw-hover-subtle: #373a41;
-  --color-daw-text-muted: #949494;
+  --color-daw-text-muted: #a0a0a0;
   --color-daw-accent: #f7a738;
   --color-daw-accent-hover: #faca88;
   --color-daw-playhead: #e6e6e6;
@@ -240,6 +240,10 @@ select:focus-visible,
   .daw-drag-lift[data-dragging="true"] {
     transform: none;
   }
+  .clip-mount-animation,
+  .recording-lane-pulse {
+    animation: none !important;
+  }
 }
 
 .arrangement-scrollbar-hidden {
@@ -350,6 +354,34 @@ select:focus-visible,
   filter: saturate(1);
   transition: opacity var(--duration-normal) var(--ease-out),
               filter var(--duration-normal) var(--ease-out);
+}
+
+/* Status bar auto-hide: numeric max-height in both states for reliable animation */
+.status-bar {
+  max-height: 512px;
+  transition: max-height var(--duration-normal) var(--ease-out),
+              opacity var(--duration-normal) var(--ease-out);
+}
+.status-bar-collapsed {
+  max-height: 8px;
+  opacity: 0.5;
+}
+
+/* Playhead glow — bright halo for visibility during playback */
+.playhead-glow {
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.5), 0 0 8px rgba(147, 197, 253, 0.3), 0 0 3px rgba(0, 0, 0, 0.35);
+}
+
+/* Clip mount fade-in animation */
+@keyframes clip-mount-fade {
+  from { opacity: 0; transform: scaleX(0.97); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+
+/* Recording track lane pulse */
+@keyframes recording-lane-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0.6); }
+  50% { box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0.2); }
 }
 
 /* Generation complete flash */

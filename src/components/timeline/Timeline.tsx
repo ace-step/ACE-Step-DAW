@@ -481,7 +481,7 @@ export function Timeline() {
           </div>
 
           {/* Track lanes area */}
-          <div className="relative" style={{ gridColumn: '2', gridRow: '2', width: totalWidth }}>
+          <div className="relative overflow-hidden" style={{ gridColumn: '2', gridRow: '2', width: totalWidth }}>
             <GridOverlay />
             <Playhead />
 

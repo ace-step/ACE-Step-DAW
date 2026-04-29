@@ -22,6 +22,7 @@ interface ClipContextMenuProps {
   onOpenMidi?: () => void;
   onExportMidi?: () => void;
   onConvertToStrudel?: () => void;
+  onExtractGroove?: () => void;
 
   /* Editing */
   onEdit: () => void;
@@ -31,6 +32,15 @@ interface ClipContextMenuProps {
   onDelete: () => void;
   onSelectAll: () => void;
   onLoopSelection: () => void;
+
+  /* Audio processing */
+  onReverse?: () => void;
+  onNormalize?: () => void;
+  onGainUp?: () => void;
+  onGainDown?: () => void;
+  onHalfSpeed?: () => void;
+  onDoubleSpeed?: () => void;
+  onResetSpeed?: () => void;
 
   /* Clip state */
   onToggleMute: () => void;
@@ -59,6 +69,7 @@ export function ClipContextMenu({
   onOpenMidi,
   onExportMidi,
   onConvertToStrudel,
+  onExtractGroove,
   onEdit,
   onDuplicate,
   onSplitAtPlayhead,
@@ -66,6 +77,13 @@ export function ClipContextMenu({
   onDelete,
   onSelectAll,
   onLoopSelection,
+  onReverse,
+  onNormalize,
+  onGainUp,
+  onGainDown,
+  onHalfSpeed,
+  onDoubleSpeed,
+  onResetSpeed,
   onToggleMute,
   isMuted,
   onAssignColor,
@@ -107,6 +125,9 @@ export function ClipContextMenu({
           {onExportMidi && (
             <ContextMenuItem label="Export MIDI Clip..." onClick={onExportMidi} color="#a5f3fc" />
           )}
+          {onExtractGroove && (
+            <ContextMenuItem label="Extract Groove..." onClick={onExtractGroove} color="#6ee7b7" />
+          )}
         </>
       )}
 
@@ -126,6 +147,20 @@ export function ClipContextMenu({
       <ContextMenuSeparator />
       <ContextMenuItem label="Split" onClick={onSplitAtPlayhead} shortcut="⌘E" />
       <ContextMenuItem label="Consolidate" onClick={onConsolidate} shortcut="⌘J" disabled={!canConsolidate} />
+
+      {/* Audio processing */}
+      {(onReverse || onNormalize || onGainUp || onGainDown || onHalfSpeed || onDoubleSpeed || onResetSpeed) && (
+        <>
+          <ContextMenuSeparator />
+          {onReverse && <ContextMenuItem label="Reverse" onClick={onReverse} />}
+          {onNormalize && <ContextMenuItem label="Normalize" onClick={onNormalize} />}
+          {onGainUp && <ContextMenuItem label="Gain +3 dB" onClick={onGainUp} />}
+          {onGainDown && <ContextMenuItem label="Gain −3 dB" onClick={onGainDown} />}
+          {onHalfSpeed && <ContextMenuItem label="Half Speed" onClick={onHalfSpeed} />}
+          {onDoubleSpeed && <ContextMenuItem label="Double Speed" onClick={onDoubleSpeed} />}
+          {onResetSpeed && <ContextMenuItem label="Reset Speed" onClick={onResetSpeed} />}
+        </>
+      )}
 
       {/* Delete */}
       <ContextMenuSeparator />

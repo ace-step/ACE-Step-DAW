@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock idb-keyval to prevent "indexedDB is not defined" from debounced auto-save
 vi.mock('idb-keyval', () => ({
+  createStore: vi.fn(() => ({})),
   get: vi.fn(),
   set: vi.fn(() => Promise.resolve()),
   del: vi.fn(() => Promise.resolve()),
@@ -38,11 +39,7 @@ vi.mock('../../hooks/useAudioEngine', () => ({
 }));
 
 vi.mock('../../utils/waveformPeaks', () => ({
-  computeWaveformPeaks: vi.fn(() => [0.1, 0.3, 0.5]),
-}));
-
-vi.mock('../../utils/clipAudio', () => ({
-  CLIP_WAVEFORM_PEAK_COUNT: 240,
+  computeWaveformWithMipmap: vi.fn(async () => [0.1, 0.3, 0.5]),
 }));
 
 vi.mock('../../hooks/useToast', () => ({
@@ -70,6 +67,7 @@ vi.mock('../../utils/wav', () => ({
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useModelStore } from '../../store/modelStore';
+import { useVoiceStore } from '../../store/voiceStore';
 import {
   resolveContextWindow,
   generateAllTracks,
@@ -205,6 +203,74 @@ describe('generateRepaintClip return value', () => {
       prompt: 'test',
     });
     expect(result).toBeUndefined();
+  });
+});
+
+describe('negative prompt pipeline forwarding', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useGenerationStore.setState(useGenerationStore.getInitialState(), true);
+    useProjectStore.getState().createProject();
+    mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['audio'], { type: 'audio/wav' }));
+    mockReleaseLegoTask.mockRejectedValue(new Error('stop after params'));
+  });
+
+  it('passes negative_prompt to cover generation params', async () => {
+    const track = useProjectStore.getState().addTrack('stems');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      name: 'Cover Source',
+      startTime: 0,
+      duration: 5,
+      type: 'audio',
+    });
+    useProjectStore.getState().updateClip(clip.id, {
+      isolatedAudioKey: 'source-audio',
+      generationStatus: 'ready',
+    });
+
+    await generateCoverClip({
+      clipId: clip.id,
+      caption: 'jazz cover',
+      lyrics: '',
+      coverStrength: 0.5,
+      createNew: false,
+      negativePrompt: ' no distortion ',
+    });
+
+    expect(mockReleaseLegoTask).toHaveBeenCalled();
+    expect(mockReleaseLegoTask.mock.calls[0][1]).toMatchObject({
+      task_type: 'cover',
+      negative_prompt: 'no distortion',
+    });
+  });
+
+  it('passes negative_prompt to repaint generation params', async () => {
+    const track = useProjectStore.getState().addTrack('stems');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      name: 'Repaint Source',
+      startTime: 0,
+      duration: 5,
+      type: 'audio',
+    });
+    useProjectStore.getState().updateClip(clip.id, {
+      cumulativeMixKey: 'source-audio',
+      generationStatus: 'ready',
+    });
+
+    await generateRepaintClip({
+      clipId: clip.id,
+      repaintStart: 0,
+      repaintEnd: 5,
+      prompt: 'gentle piano',
+      negativePrompt: ' no harsh vocals ',
+    });
+
+    expect(mockReleaseLegoTask).toHaveBeenCalled();
+    expect(mockReleaseLegoTask.mock.calls[0][1]).toMatchObject({
+      task_type: 'repaint',
+      negative_prompt: 'no harsh vocals',
+    });
   });
 });
 
@@ -499,6 +565,138 @@ describe('regenerateClip', () => {
     expect(mockReleaseLegoTask).toHaveBeenCalled();
     expect(useGenerationStore.getState().isGenerating).toBe(false);
   });
+
+  it('regenerates text2music with the clip saved voice influence instead of current selection', async () => {
+    useModelStore.setState({
+      activeModelId: 'test-t2m-model',
+      availableModels: [
+        { name: 'test-t2m-model', category: 'text2music', is_default: true, is_loaded: true } as never,
+      ],
+    });
+    const track = useProjectStore.getState().addTrack('custom', 'mix');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0,
+      duration: 60,
+      prompt: 'Saved prompt',
+      lyrics: '',
+    });
+    useProjectStore.getState().updateClip(clip.id, {
+      generationParams: {
+        type: 'text2music',
+        prompt: 'Saved prompt',
+        lyrics: '',
+        durationSeconds: 60,
+        useProjectMeta: false,
+        guidanceScale: 10,
+        voiceProfileId: 'saved-voice',
+        audioInfluence: 70,
+        styleInfluence: 30,
+      },
+    });
+    useVoiceStore.setState({
+      voices: [
+        {
+          id: 'saved-voice',
+          name: 'Saved Voice',
+          createdAt: 1,
+          updatedAt: 1,
+          audioKey: 'voice-audio:saved',
+          durationSeconds: 12,
+          skillLevel: 'professional',
+          tags: [],
+          defaultAudioInfluence: 20,
+          defaultStyleInfluence: 80,
+          source: 'upload',
+        },
+        {
+          id: 'current-voice',
+          name: 'Current Voice',
+          createdAt: 1,
+          updatedAt: 1,
+          audioKey: 'voice-audio:current',
+          durationSeconds: 12,
+          skillLevel: 'professional',
+          tags: [],
+          defaultAudioInfluence: 95,
+          defaultStyleInfluence: 95,
+          source: 'upload',
+        },
+      ],
+      selectedVoiceId: 'current-voice',
+      searchQuery: '',
+      filterTag: null,
+    });
+    const voiceBlob = new Blob(['saved-voice'], { type: 'audio/wav' });
+    mockSuccessfulGeneration('/tmp/regenerated.wav');
+    mockLoadAudioBlobByKey.mockResolvedValue(voiceBlob);
+
+    const promise = regenerateClip(clip.id);
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockLoadAudioBlobByKey).toHaveBeenCalledWith('voice-audio:saved');
+    const [, params, options] = mockReleaseLegoTask.mock.calls[0];
+    expect(params.audio_cover_strength).toBe(0.7);
+    expect(params.guidance_scale).toBe(6);
+    expect(options.referenceAudioBlob).toBe(voiceBlob);
+  });
+
+  it('falls back to the selected voice when regenerating legacy text2music clips', async () => {
+    useModelStore.setState({
+      activeModelId: 'test-t2m-model',
+      availableModels: [
+        { name: 'test-t2m-model', category: 'text2music', is_default: true, is_loaded: true } as never,
+      ],
+    });
+    const track = useProjectStore.getState().addTrack('custom', 'mix');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0,
+      duration: 60,
+      prompt: 'Legacy prompt',
+      lyrics: '',
+    });
+    useProjectStore.getState().updateClip(clip.id, {
+      generationParams: {
+        type: 'text2music',
+        prompt: 'Legacy prompt',
+        lyrics: '',
+        durationSeconds: 60,
+        useProjectMeta: false,
+        guidanceScale: 10,
+      },
+    });
+    useVoiceStore.setState({
+      voices: [{
+        id: 'current-voice',
+        name: 'Current Voice',
+        createdAt: 1,
+        updatedAt: 1,
+        audioKey: 'voice-audio:current',
+        durationSeconds: 12,
+        skillLevel: 'professional',
+        tags: [],
+        defaultAudioInfluence: 55,
+        defaultStyleInfluence: 50,
+        source: 'upload',
+      }],
+      selectedVoiceId: 'current-voice',
+      searchQuery: '',
+      filterTag: null,
+    });
+    const voiceBlob = new Blob(['current-voice'], { type: 'audio/wav' });
+    mockSuccessfulGeneration('/tmp/regenerated.wav');
+    mockLoadAudioBlobByKey.mockResolvedValue(voiceBlob);
+
+    const promise = regenerateClip(clip.id);
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockLoadAudioBlobByKey).toHaveBeenCalledWith('voice-audio:current');
+    const [, params, options] = mockReleaseLegoTask.mock.calls[0];
+    expect(params.audio_cover_strength).toBe(0.55);
+    expect(params.guidance_scale).toBe(10);
+    expect(options.referenceAudioBlob).toBe(voiceBlob);
+  });
 });
 
 describe('generateText2Music', () => {
@@ -508,6 +706,7 @@ describe('generateText2Music', () => {
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useGenerationStore.setState(useGenerationStore.getInitialState(), true);
     useModelStore.setState(useModelStore.getInitialState(), true);
+    useVoiceStore.setState({ voices: [], selectedVoiceId: null, searchQuery: '', filterTag: null });
     useProjectStore.getState().createProject();
   });
 
@@ -560,6 +759,63 @@ describe('generateText2Music', () => {
     expect(result.mixClipId).toBeDefined();
     expect(result.audioBlob).toBeInstanceOf(Blob);
     expect(useGenerationStore.getState().isGenerating).toBe(false);
+  });
+
+  it('attaches the selected voice profile to initial text2music submissions', async () => {
+    mockInitModel.mockResolvedValue(undefined);
+    setupModelStore();
+    mockReleaseLegoTask.mockResolvedValue({ task_id: 'task-t2m' });
+    mockQueryResult.mockResolvedValue([{
+      task_id: 'task-t2m',
+      status: 1,
+      progress_text: 'Done',
+      result: JSON.stringify([{
+        file: '/tmp/fullsong.wav',
+        seed_value: 99,
+        dit_model: 'test-model',
+        metas: { bpm: 128, keyscale: 'A minor', timesignature: '4/4', genres: ['electronic'] },
+      }]),
+    }]);
+    mockDownloadAudio.mockResolvedValue(new Blob(['full-song'], { type: 'audio/wav' }));
+    mockSaveAudioBlob.mockResolvedValue('audio:proj:mix:isolated');
+    mockDecodeAudioData.mockResolvedValue(fakeAudioBuffer(120));
+    const voiceBlob = new Blob(['voice'], { type: 'audio/wav' });
+    mockLoadAudioBlobByKey.mockResolvedValue(voiceBlob);
+    useVoiceStore.setState({
+      voices: [{
+        id: 'voice-1',
+        name: 'Lead vocal',
+        createdAt: 1,
+        updatedAt: 1,
+        audioKey: 'voice-audio:voice-1',
+        durationSeconds: 12,
+        skillLevel: 'professional',
+        tags: [],
+        defaultAudioInfluence: 70,
+        defaultStyleInfluence: 35,
+        source: 'upload',
+      }],
+      selectedVoiceId: 'voice-1',
+    });
+
+    const promise = generateText2Music({
+      prompt: 'An electronic dance track',
+      lyrics: '',
+      durationSeconds: 120,
+      bpm: 128,
+      keyScale: 'A minor',
+      timeSignature: '4/4',
+      splitToStems: false,
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockLoadAudioBlobByKey).toHaveBeenCalledWith('voice-audio:voice-1');
+    const [, params, options] = mockReleaseLegoTask.mock.calls[0];
+    expect(params.reference_audio_path).toBeUndefined();
+    expect(params.audio_cover_strength).toBe(0.7);
+    expect(params.guidance_scale).toBe(4.9);
+    expect(options.referenceAudioBlob).toBe(voiceBlob);
   });
 
   it('fails when generation lock is already held', async () => {
@@ -640,6 +896,34 @@ describe('generateText2Music', () => {
     expect(result.succeeded).toBe(false);
     expect(result.errorMessage).toContain('CUDA out of memory');
     expect(useGenerationStore.getState().isGenerating).toBe(false);
+  });
+
+  it('keeps an empty full-song placeholder empty when generation is cancelled before audio is saved', async () => {
+    mockInitModel.mockResolvedValue(undefined);
+    setupModelStore();
+    mockReleaseLegoTask.mockRejectedValue(new DOMException('Aborted', 'AbortError'));
+
+    const result = await generateText2Music({
+      prompt: 'test',
+      lyrics: '',
+      durationSeconds: 60,
+      bpm: null,
+      keyScale: '',
+      timeSignature: '',
+      splitToStems: false,
+    });
+
+    const clip = useProjectStore
+      .getState()
+      .project?.tracks.flatMap((track) => track.clips)
+      .find((candidate) => candidate.id === result.mixClipId);
+    const job = useGenerationStore.getState().jobs.find((candidate) => candidate.clipId === result.mixClipId);
+
+    expect(result.succeeded).toBe(false);
+    expect(result.errorMessage).toBe('Cancelled');
+    expect(clip?.generationStatus).toBe('empty');
+    expect(clip?.isolatedAudioKey).toBeNull();
+    expect(job?.status).toBe('cancelled');
   });
 });
 

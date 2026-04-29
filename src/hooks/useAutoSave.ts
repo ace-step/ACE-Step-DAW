@@ -2,10 +2,13 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
 import { toastError, toastSuccess } from './useToast';
+import { saveVersion, pruneVersions } from '../services/versionHistory';
 
 export type SaveStatus = 'saved' | 'saving' | 'unsaved';
 
 const DEFAULT_DEBOUNCE_MS = 30_000;
+const VERSION_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_AUTO_VERSIONS = 20;
 
 interface UseAutoSaveOptions {
   /** Debounce interval in milliseconds before auto-saving. Default: 30000 (30s). */
@@ -37,6 +40,8 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
   const lastSavedUpdatedAtRef = useRef<number>(0);
   const isDirtyRef = useRef(false);
   const isManualSaveRef = useRef(false);
+  const isSnapshotInFlightRef = useRef(false);
+  const lastSnapshottedProjectRef = useRef<{ id: string; updatedAt: number } | null>(null);
 
   const saveNow = useCallback(async () => {
     const project = useProjectStore.getState().project;
@@ -47,8 +52,20 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
     try {
       await saveProjectToIDB(project);
       lastSavedUpdatedAtRef.current = project.updatedAt;
-      isDirtyRef.current = false;
-      setStatus('saved');
+      // Re-check if project changed during the async save
+      const latestProject = useProjectStore.getState().project;
+      if (latestProject && latestProject.updatedAt !== project.updatedAt) {
+        isDirtyRef.current = true;
+        setStatus('unsaved');
+      } else {
+        isDirtyRef.current = false;
+        setStatus('saved');
+        // Only clear debounce timer when no concurrent changes detected
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+      }
       setLastSavedAt(Date.now());
       if (isManualSaveRef.current) {
         toastSuccess('Project saved');
@@ -58,12 +75,6 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
       toastError('Save failed — will retry automatically');
     }
     isManualSaveRef.current = false;
-
-    // Clear any pending debounce timer since we just saved
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
   }, []);
 
   // Subscribe to project store changes and schedule debounced saves
@@ -91,8 +102,15 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
         setStatus('saving');
         void saveProjectToIDB(currentProject).then(() => {
           lastSavedUpdatedAtRef.current = currentProject.updatedAt;
-          isDirtyRef.current = false;
-          setStatus('saved');
+          // Re-check if project changed during the async save
+          const latestProject = useProjectStore.getState().project;
+          if (latestProject && latestProject.updatedAt !== currentProject.updatedAt) {
+            isDirtyRef.current = true;
+            setStatus('unsaved');
+          } else {
+            isDirtyRef.current = false;
+            setStatus('saved');
+          }
           setLastSavedAt(Date.now());
         }).catch(() => {
           setStatus('unsaved');
@@ -109,6 +127,34 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
       }
     };
   }, [debounceMs]);
+
+  // Periodic version snapshots (every 5 minutes)
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const project = useProjectStore.getState().project;
+      if (!project) return;
+      if (isSnapshotInFlightRef.current) return;
+      const lastSnapshot = lastSnapshottedProjectRef.current;
+      if (lastSnapshot?.id === project.id && lastSnapshot.updatedAt === project.updatedAt) {
+        return;
+      }
+
+      isSnapshotInFlightRef.current = true;
+      void saveVersion(project, 'Auto-save', 'auto')
+        .then(() => {
+          lastSnapshottedProjectRef.current = { id: project.id, updatedAt: project.updatedAt };
+          return pruneVersions(project.id, MAX_AUTO_VERSIONS);
+        })
+        .catch(() => {
+          toastError('Auto snapshot failed');
+        })
+        .finally(() => {
+          isSnapshotInFlightRef.current = false;
+        });
+    }, VERSION_SNAPSHOT_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Beforeunload warning when dirty
   useEffect(() => {

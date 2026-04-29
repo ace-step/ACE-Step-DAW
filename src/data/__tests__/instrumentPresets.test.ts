@@ -141,4 +141,51 @@ describe('Unified Instrument Presets', () => {
       );
     });
   });
+
+  describe('physical modeling presets', () => {
+    it('includes physical presets in factory collection', () => {
+      const kinds = new Set(ALL_FACTORY_PRESETS.map((p) => p.instrumentKind));
+      expect(kinds.has('physical')).toBe(true);
+    });
+
+    it('has exactly 5 physical factory presets', () => {
+      const physical = ALL_FACTORY_PRESETS.filter((p) => p.instrumentKind === 'physical');
+      expect(physical.length).toBe(5);
+    });
+
+    it('getPresetsByKind returns only physical presets', () => {
+      const physical = getPresetsByKind('physical');
+      expect(physical.length).toBe(5);
+      expect(physical.every((p) => p.instrumentKind === 'physical')).toBe(true);
+    });
+
+    it('all physical presets are in the Physical category', () => {
+      const physical = getPresetsByKind('physical');
+      expect(physical.every((p) => p.category === 'Physical')).toBe(true);
+    });
+
+    it('getCategoriesForKind returns Physical for physical kind', () => {
+      const cats = getCategoriesForKind('physical');
+      expect(cats).toContain('Physical');
+    });
+
+    it('physical presets have correct names', () => {
+      const physical = getPresetsByKind('physical');
+      const names = physical.map((p) => p.name).sort();
+      expect(names).toEqual([
+        'Acoustic Guitar',
+        'Harp',
+        'Kalimba',
+        'Marimba',
+        'Steel Drum',
+      ]);
+    });
+
+    it('physical presets have kind=physical in instrument config', () => {
+      const physical = getPresetsByKind('physical');
+      for (const p of physical) {
+        expect(p.instrument.kind).toBe('physical');
+      }
+    });
+  });
 });

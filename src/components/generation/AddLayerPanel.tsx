@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore } from '../../store/uiStore';
 import { generateFromAddLayer, resolveContextWindow } from '../../services/generationPipeline';
+import { toastError } from '../../hooks/useToast';
 import { extractContextAudioLazy } from '../../services/lazyContextAudioExtractor';
 import type { TrackName } from '../../types/project';
 import { TRACK_CATALOG, TRACK_NAMES } from '../../constants/tracks';
@@ -638,17 +639,21 @@ export function AddLayerPanel() {
     setSavedSelectionBeforeWholeSong(null);
     handleClose();
 
-    await generateFromAddLayer({
-      trackId,
-      startTime,
-      duration,
-      localDescription: style,
-      globalCaption,
-      lyrics: showLyrics ? lyrics : '',
-      contextWindow: hasContext ? contextWindow : null,
-      chunkMaskMode,
-      clipId: isEditMode ? editingClipId ?? undefined : undefined,
-    });
+    try {
+      await generateFromAddLayer({
+        trackId,
+        startTime,
+        duration,
+        localDescription: style,
+        globalCaption,
+        lyrics: showLyrics ? lyrics : '',
+        contextWindow: hasContext ? contextWindow : null,
+        chunkMaskMode,
+        clipId: isEditMode ? editingClipId ?? undefined : undefined,
+      });
+    } catch {
+      toastError('Generation failed — please try again');
+    }
   };
 
   const handleHeaderMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {

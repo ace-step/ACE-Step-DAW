@@ -4,6 +4,7 @@ const mockGet = vi.fn();
 const mockSet = vi.fn();
 const mockKeys = vi.fn();
 vi.mock('idb-keyval', () => ({
+  createStore: vi.fn(() => ({})),
   get: (...args: unknown[]) => mockGet(...args),
   set: (...args: unknown[]) => mockSet(...args),
   keys: (...args: unknown[]) => mockKeys(...args),

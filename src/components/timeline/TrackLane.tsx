@@ -3,6 +3,7 @@ import type { Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
+import { useTransportStore } from '../../store/transportStore';
 import { useVST3Store } from '../../store/vst3Store';
 import { ClipBlock } from './ClipBlock';
 import { VideoClipBlock } from './VideoClipBlock';
@@ -62,6 +63,9 @@ function TrackLaneInner({ track }: TrackLaneProps) {
   const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
   const placeGenerationHistoryOnTrack = useGenerationStore((s) => s.placeGenerationHistoryOnTrack);
   const loadVST3Plugin = useVST3Store((s) => s.loadPlugin);
+  const isRecording = useTransportStore((s) => s.isRecording);
+  const armedTrackIds = useTransportStore((s) => s.armedTrackIds);
+  const isTrackArmed = track.armed || armedTrackIds.includes(track.id);
 
   const [ctxMenu, setCtxMenu] = useState<{
     x: number; y: number; startTime: number; duration: number;
@@ -407,6 +411,16 @@ function TrackLaneInner({ track }: TrackLaneProps) {
             aria-hidden="true"
             className="absolute inset-0 pointer-events-none"
             style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }}
+          />
+        )}
+
+        {/* Recording lane pulse — pulsing red border when track is armed and recording */}
+        {isTrackArmed && isRecording && (
+          <div
+            aria-hidden="true"
+            data-testid={`recording-lane-pulse-${track.id}`}
+            className="absolute inset-0 pointer-events-none z-10 recording-lane-pulse"
+            style={{ animation: 'recording-lane-pulse 1.5s ease-in-out infinite' }}
           />
         )}
 

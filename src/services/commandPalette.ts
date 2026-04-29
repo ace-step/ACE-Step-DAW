@@ -1,5 +1,7 @@
 import type { Project, ReverbParams, Track, TrackEffect, TrackEffectType, TrackName, TrackType } from '../types/project';
+import type { SavedPrompt } from '../types/promptLibrary';
 import { useUIStore } from '../store/uiStore';
+import { canDestructivelyProcessClipAudio } from '../utils/clipAudio';
 
 export type CommandPaletteCommandKind = 'action' | 'setting' | 'parameter';
 
@@ -46,6 +48,7 @@ export interface CommandPaletteContext {
   showTempoLane: boolean;
   loopEnabled: boolean;
   metronomeEnabled: boolean;
+  punchEnabled: boolean;
   expandedTrackId: string | null;
   openPianoRollTrackId: string | null;
   openSequencerTrackId: string | null;
@@ -56,6 +59,7 @@ export interface CommandPaletteContext {
     stop: () => void | Promise<void>;
     toggleLoop: () => void;
     toggleMetronome: () => void;
+    togglePunch: () => void;
     setShowNewProjectDialog: (v: boolean) => void;
     setShowProjectListDialog: (v: boolean) => void;
     openGenerationSettings: () => void;
@@ -80,10 +84,15 @@ export interface CommandPaletteContext {
     splitClip: (clipId: string, splitTime: number) => void;
     splitClipAtZeroCrossing: (clipId: string, splitTime: number) => Promise<void>;
     removeClip: (clipId: string) => void;
+    reverseClip: (clipId: string) => Promise<void>;
+    normalizeClip: (clipId: string) => Promise<void>;
+    adjustClipGain: (clipId: string, gainDb: number) => Promise<void>;
     setEditingClip: (clipId: string | null) => void;
     deselectAll: () => void;
     openEnhancer: (clipId: string, trackId: string, range?: { start: number; end: number } | null) => void;
+    applyPromptFromLibrary?: (id: string) => boolean;
   };
+  savedPrompts?: SavedPrompt[];
 }
 
 const DEFAULT_RESULT_LIMIT = 12;
@@ -419,7 +428,113 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       ['K'],
       'Transport control',
     ),
+    createTrackCommand(
+      'transport:toggle-punch',
+      context.punchEnabled ? 'Disable Punch In/Out' : 'Enable Punch In/Out',
+      'Transport',
+      'action',
+      ['transport', 'punch', 'recording'],
+      ['toggle punch', 'punch recording', 'punch in out'],
+      context.actions.togglePunch,
+      ['Shift', 'P'],
+      'Transport control',
+    ),
   );
+
+  // Arrangement operations — use dynamic imports since these are direct store calls
+  commands.push(
+    createTrackCommand(
+      'arrangement:split-all',
+      'Split All at Playhead',
+      'Arrangement',
+      'action',
+      ['arrangement', 'split', 'all', 'playhead'],
+      ['split all clips', 'split at playhead'],
+      async () => {
+        const { useProjectStore } = await import('../store/projectStore');
+        useProjectStore.getState().splitAllAtPlayhead(context.currentTime);
+      },
+      ['Cmd', 'Shift', 'S'],
+      'Arrangement editing',
+    ),
+  );
+  commands.push(
+    createTrackCommand(
+      'arrangement:insert-time',
+      'Insert Time at Selection',
+      'Arrangement',
+      'action',
+      ['arrangement', 'insert', 'time', 'silence'],
+      ['insert silence', 'add time'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        const { useProjectStore } = await import('../store/projectStore');
+        const sw = useUIStore.getState().selectWindow;
+        if (sw) {
+          useProjectStore.getState().insertTime(sw.startTime, sw.endTime - sw.startTime);
+          useUIStore.getState().setSelectWindow(null);
+        }
+      },
+      ['Cmd', 'I'],
+      'Arrangement editing',
+    ),
+  );
+  commands.push(
+    createTrackCommand(
+      'arrangement:delete-time',
+      'Delete Time (Ripple Delete)',
+      'Arrangement',
+      'action',
+      ['arrangement', 'delete', 'time', 'ripple'],
+      ['ripple delete', 'remove time'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        const { useProjectStore } = await import('../store/projectStore');
+        const sw = useUIStore.getState().selectWindow;
+        if (sw) {
+          useProjectStore.getState().deleteTimeRange(sw.startTime, sw.endTime);
+          useUIStore.getState().setSelectWindow(null);
+        }
+      },
+      ['Cmd', 'Shift', '⌫'],
+      'Arrangement editing',
+    ),
+  );
+  commands.push(
+    createTrackCommand(
+      'arrangement:duplicate-section',
+      'Duplicate Section',
+      'Arrangement',
+      'action',
+      ['arrangement', 'duplicate', 'section', 'copy'],
+      ['duplicate range', 'copy section'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        const { useProjectStore } = await import('../store/projectStore');
+        const sw = useUIStore.getState().selectWindow;
+        if (sw) {
+          useProjectStore.getState().duplicateTimeRange(sw.startTime, sw.endTime);
+          useUIStore.getState().setSelectWindow(null);
+        }
+      },
+      ['Cmd', 'Shift', 'D'],
+      'Arrangement editing',
+    ),
+  );
+
+  // Metronome settings commands — call transportStore directly since they
+  // don't need context-dependent titles.
+  const metronomeSettings: Array<{ id: string; title: string; keywords: string[]; aliases: string[]; execute: () => void }> = [
+    { id: 'transport:metronome-sound-click', title: 'Metronome Sound: Click', keywords: ['metronome', 'sound', 'click'], aliases: ['click sound'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setMetronomeSound('click')); } },
+    { id: 'transport:metronome-sound-woodblock', title: 'Metronome Sound: Woodblock', keywords: ['metronome', 'sound', 'woodblock'], aliases: ['woodblock sound'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setMetronomeSound('woodblock')); } },
+    { id: 'transport:metronome-sound-beep', title: 'Metronome Sound: Beep', keywords: ['metronome', 'sound', 'beep'], aliases: ['beep sound'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setMetronomeSound('beep')); } },
+    { id: 'transport:countin-off', title: 'Count-In: Off', keywords: ['count', 'in', 'off', 'recording'], aliases: ['disable count in'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setCountInBars(0)); } },
+    { id: 'transport:countin-1bar', title: 'Count-In: 1 Bar', keywords: ['count', 'in', '1', 'bar', 'recording'], aliases: ['1 bar count in'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setCountInBars(1)); } },
+    { id: 'transport:countin-2bars', title: 'Count-In: 2 Bars', keywords: ['count', 'in', '2', 'bars', 'recording'], aliases: ['2 bar count in'], execute: () => { import('../store/transportStore').then(m => m.useTransportStore.getState().setCountInBars(2)); } },
+  ];
+  for (const cmd of metronomeSettings) {
+    commands.push(createTrackCommand(cmd.id, cmd.title, 'Transport', 'setting', cmd.keywords, cmd.aliases, cmd.execute, undefined, 'Metronome'));
+  }
 
   commands.push(
     createTrackCommand(
@@ -757,6 +872,57 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
           'Selected clip action',
         ),
       );
+
+      const hasAudio = !!(selectedClip.clip.isolatedAudioKey || selectedClip.clip.cumulativeMixKey);
+      const isMidi = !!selectedClip.clip.midiData;
+      if (hasAudio && !isMidi && canDestructivelyProcessClipAudio(selectedClip.clip)) {
+        commands.push(
+          createTrackCommand(
+            'clip:reverse-selected',
+            'Reverse Selected Clip Audio',
+            'Clips',
+            'action',
+            ['clip', 'reverse', 'audio', 'backwards'],
+            ['reverse clip', 'flip audio'],
+            () => context.actions.reverseClip(selectedClipId),
+            undefined,
+            'Audio processing',
+          ),
+          createTrackCommand(
+            'clip:normalize-selected',
+            'Normalize Selected Clip Audio',
+            'Clips',
+            'action',
+            ['clip', 'normalize', 'audio', 'level', 'peak'],
+            ['normalize clip', 'normalize audio level'],
+            () => context.actions.normalizeClip(selectedClipId),
+            undefined,
+            'Audio processing',
+          ),
+          createTrackCommand(
+            'clip:gain-up-selected',
+            'Gain +3 dB Selected Clip',
+            'Clips',
+            'action',
+            ['clip', 'gain', 'louder', 'volume', 'boost'],
+            ['increase clip volume', 'boost clip gain'],
+            () => context.actions.adjustClipGain(selectedClipId, 3),
+            undefined,
+            'Audio processing',
+          ),
+          createTrackCommand(
+            'clip:gain-down-selected',
+            'Gain −3 dB Selected Clip',
+            'Clips',
+            'action',
+            ['clip', 'gain', 'quieter', 'volume', 'reduce'],
+            ['decrease clip volume', 'reduce clip gain'],
+            () => context.actions.adjustClipGain(selectedClipId, -3),
+            undefined,
+            'Audio processing',
+          ),
+        );
+      }
     }
   }
 
@@ -1012,6 +1178,219 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
           },
           undefined,
           `Capture current pattern code as a version snapshot`,
+        ),
+      );
+    }
+  }
+
+  // ── Mix Snapshot commands ──
+  commands.push(
+    createTrackCommand(
+      'mixer:save-snapshot',
+      'Save Mix Snapshot',
+      'Mixer',
+      'action',
+      ['mixer', 'snapshot', 'save', 'mix', 'recall', 'preset'],
+      ['save mix', 'snapshot mix', 'mix preset'],
+      async () => {
+        const { useProjectStore } = await import('../store/projectStore');
+        const project = useProjectStore.getState().project;
+        if (!project) return;
+        const name = `Snapshot ${((project.mixSnapshots ?? []).length + 1)}`;
+        try {
+          useProjectStore.getState().saveMixSnapshot(name);
+        } catch {
+          // Viewer mode and unloaded project states can reject write commands.
+        }
+      },
+      undefined,
+      'Save current mixer state as a named snapshot',
+    ),
+  );
+
+  // Dynamic commands for each saved snapshot
+  const snapshots = context.project?.mixSnapshots ?? [];
+  for (const snapshot of snapshots) {
+    commands.push(
+      createTrackCommand(
+        `mixer:load-snapshot:${snapshot.id}`,
+        `Load Mix Snapshot "${snapshot.name}"`,
+        'Mixer',
+        'action',
+        ['mixer', 'snapshot', 'load', 'recall', 'mix', snapshot.name.toLowerCase()],
+        [`apply ${snapshot.name}`, `recall ${snapshot.name}`],
+        async () => {
+          const { useProjectStore } = await import('../store/projectStore');
+          useProjectStore.getState().loadMixSnapshot(snapshot.id);
+        },
+        undefined,
+        `Restore mixer state from "${snapshot.name}"`,
+      ),
+    );
+
+    commands.push(
+      createTrackCommand(
+        `mixer:ab-snapshot:${snapshot.id}`,
+        `A/B Compare "${snapshot.name}"`,
+        'Mixer',
+        'action',
+        ['mixer', 'ab', 'compare', 'snapshot', 'toggle', snapshot.name.toLowerCase()],
+        [`compare ${snapshot.name}`, `ab ${snapshot.name}`],
+        async () => {
+          const { useProjectStore } = await import('../store/projectStore');
+          useProjectStore.getState().toggleAbCompare(snapshot.id);
+        },
+        undefined,
+        `Toggle A/B comparison with "${snapshot.name}"`,
+      ),
+    );
+  }
+
+  // Prompt Library commands
+  commands.push(
+    createTrackCommand(
+      'prompt-library:open',
+      'Open Prompt Library',
+      'AI Generation',
+      'action',
+      ['prompt', 'library', 'saved', 'prompts', 'favorites'],
+      ['show prompt library', 'browse saved prompts', 'open prompts'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        useUIStore.getState().openGenerationPanelView('library');
+      },
+      undefined,
+      'Browse and apply saved AI generation prompts',
+    ),
+    createTrackCommand(
+      'prompt-library:export',
+      'Export Prompt Library',
+      'AI Generation',
+      'action',
+      ['prompt', 'library', 'export', 'backup', 'json'],
+      ['export prompts', 'download prompt library', 'backup prompts'],
+      async () => {
+        const { useGenerationStore } = await import('../store/generationStore');
+        const { downloadBlob } = await import('./browserDownload');
+        const data = useGenerationStore.getState().exportPromptLibrary();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        downloadBlob(blob, `prompt-library-${new Date().toISOString().slice(0, 10)}.json`);
+      },
+      undefined,
+      'Export saved prompts as JSON file',
+    ),
+  );
+
+  // Add "Apply prompt: <title>" commands for each saved prompt
+  if (context.savedPrompts && context.actions.applyPromptFromLibrary) {
+    const applyFn = context.actions.applyPromptFromLibrary;
+    for (const savedPrompt of context.savedPrompts.slice(0, 20)) {
+      commands.push(
+        createTrackCommand(
+          `prompt-library:apply:${savedPrompt.id}`,
+          `Apply Prompt: ${savedPrompt.title}`,
+          'Prompt Library',
+          'action',
+          ['prompt', 'apply', 'library', ...savedPrompt.tags, savedPrompt.category].filter(Boolean),
+          [savedPrompt.prompt.slice(0, 60)],
+          () => { applyFn(savedPrompt.id); },
+          undefined,
+          savedPrompt.prompt.length > 60 ? savedPrompt.prompt.slice(0, 60) + '...' : savedPrompt.prompt,
+        ),
+      );
+    }
+  }
+
+  // MIDI Controller commands
+  commands.push(
+    createTrackCommand(
+      'midi:toggle-panel',
+      'Toggle MIDI Controller Panel',
+      'MIDI',
+      'action',
+      ['midi', 'controller', 'device', 'hardware', 'panel'],
+      ['show midi controllers', 'hide midi panel', 'midi devices'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        const ui = useUIStore.getState();
+        ui.setShowMidiControllerPanel(!ui.showMidiControllerPanel);
+      },
+      undefined,
+      'Show/hide MIDI controller panel',
+    ),
+    createTrackCommand(
+      'midi:learn',
+      'MIDI Learn Master Volume',
+      'MIDI',
+      'parameter',
+      ['midi', 'learn', 'map', 'assign', 'controller', 'master', 'volume'],
+      ['midi learn master volume', 'assign midi controller to master volume', 'map midi'],
+      async () => {
+        const { useMidiControllerStore } = await import('../store/midiControllerStore');
+        const { useUIStore } = await import('../store/uiStore');
+        const state = useMidiControllerStore.getState();
+        if (state.learnMode.active) {
+          state.cancelLearnMode();
+        } else {
+          useUIStore.getState().setShowMidiControllerPanel(true);
+          state.setEnabled(true);
+          state.startLearnMode('master:volume', 'Master Volume');
+        }
+      },
+      undefined,
+      'Arm MIDI learn for the master volume parameter',
+    ),
+    createTrackCommand(
+      'midi:clear-all',
+      'Clear All MIDI Mappings',
+      'MIDI',
+      'action',
+      ['midi', 'clear', 'reset', 'mappings', 'controller'],
+      ['remove all midi mappings', 'reset midi', 'clear controller assignments'],
+      async () => {
+        const { useMidiControllerStore } = await import('../store/midiControllerStore');
+        useMidiControllerStore.getState().clearAllMappings();
+      },
+      undefined,
+      'Remove all MIDI controller mappings',
+    ),
+  );
+
+  // ── Track Preset Manager ──────────────────────────────────────────────
+  commands.push(
+    createTrackCommand(
+      'track-preset-manager',
+      'Track Preset Manager',
+      'Tracks',
+      'action',
+      ['track', 'preset', 'manager', 'save', 'template', 'instrument'],
+      ['manage track presets', 'track templates', 'save track preset'],
+      () => {
+        const current = useUIStore.getState().showTrackPresetManager;
+        useUIStore.getState().setShowTrackPresetManager(!current);
+      },
+      undefined,
+      'Open track preset manager to save, browse, and apply presets',
+    ),
+  );
+
+  // ── Groove Pool ───────────────────────────────────────────────────────
+  if (context.project?.groovePool) {
+    for (const groove of context.project.groovePool) {
+      commands.push(
+        createTrackCommand(
+          `groove:delete:${groove.id}`,
+          `Delete Groove "${groove.name}"`,
+          'Groove',
+          'action',
+          ['groove', 'delete', 'remove', groove.name.toLowerCase()],
+          [`delete groove ${groove.name}`, `remove groove ${groove.name}`],
+          async () => {
+            const { useProjectStore } = await import('../store/projectStore');
+            useProjectStore.getState().deleteGrooveTemplate(groove.id);
+          },
+          undefined,
+          `Remove "${groove.name}" from the groove pool`,
         ),
       );
     }

@@ -5,6 +5,7 @@ import { loadModelBytes, isModelCached, getModelMeta, MODEL_REGISTRY } from '../
 vi.mock('idb-keyval', () => {
   const store = new Map<string, unknown>();
   return {
+    createStore: vi.fn(() => ({})),
     get: vi.fn((key: string) => Promise.resolve(store.get(key))),
     set: vi.fn((key: string, value: unknown) => {
       store.set(key, value);

@@ -38,6 +38,18 @@ const LEGO_LOADED_RESPONSE: ModelsListResponse = {
   llm_initialized: false,
 };
 
+// Both models loaded simultaneously (the scenario that triggered #1669)
+const BOTH_LOADED_RESPONSE: ModelsListResponse = {
+  models: [
+    { name: 'ace-t2m-v1', is_default: true, is_loaded: true, supported_task_types: ['text2music', 'cover', 'repaint'], category: 'text2music' },
+    { name: 'ace-lego-v1', is_default: false, is_loaded: true, supported_task_types: ['lego', 'cover', 'repaint'], category: 'lego' },
+  ],
+  default_model: 'ace-t2m-v1',
+  lm_models: [{ name: 'llm-v1', is_loaded: false }],
+  loaded_lm_model: null,
+  llm_initialized: false,
+};
+
 const LM_LOADED_RESPONSE: ModelsListResponse = {
   ...DUAL_MODEL_RESPONSE,
   lm_models: [{ name: 'llm-v1', is_loaded: true }],
@@ -213,6 +225,32 @@ describe('modelStore category-aware features', () => {
       await expect(
         useModelStore.getState().ensureModelForIntent('single-track'),
       ).rejects.toThrow('No lego model available');
+    });
+  });
+
+  describe('getLoadedModelForCategory', () => {
+    it('returns loaded text2music model when both are loaded (#1669)', async () => {
+      mockedListModels.mockResolvedValue(BOTH_LOADED_RESPONSE);
+      await useModelStore.getState().refreshModels();
+
+      expect(useModelStore.getState().getLoadedModelForCategory('text2music')).toBe('ace-t2m-v1');
+      expect(useModelStore.getState().getLoadedModelForCategory('lego')).toBe('ace-lego-v1');
+    });
+
+    it('returns null when no model of that category is loaded', async () => {
+      mockedListModels.mockResolvedValue(DUAL_MODEL_RESPONSE); // only t2m loaded
+      await useModelStore.getState().refreshModels();
+
+      expect(useModelStore.getState().getLoadedModelForCategory('text2music')).toBe('ace-t2m-v1');
+      expect(useModelStore.getState().getLoadedModelForCategory('lego')).toBeNull();
+    });
+
+    it('returns correct model after switching — lego loaded only', async () => {
+      mockedListModels.mockResolvedValue(LEGO_LOADED_RESPONSE);
+      await useModelStore.getState().refreshModels();
+
+      expect(useModelStore.getState().getLoadedModelForCategory('lego')).toBe('ace-lego-v1');
+      expect(useModelStore.getState().getLoadedModelForCategory('text2music')).toBeNull();
     });
   });
 

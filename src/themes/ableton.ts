@@ -45,7 +45,7 @@ export const abletonTheme: ThemeDefinition = {
     'daw-hover': '#40434b',
     'daw-hover-subtle': '#373a41',
     // ArrangementRulerMarkings color for muted text
-    'daw-text-muted': '#949494',
+    'daw-text-muted': '#a0a0a0',
     // ChosenDefault = Ableton's iconic amber/gold accent
     'daw-accent': '#f7a738',
     // Slightly brighter amber for hover

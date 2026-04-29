@@ -52,6 +52,7 @@ export function useEnhancePanelState() {
   const [consistency, setConsistency] = useState<ConsistencyLevel>('medium');
   const [createNew, setCreateNew] = useState(true);
   const [timbreRef, setTimbreRef] = useState<TimbreReference | null>(null);
+  const [negativePrompt, setNegativePrompt] = useState('');
 
   // Repaint fields
   const [selStart, setSelStart] = useState(0);
@@ -107,6 +108,7 @@ export function useEnhancePanelState() {
       setLyrics(clip.lyrics ?? '');
       setConsistency('medium');
       setCreateNew(true);
+      setNegativePrompt(clip.generationParams?.negativePrompt ?? '');
 
       const clipStart = clip.startTime ?? 0;
       const clipEnd = (clip.startTime ?? 0) + (clip.duration ?? 0);
@@ -207,6 +209,7 @@ export function useEnhancePanelState() {
     setConsistency('medium');
     setRepaintMode('balanced');
     setRepaintStrength(0.5);
+    setNegativePrompt(clip?.generationParams?.negativePrompt ?? '');
     setResults([]);
     setSelectedResultId(null);
     setMiniPlayerIdx(0);
@@ -286,6 +289,7 @@ export function useEnhancePanelState() {
         coverStrength: timbreRef ? timbreRef.strength : coverStrength,
         createNew,
         sourceAudioOverride: timbreRef?.audioKey || chainedSourceAudioKey || undefined,
+        negativePrompt: negativePrompt.trim() || undefined,
       });
       await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
     } catch (err) {
@@ -296,7 +300,7 @@ export function useEnhancePanelState() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, isSubmitting, chainedSourceAudioKey, timbreRef, finalizeResult]);
+  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, isSubmitting, chainedSourceAudioKey, timbreRef, negativePrompt, finalizeResult]);
 
   const handleRepaintGenerate = useCallback(async () => {
     if (!enhancerTarget || isGenerating || isSubmitting) return;
@@ -311,6 +315,7 @@ export function useEnhancePanelState() {
         clipId: enhancerTarget.clipId, repaintStart: selStart, repaintEnd: selEnd, prompt,
         globalCaption: globalCaption || undefined, repaintMode, repaintStrength,
         sourceAudioOverride: chainedSourceAudioKey || undefined,
+        negativePrompt: negativePrompt.trim() || undefined,
       });
       await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
     } catch (err) {
@@ -321,7 +326,7 @@ export function useEnhancePanelState() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, isSubmitting, chainedSourceAudioKey, finalizeResult]);
+  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, isSubmitting, chainedSourceAudioKey, negativePrompt, finalizeResult]);
 
   const handleGenerate = mode === 'cover' ? handleCoverGenerate : handleRepaintGenerate;
 
@@ -439,6 +444,7 @@ export function useEnhancePanelState() {
     // Cover fields
     caption, setCaption, lyrics, setLyrics, consistency, setConsistency, createNew, setCreateNew,
     quickStylesOpen, setQuickStylesOpen, timbreRef, setTimbreRef,
+    negativePrompt, setNegativePrompt,
     // Repaint fields
     selStart, selEnd, prompt, setPrompt, globalCaption, setGlobalCaption,
     repaintMode, setRepaintMode, repaintStrength, setRepaintStrength,

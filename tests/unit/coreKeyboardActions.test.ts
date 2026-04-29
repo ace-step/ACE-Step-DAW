@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { executeCoreKeyboardAction, createCoreKeyboardActions } from '../../src/services/coreKeyboardActions';
+import {
+  createCoreKeyboardActions,
+  executeCoreKeyboardAction,
+} from '../../src/services/coreKeyboardActions';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useTransportStore } from '../../src/store/transportStore';
 import { useUIStore } from '../../src/store/uiStore';
-
-function makeDeps(overrides: Partial<ReturnType<typeof defaultDeps>> = {}) {
-  return { ...defaultDeps(), ...overrides };
-}
 
 function defaultDeps() {
   return {
@@ -15,6 +14,10 @@ function defaultDeps() {
     toggleRecord: vi.fn().mockResolvedValue(undefined),
     toggleArmTrack: vi.fn(),
   };
+}
+
+function makeDeps(overrides: Partial<ReturnType<typeof defaultDeps>> = {}) {
+  return { ...defaultDeps(), ...overrides };
 }
 
 describe('coreKeyboardActions', () => {
@@ -26,19 +29,10 @@ describe('coreKeyboardActions', () => {
     useProjectStore.getState().createProject({ name: 'Core Shortcut Test' });
   });
 
-  // ── Invalid action IDs ──
-
   it('returns false for invalid action ids from untyped callers', async () => {
-    const result = await executeCoreKeyboardAction('invalid.action', makeDeps());
-    expect(result).toBe(false);
+    await expect(executeCoreKeyboardAction('invalid.action', makeDeps())).resolves.toBe(false);
+    await expect(executeCoreKeyboardAction('', makeDeps())).resolves.toBe(false);
   });
-
-  it('returns false for empty string action id', async () => {
-    const result = await executeCoreKeyboardAction('', makeDeps());
-    expect(result).toBe(false);
-  });
-
-  // ── transport.playPause ──
 
   it('awaits async transport handlers before resolving play/pause', async () => {
     const play = vi.fn(async () => {
@@ -61,20 +55,15 @@ describe('coreKeyboardActions', () => {
     expect(useTransportStore.getState().isPlaying).toBe(false);
   });
 
-  // ── transport.loop ──
-
   it('toggles loop on and off', async () => {
     expect(useTransportStore.getState().loopEnabled).toBe(false);
-    const result1 = await executeCoreKeyboardAction('transport.loop', makeDeps());
-    expect(result1).toBe(true);
+
+    expect(await executeCoreKeyboardAction('transport.loop', makeDeps())).toBe(true);
     expect(useTransportStore.getState().loopEnabled).toBe(true);
 
-    const result2 = await executeCoreKeyboardAction('transport.loop', makeDeps());
-    expect(result2).toBe(true);
+    expect(await executeCoreKeyboardAction('transport.loop', makeDeps())).toBe(true);
     expect(useTransportStore.getState().loopEnabled).toBe(false);
   });
-
-  // ── transport.record ──
 
   it('arms the focused track before toggling record, then records on the next press', async () => {
     const vocals = useProjectStore.getState().addTrack('vocals');
@@ -105,34 +94,28 @@ describe('coreKeyboardActions', () => {
   });
 
   it('returns false for record when no track focused and none armed', async () => {
-    // No focused track, no armed tracks
     const result = await executeCoreKeyboardAction('transport.record', makeDeps());
     expect(result).toBe(false);
   });
-
-  // ── tracks.mute ──
 
   it('toggles focused-track mute in timeline context', async () => {
     const drums = useProjectStore.getState().addTrack('drums');
     useUIStore.getState().setKeyboardContext('timeline', drums.id);
 
     await executeCoreKeyboardAction('tracks.mute', makeDeps());
-    const updatedTrack = useProjectStore.getState().project?.tracks.find((t) => t.id === drums.id);
-    expect(updatedTrack?.muted).toBe(true);
+    const mutedTrack = useProjectStore.getState().project?.tracks.find((t) => t.id === drums.id);
+    expect(mutedTrack?.muted).toBe(true);
 
-    // Toggle back
     await executeCoreKeyboardAction('tracks.mute', makeDeps());
-    const toggledBack = useProjectStore.getState().project?.tracks.find((t) => t.id === drums.id);
-    expect(toggledBack?.muted).toBe(false);
+    const unmutedTrack = useProjectStore.getState().project?.tracks.find((t) => t.id === drums.id);
+    expect(unmutedTrack?.muted).toBe(false);
   });
 
-  it('returns false when not in track scope (e.g., global context)', async () => {
+  it('returns false when muting outside track scope', async () => {
     useUIStore.getState().setKeyboardContext('global');
     const result = await executeCoreKeyboardAction('tracks.mute', makeDeps());
     expect(result).toBe(false);
   });
-
-  // ── tracks.solo ──
 
   it('toggles focused-track solo', async () => {
     const bass = useProjectStore.getState().addTrack('bass');
@@ -143,7 +126,16 @@ describe('coreKeyboardActions', () => {
     expect(updatedTrack?.soloed).toBe(true);
   });
 
-  // ── tracks.bypassEffects ──
+  it('uses group-specific store methods for muting and soloing group tracks', async () => {
+    const group = useProjectStore.getState().createGroupTrack('Drums Group');
+    useUIStore.getState().setKeyboardContext('mixer', group.id);
+
+    await executeCoreKeyboardAction('tracks.mute', makeDeps());
+    expect(useProjectStore.getState().project?.tracks.find((t) => t.id === group.id)?.muted).toBe(true);
+
+    await executeCoreKeyboardAction('tracks.solo', makeDeps());
+    expect(useProjectStore.getState().project?.tracks.find((t) => t.id === group.id)?.soloed).toBe(true);
+  });
 
   it('toggles effects bypass on focused track', async () => {
     const vocals = useProjectStore.getState().addTrack('vocals');
@@ -164,30 +156,23 @@ describe('coreKeyboardActions', () => {
   });
 
   it('returns false for effects bypass on group tracks', async () => {
-    const group = useProjectStore.getState().addTrack('drums');
-    useProjectStore.getState().updateTrack(group.id, { isGroup: true });
+    const group = useProjectStore.getState().createGroupTrack('My Group');
     useUIStore.getState().setKeyboardContext('timeline', group.id);
 
     const result = await executeCoreKeyboardAction('tracks.bypassEffects', makeDeps());
     expect(result).toBe(false);
   });
 
-  // ── view.zoomToSelection ──
-
   it('routes arrangement zoom actions only in timeline context', async () => {
-    const deps = makeDeps();
-    const didZoomSelection = await executeCoreKeyboardAction('view.zoomToSelection', deps);
+    const didZoomSelection = await executeCoreKeyboardAction('view.zoomToSelection', makeDeps());
     expect(didZoomSelection).toBe(true);
     expect(useUIStore.getState().timelineZoomRequest).toEqual({ id: 1, mode: 'selection' });
 
     useUIStore.getState().setKeyboardContext('pianoRoll');
-    const didZoomFromPianoRoll = await executeCoreKeyboardAction('view.zoomToFit', deps);
+    const didZoomFromPianoRoll = await executeCoreKeyboardAction('view.zoomToFit', makeDeps());
     expect(didZoomFromPianoRoll).toBe(false);
-    // Unchanged from previous request
     expect(useUIStore.getState().timelineZoomRequest).toEqual({ id: 1, mode: 'selection' });
   });
-
-  // ── view.zoomToFit ──
 
   it('zooms to fit project in timeline context', async () => {
     const result = await executeCoreKeyboardAction('view.zoomToFit', makeDeps());
@@ -195,14 +180,25 @@ describe('coreKeyboardActions', () => {
     expect(useUIStore.getState().timelineZoomRequest).toEqual({ id: 1, mode: 'project' });
   });
 
-  // ── createCoreKeyboardActions factory ──
+  describe('createCoreKeyboardActions', () => {
+    it('returns an object with an execute method that delegates to executeCoreKeyboardAction', async () => {
+      const play = vi.fn(() => {
+        useTransportStore.getState().play();
+      });
 
-  it('wraps executeCoreKeyboardAction with deps', async () => {
-    const deps = makeDeps();
-    const actions = createCoreKeyboardActions(deps);
+      const actions = createCoreKeyboardActions(makeDeps({ play }));
 
-    const result = await actions.execute('transport.loop');
-    expect(result).toBe(true);
-    expect(useTransportStore.getState().loopEnabled).toBe(true);
+      expect(typeof actions.execute).toBe('function');
+      const result = await actions.execute('transport.playPause');
+      expect(result).toBe(true);
+      expect(play).toHaveBeenCalledTimes(1);
+      expect(useTransportStore.getState().isPlaying).toBe(true);
+    });
+
+    it('returns false for invalid action IDs via the factory', async () => {
+      const actions = createCoreKeyboardActions(makeDeps());
+      const result = await actions.execute('nonexistent.action');
+      expect(result).toBe(false);
+    });
   });
 });

@@ -6,6 +6,7 @@ import { TRACK_NAMES, TRACK_CATALOG, TRACK_TYPE_CATALOG } from '../../constants/
 import type { TrackName, TrackType } from '../../types/project';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { getFirstSelectedEmptyTrackSlotIndex } from '../arrangement/trackSlotLayout';
+import { toastError } from '../../hooks/useToast';
 
 type PickerStep = 'type' | 'instrument';
 
@@ -58,7 +59,16 @@ export function InstrumentPicker() {
   };
 
   const handlePresetSelect = (presetId: string) => {
-    applyTrackPreset(presetId);
+    const insertOptions = selectedEmptySlotIndex !== null
+      ? { order: selectedEmptySlotIndex + 1 }
+      : undefined;
+    const track = insertOptions
+      ? applyTrackPreset(presetId, insertOptions)
+      : applyTrackPreset(presetId);
+    if (!track) {
+      toastError('Track presets cannot be applied in viewer mode.');
+      return;
+    }
     close();
   };
 

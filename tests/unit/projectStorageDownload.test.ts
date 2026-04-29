@@ -9,6 +9,7 @@ vi.mock('../../src/services/browserDownload', () => ({
 }));
 
 vi.mock('idb-keyval', () => ({
+  createStore: vi.fn(() => ({})),
   keys: vi.fn(async () => ['audio:project-1:clip-1']),
   get: vi.fn(async (key: string) => {
     if (key === 'audio:project-1:clip-1') {

@@ -4,7 +4,7 @@
  * Allows users to specify elements to exclude from AI music generation.
  * Collapsed by default to keep the UI clean for basic usage.
  */
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const SUGGESTION_CHIPS = [
   'distortion',
@@ -24,7 +24,13 @@ interface NegativePromptSectionProps {
 }
 
 export function NegativePromptSection({ value, onChange, disabled }: NegativePromptSectionProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(() => value.trim().length > 0);
+
+  useEffect(() => {
+    if (value.trim()) {
+      setExpanded(true);
+    }
+  }, [value]);
 
   const toggleChip = useCallback(
     (chip: string) => {

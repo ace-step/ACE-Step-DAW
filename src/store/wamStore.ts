@@ -90,11 +90,14 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
       return null;
     }
 
+    let adapter: WAMPluginAdapter | undefined;
+    let instanceId: string | undefined;
+
     try {
       const handle = await wamHost.loadPlugin(entry.url);
-      const adapter = await WAMPluginAdapter.create(handle);
+      adapter = await WAMPluginAdapter.create(handle);
 
-      const instanceId = handle.instanceId;
+      instanceId = handle.instanceId;
       _adapters.set(instanceId, adapter);
       const { getAudioEngine } = await import('../hooks/useAudioEngine');
       pluginEngine.addPlugin(trackId, instanceId, adapter, getAudioEngine().ctx);
@@ -165,16 +168,24 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
         descriptor: handle.descriptor,
       };
 
+      const id = instanceId;
       set((state) => {
         const order = state.pluginOrder[trackId] ?? [];
         return {
-          instances: { ...state.instances, [instanceId]: instance },
-          pluginOrder: { ...state.pluginOrder, [trackId]: [...order, instanceId] },
+          instances: { ...state.instances, [id]: instance },
+          pluginOrder: { ...state.pluginOrder, [trackId]: [...order, id] },
         };
       });
 
-      return instanceId;
+      return id;
     } catch (err) {
+      // Clean up partially created WAM instance/adapter to prevent AudioWorklet leaks
+      if (adapter) {
+        try { adapter.dispose(); } catch { /* best effort */ }
+      }
+      if (instanceId && _adapters.has(instanceId)) {
+        _adapters.delete(instanceId);
+      }
       console.error('[WAM] Failed to load plugin:', err);
       return null;
     }
@@ -352,9 +363,20 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
   },
 
   reorderPlugins: (trackId: string, orderedIds: string[]) => {
-    set((state) => ({
-      pluginOrder: { ...state.pluginOrder, [trackId]: orderedIds },
-    }));
+    set((state) => {
+      const validInstanceIds = new Set(
+        Object.values(state.instances)
+          .filter((instance) => instance.trackId === trackId)
+          .map((instance) => instance.instanceId),
+      );
+      const filteredOrder = orderedIds.filter((id) => validInstanceIds.has(id));
+
+      if (filteredOrder.length === 0) return state;
+
+      return {
+        pluginOrder: { ...state.pluginOrder, [trackId]: filteredOrder },
+      };
+    });
   },
 
   getAdapter: (instanceId: string) => {

@@ -25,7 +25,7 @@ const LinkIcon = ({ className }: { className?: string }) => (
 type CategoryFilter = 'all' | 'instrument' | 'effect';
 
 interface WAMPluginBrowserProps {
-  /** Called when the user loads a plugin — receives instanceId */
+  /** Called when the user loads a plugin — receives the selected WAMCatalogEntry */
   onLoadPlugin?: (entry: WAMCatalogEntry) => void;
 }
 

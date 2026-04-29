@@ -4,7 +4,7 @@
  * Shows enable/bypass, parameter sliders, preset management,
  * and an embedded custom GUI (if the plugin provides one).
  */
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWAMStore } from '../../store/wamStore';
 import type { WAMParameterInfo } from '../../types/wam';
 import type { WAMPluginAdapter } from '../../services/wam/WAMPluginAdapter';
@@ -185,11 +185,20 @@ function WAMGuiEmbed({
 
     let mounted = true;
 
-    adapter.createGui().then((gui: Element) => {
-      if (!mounted || !containerRef.current) return;
-      guiRef.current = gui;
-      containerRef.current.appendChild(gui);
-    });
+    adapter.createGui()
+      .then((gui: Element) => {
+        if (!mounted || !containerRef.current) return;
+        guiRef.current = gui;
+        containerRef.current.appendChild(gui);
+      })
+      .catch((error: unknown) => {
+        if (!mounted) return;
+        guiRef.current = null;
+        if (containerRef.current) {
+          containerRef.current.innerHTML = '';
+        }
+        console.error('Failed to create WAM plugin GUI:', error);
+      });
 
     return () => {
       mounted = false;
@@ -225,12 +234,17 @@ function WAMParameterControl({
   instanceId: string;
   setParameter: (instanceId: string, paramId: string, value: number) => void;
 }) {
+  // Local state for immediate slider feedback; store update is debounced
+  const [localValue, setLocalValue] = useState(value);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  // Sync local value when store value changes externally (e.g. preset load)
+  useEffect(() => { setLocalValue(value); }, [value]);
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
   const handleChange = useCallback(
     (newValue: number) => {
+      setLocalValue(newValue);
       clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         setParameter(instanceId, param.id, newValue);
@@ -278,10 +292,10 @@ function WAMParameterControl({
     );
   }
 
-  // Float / Int slider
+  // Float / Int slider — use localValue for immediate UI response
   const pct =
     param.maxValue > param.minValue
-      ? ((value - param.minValue) / (param.maxValue - param.minValue)) * 100
+      ? ((localValue - param.minValue) / (param.maxValue - param.minValue)) * 100
       : 0;
 
   return (
@@ -292,7 +306,7 @@ function WAMParameterControl({
         min={param.minValue}
         max={param.maxValue}
         step={param.discreteStep || (param.maxValue - param.minValue) / 1000 || 0.001}
-        value={value}
+        value={localValue}
         onChange={(e) => handleChange(Number(e.target.value))}
         aria-label={param.label}
         data-testid="wam-param-slider"
@@ -302,7 +316,7 @@ function WAMParameterControl({
         }}
       />
       <span className="w-10 text-right text-[9px] text-zinc-500 tabular-nums">
-        {param.type === 'int' ? Math.round(value) : value.toFixed(2)}
+        {param.type === 'int' ? Math.round(localValue) : localValue.toFixed(2)}
       </span>
     </div>
   );

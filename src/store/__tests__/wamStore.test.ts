@@ -332,9 +332,30 @@ describe('wamStore', () => {
   });
 
   describe('reorderPlugins', () => {
-    it('should update plugin order for a track', () => {
+    it('should update plugin order for a track with valid instances', () => {
+      // Seed instances so the validation filter keeps them
+      useWAMStore.setState({
+        instances: {
+          a: createInstance({ instanceId: 'a', trackId: 'track-1' }),
+          b: createInstance({ instanceId: 'b', trackId: 'track-1' }),
+          c: createInstance({ instanceId: 'c', trackId: 'track-1' }),
+        },
+        pluginOrder: { 'track-1': ['a', 'b', 'c'] },
+      });
+
       useWAMStore.getState().reorderPlugins('track-1', ['b', 'a', 'c']);
       expect(useWAMStore.getState().pluginOrder['track-1']).toEqual(['b', 'a', 'c']);
+    });
+
+    it('should filter out invalid instance IDs', () => {
+      seedInstance();
+      useWAMStore.getState().reorderPlugins('track-1', ['inst-1', 'nonexistent']);
+      expect(useWAMStore.getState().pluginOrder['track-1']).toEqual(['inst-1']);
+    });
+
+    it('should no-op when all IDs are invalid', () => {
+      useWAMStore.getState().reorderPlugins('track-1', ['x', 'y', 'z']);
+      expect(useWAMStore.getState().pluginOrder['track-1']).toBeUndefined();
     });
   });
 

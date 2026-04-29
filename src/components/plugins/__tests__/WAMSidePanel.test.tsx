@@ -5,6 +5,10 @@ import { useWAMStore } from '../../../store/wamStore';
 import { useUIStore } from '../../../store/uiStore';
 import { useProjectStore } from '../../../store/projectStore';
 
+vi.mock('../../../hooks/useAudioEngine', () => ({
+  getAudioEngine: () => ({ ctx: { sampleRate: 48000 } }),
+}));
+
 describe('WAMSidePanel', () => {
   beforeEach(() => {
     useWAMStore.setState({

@@ -273,6 +273,21 @@ describe('useTransport', () => {
     expect(canUseNativeClipPlayback(project, [nativeClipEntry(project.tracks[0]!.id, 2)])).toBe(false);
   });
 
+  it('disables native clip playback for centered stereo clips', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+
+    expect(canUseNativeClipPlayback(project, [nativeClipEntry(project.tracks[0]!.id, 2)])).toBe(false);
+  });
+
+  it('disables native clip playback when the native schedule exceeds Rust capacity', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+    const entries = Array.from({ length: 1025 }, () => nativeClipEntry(project.tracks[0]!.id));
+
+    expect(canUseNativeClipPlayback(project, entries)).toBe(false);
+  });
+
   // ── pause() ──
 
   it('stops all engines and strudel when pausing', async () => {

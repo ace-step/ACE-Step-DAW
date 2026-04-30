@@ -89,6 +89,8 @@ interface NativePlaybackEntry {
   warpMarkers?: import('../types/project').AudioWarpMarker[];
 }
 
+const NATIVE_MAX_CLIPS = 1024;
+
 function hasNonZero(value: number | undefined | null): boolean {
   return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) > 0.000001;
 }
@@ -125,6 +127,7 @@ function trackNeedsWebAudio(track: Track): boolean {
 }
 
 export function canUseNativeClipPlayback(project: Project, entries: NativePlaybackEntry[]): boolean {
+  if (entries.length > NATIVE_MAX_CLIPS) return false;
   if (project.mastering?.enabled) return false;
   if ((project.returnTracks?.length ?? 0) > 0) return false;
   if (project.automationLanes?.some((lane) => lane.points.length > 0)) return false;
@@ -133,7 +136,7 @@ export function canUseNativeClipPlayback(project: Project, entries: NativePlayba
   if (entries.some((entry) => {
     if (!entry.trackId || !entry.buffer) return false;
     const track = tracksById.get(entry.trackId);
-    return entry.buffer.numberOfChannels > 1 && hasNonZero(track?.pan);
+    return entry.buffer.numberOfChannels > 1 || hasNonZero(track?.pan);
   })) return false;
   return !project.tracks.some(trackNeedsWebAudio);
 }

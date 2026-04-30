@@ -70,6 +70,53 @@ const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   perc: 15,
 };
 
+interface NativePlaybackEntry {
+  fadeInDuration?: number;
+  fadeOutDuration?: number;
+  fadeInCurvePoint?: { x: number; y: number };
+  fadeOutCurvePoint?: { x: number; y: number };
+  timeStretchRate?: number;
+  pitchShift?: number;
+  stretchMode?: import('../types/project').StretchMode;
+  gainEnvelope?: import('../types/project').GainEnvelopePoint[];
+  warpMarkers?: import('../types/project').AudioWarpMarker[];
+}
+
+function hasNonZero(value: number | undefined | null): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) > 0.000001;
+}
+
+function clipNeedsWebAudio(entry: NativePlaybackEntry): boolean {
+  return hasNonZero(entry.fadeInDuration)
+    || hasNonZero(entry.fadeOutDuration)
+    || entry.fadeInCurvePoint !== undefined
+    || entry.fadeOutCurvePoint !== undefined
+    || (entry.timeStretchRate !== undefined && Math.abs(entry.timeStretchRate - 1) > 0.000001)
+    || hasNonZero(entry.pitchShift)
+    || entry.stretchMode !== undefined
+    || (entry.gainEnvelope?.length ?? 0) > 0
+    || (entry.warpMarkers?.length ?? 0) > 0;
+}
+
+function trackNeedsWebAudio(track: Track): boolean {
+  return track.isGroup === true
+    || track.parentTrackId !== undefined
+    || hasNonZero(track.eqLowGain)
+    || hasNonZero(track.eqMidGain)
+    || hasNonZero(track.eqHighGain)
+    || track.compressorEnabled === true
+    || hasNonZero(track.reverbMix)
+    || ((track.effects?.length ?? 0) > 0 && track.effectsBypassed !== true)
+    || (track.sends?.some((send) => send.amount > 0.000001) ?? false);
+}
+
+function canUseNativeClipPlayback(project: Project, entries: NativePlaybackEntry[]): boolean {
+  if (project.mastering?.enabled) return false;
+  if ((project.returnTracks?.length ?? 0) > 0) return false;
+  if (entries.some(clipNeedsWebAudio)) return false;
+  return !project.tracks.some(trackNeedsWebAudio);
+}
+
 /**
  * Trim an AudioBuffer to a specific project-time region.
  * The input buffer may cover the full project duration; the output covers only
@@ -168,6 +215,7 @@ export function useTransport() {
   const { stopRecording, onLoopCycle } = useRecording();
   const mainView = useUIStore((s) => s.mainView);
   const scrubClipsRef = useRef<TimelineScrubClip[]>([]);
+  const lastEndedAtRef = useRef(0);
 
   const play = useCallback(async (fromTime?: number) => {
     const engine = getAudioEngine();
@@ -401,15 +449,23 @@ export function useTransport() {
       if (lastClipEnd > 0) effectiveEnd = lastClipEnd;
     }
 
-    // Playback reads from stretchedBufferCache (populated on clip stretch mouseup).
-    // If Signalsmith/Rubber Band already finished → high quality buffer used.
-    // If neither finished yet → legacy fallback via _getProcessedBuffer.
-    bridge.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
-    if (bridge.backend === 'tauri') {
+    const useNativeClipPlayback = bridge.backend === 'tauri'
+      && canUseNativeClipPlayback(nextProject, clipBuffers);
+
+    if (useNativeClipPlayback) {
+      bridge.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
       // The native backend owns audio clip playback, but MIDI, synth,
       // sequencer, automation, and Strudel still use AudioEngine's
       // RAF clock until the Rust engine reaches full feature parity.
       engine.schedulePlayback([], startFrom, effectiveEnd);
+    } else if (bridge.backend === 'tauri') {
+      bridge.stopAllSources();
+      engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
+    } else {
+      // Playback reads from stretchedBufferCache (populated on clip stretch mouseup).
+      // If Signalsmith/Rubber Band already finished → high quality buffer used.
+      // If neither finished yet → legacy fallback via _getProcessedBuffer.
+      bridge.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
     }
 
     const { metronomeEnabled, metronomeSound, metronomeVolume } = useTransportStore.getState();
@@ -978,6 +1034,9 @@ export function useTransport() {
     const engine = getAudioEngine();
     const bridge = getAudioBridge(engine);
     const onEnded = () => {
+      const now = Date.now();
+      if (now - lastEndedAtRef.current < 250) return;
+      lastEndedAtRef.current = now;
       const {
         loopEnabled,
         isRecording,
@@ -1000,11 +1059,9 @@ export function useTransport() {
         useTransportStore.getState().stop();
       }
     };
+    engine.setOnEndedCallback(onEnded);
     if (bridge.backend === 'tauri') {
-      engine.setOnEndedCallback(() => {});
       bridge.setOnEndedCallback(onEnded);
-    } else {
-      engine.setOnEndedCallback(onEnded);
     }
     return () => {
       engine.setOnEndedCallback(() => {});

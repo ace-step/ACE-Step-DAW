@@ -933,7 +933,7 @@ export function useTransport() {
     useTransportStore.getState().stop();
   }, [finalizeSessionArrangementRecording, isRecording, stopRecording]);
 
-  const seek = useCallback((time: number) => {
+  const seek = useCallback(async (time: number) => {
     const engine = getAudioEngine();
     const bridge = getAudioBridge(engine);
     stopStrudelEditorPlayback();
@@ -941,7 +941,7 @@ export function useTransport() {
     if (engine.playing || (bridge.backend === 'tauri' && useTransportStore.getState().isPlaying)) {
       engine.stop();
       setTauriPlaybackClockOwner('web-audio');
-      bridge.stopAllSources();
+      await bridge.stopAllSources();
       synthEngine.releaseAll();
       subtractiveEngine.releaseAll();
       wavetableEngine.releaseAll();
@@ -949,7 +949,7 @@ export function useTransport() {
       granularEngine.releaseAll();
       modulationEngine.releaseAll();
       useTransportStore.getState().seek(time);
-      play(time);
+      await play(time);
     } else {
       useTransportStore.getState().seek(time);
     }

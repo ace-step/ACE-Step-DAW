@@ -34,7 +34,14 @@ vi.mock('../../engine/bridge', () => ({
   getAudioBridge: vi.fn(() => mockBridge),
 }));
 
-import { getAudioEngine, getExistingAudioEngine, _setAudioResumed, useAudioEngine } from '../useAudioEngine';
+import {
+  getAudioEngine,
+  getExistingAudioEngine,
+  getTauriPlaybackClockOwner,
+  setTauriPlaybackClockOwner,
+  _setAudioResumed,
+  useAudioEngine,
+} from '../useAudioEngine';
 import { useTransportStore } from '../../store/transportStore';
 import { useProjectStore } from '../../store/projectStore';
 
@@ -48,6 +55,7 @@ describe('useAudioEngine', () => {
     mockBridge.backend = 'web-audio';
     mockBridge.resume.mockReset();
     mockBridge.setTimeUpdateCallback.mockReset();
+    setTauriPlaybackClockOwner('web-audio');
   });
 
   afterEach(() => {
@@ -93,6 +101,22 @@ describe('useAudioEngine', () => {
 
     engineCallback(2.25);
     expect(useTransportStore.getState().currentTime).toBe(2.25);
+
+    bridgeCallback(3.5);
+    expect(useTransportStore.getState().currentTime).toBe(2.25);
+    expect(getTauriPlaybackClockOwner()).toBe('web-audio');
+  });
+
+  it('uses the Tauri bridge clock when native playback owns transport', () => {
+    mockBridge.backend = 'tauri';
+    setTauriPlaybackClockOwner('native');
+    renderHook(() => useAudioEngine());
+
+    const engineCallback = mockSetTimeUpdateCallback.mock.calls[0][0];
+    const bridgeCallback = mockBridge.setTimeUpdateCallback.mock.calls[0][0];
+
+    engineCallback(2.25);
+    expect(useTransportStore.getState().currentTime).toBe(0);
 
     bridgeCallback(3.5);
     expect(useTransportStore.getState().currentTime).toBe(3.5);

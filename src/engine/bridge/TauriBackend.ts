@@ -282,6 +282,11 @@ export class TauriBackend implements AudioBridge {
   // ── Metering ──────────────────────────────────────────────────────
 
   getTrackMeter(_trackId: string): MeterData {
+    const scheduledClipMeter = this.getScheduledClipTrackMeter(_trackId);
+    if (scheduledClipMeter) {
+      this._trackMeters.set(_trackId, scheduledClipMeter);
+      return scheduledClipMeter;
+    }
     const entry = this._trackEntries.get(_trackId);
     if (entry?.handle && this.shouldRefreshTrackMeter(_trackId)) {
       invoke<NativeMeterReading>('audio_get_track_meter', { handle: entry.handle })
@@ -405,6 +410,49 @@ export class TauriBackend implements AudioBridge {
         return clipToNative(clip, this.sampleRate, params, anySoloed);
       })
       .filter((clip): clip is NativeClipSource => clip !== null);
+  }
+
+  private getScheduledClipTrackMeter(trackId: string): MeterData | null {
+    const trackClips = this._lastScheduledClips.filter((clip) => clip.trackId === trackId);
+    if (trackClips.length === 0) return null;
+
+    const params = this._trackEntries.get(trackId)?.params ?? {
+      volume: 1,
+      pan: 0,
+      mute: false,
+      solo: false,
+    };
+    const anySoloed = Array.from(this._trackEntries.values()).some((entry) => entry.params.solo);
+    if (params.mute || (anySoloed && !params.solo)) return ZERO_METER;
+
+    const currentTime = this.getCurrentTime();
+    const pan = getPanGains(params.pan);
+    const volume = Math.max(0, Math.min(1, Number.isFinite(params.volume) ? params.volume : 1));
+    let leftLevel = 0;
+    let rightLevel = 0;
+
+    for (const clip of trackClips) {
+      const clipEndTime = clip.startTime + clip.clipDuration;
+      if (currentTime < clip.startTime || currentTime >= clipEndTime) continue;
+      const sourceRate = clip.buffer.sampleRate || this.sampleRate;
+      const sourceTime = clip.audioOffset + (currentTime - clip.startTime);
+      const sampleIndex = Math.min(
+        clip.buffer.length - 1,
+        Math.max(0, Math.round(sourceTime * sourceRate)),
+      );
+      const left = clip.buffer.getChannelData(0);
+      const right = clip.buffer.numberOfChannels > 1 ? clip.buffer.getChannelData(1) : left;
+      leftLevel = Math.max(leftLevel, Math.abs(left[sampleIndex] ?? 0) * volume * pan.left);
+      rightLevel = Math.max(rightLevel, Math.abs(right[sampleIndex] ?? 0) * volume * pan.right);
+    }
+
+    const level = Math.max(leftLevel, rightLevel);
+    return {
+      level,
+      leftLevel,
+      rightLevel,
+      clipped: level >= 1,
+    };
   }
 
   private meterNowMs(): number {

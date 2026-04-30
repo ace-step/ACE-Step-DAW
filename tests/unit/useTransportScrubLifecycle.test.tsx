@@ -42,6 +42,8 @@ const engineMock = {
 
 vi.mock('../../src/hooks/useAudioEngine', () => ({
   getAudioEngine: () => engineMock,
+  getTauriPlaybackClockOwner: () => 'web-audio',
+  setTauriPlaybackClockOwner: vi.fn(),
 }));
 
 vi.mock('../../src/engine/SynthEngine', () => ({

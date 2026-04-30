@@ -6,10 +6,19 @@ import { getAudioBridge } from '../engine/bridge';
 
 let _engineInstance: AudioEngine | null = null;
 let _audioResumed = false;
+let _tauriPlaybackClockOwner: 'native' | 'web-audio' = 'web-audio';
 
 /** @internal Set audio-resumed flag — for tests only */
 export function _setAudioResumed(value: boolean) {
   _audioResumed = value;
+}
+
+export function setTauriPlaybackClockOwner(owner: 'native' | 'web-audio') {
+  _tauriPlaybackClockOwner = owner;
+}
+
+export function getTauriPlaybackClockOwner(): 'native' | 'web-audio' {
+  return _tauriPlaybackClockOwner;
 }
 
 export function getAudioEngine(): AudioEngine {
@@ -30,10 +39,12 @@ export function useAudioEngine() {
     const engine = engineRef.current;
     const bridge = getAudioBridge(engine);
     engine.setTimeUpdateCallback((time) => {
+      if (bridge.backend === 'tauri' && _tauriPlaybackClockOwner === 'native') return;
       useTransportStore.getState().setCurrentTime(time);
     });
     if (bridge.backend === 'tauri') {
       bridge.setTimeUpdateCallback((time) => {
+        if (_tauriPlaybackClockOwner !== 'native') return;
         useTransportStore.getState().setCurrentTime(time);
       });
     }

@@ -2,8 +2,13 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
-import { getAudioEngine } from './useAudioEngine';
+import {
+  getAudioEngine,
+  getTauriPlaybackClockOwner,
+  setTauriPlaybackClockOwner,
+} from './useAudioEngine';
 import { getAudioBridge } from '../engine/bridge';
+import type { AudioBridge } from '../engine/bridge/types';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { synthEngine } from '../engine/SynthEngine';
 import { subtractiveEngine } from '../engine/SubtractiveEngine';
@@ -115,6 +120,19 @@ function canUseNativeClipPlayback(project: Project, entries: NativePlaybackEntry
   if ((project.returnTracks?.length ?? 0) > 0) return false;
   if (entries.some(clipNeedsWebAudio)) return false;
   return !project.tracks.some(trackNeedsWebAudio);
+}
+
+function getActivePlaybackTime(
+  engine: ReturnType<typeof getAudioEngine>,
+  bridge: AudioBridge,
+): number {
+  if (!useTransportStore.getState().isPlaying) {
+    return useTransportStore.getState().currentTime;
+  }
+  if (bridge.backend === 'tauri' && getTauriPlaybackClockOwner() === 'native') {
+    return bridge.getCurrentTime();
+  }
+  return engine.getCurrentTime();
 }
 
 /**
@@ -453,15 +471,18 @@ export function useTransport() {
       && canUseNativeClipPlayback(nextProject, clipBuffers);
 
     if (useNativeClipPlayback) {
+      setTauriPlaybackClockOwner('native');
       bridge.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
       // The native backend owns audio clip playback, but MIDI, synth,
       // sequencer, automation, and Strudel still use AudioEngine's
       // RAF clock until the Rust engine reaches full feature parity.
       engine.schedulePlayback([], startFrom, effectiveEnd);
     } else if (bridge.backend === 'tauri') {
+      setTauriPlaybackClockOwner('web-audio');
       bridge.stopAllSources();
       engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
     } else {
+      setTauriPlaybackClockOwner('web-audio');
       // Playback reads from stretchedBufferCache (populated on clip stretch mouseup).
       // If Signalsmith/Rubber Band already finished → high quality buffer used.
       // If neither finished yet → legacy fallback via _getProcessedBuffer.
@@ -835,11 +856,12 @@ export function useTransport() {
     }
     const engine = getAudioEngine();
     const bridge = getAudioBridge(engine);
-    const time = bridge.getCurrentTime();
+    const time = getActivePlaybackTime(engine, bridge);
     finalizeSessionArrangementRecording(time);
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
     engine.stop();
+    setTauriPlaybackClockOwner('web-audio');
     bridge.pauseAllSources();
     synthEngine.releaseAll();
     subtractiveEngine.releaseAll();
@@ -859,12 +881,11 @@ export function useTransport() {
     }
     const engine = getAudioEngine();
     const bridge = getAudioBridge(engine);
-    const time = engine.playing || bridge.backend === 'tauri'
-      ? bridge.getCurrentTime()
-      : useTransportStore.getState().currentTime;
+    const time = getActivePlaybackTime(engine, bridge);
     finalizeSessionArrangementRecording(time);
     stopStrudelEditorPlayback();
     engine.stop();
+    setTauriPlaybackClockOwner('web-audio');
     bridge.stopAllSources();
     synthEngine.releaseAll();
     subtractiveEngine.releaseAll();
@@ -884,6 +905,7 @@ export function useTransport() {
     stopAllStrudelTracks();
     if (engine.playing || (bridge.backend === 'tauri' && useTransportStore.getState().isPlaying)) {
       engine.stop();
+      setTauriPlaybackClockOwner('web-audio');
       bridge.stopAllSources();
       synthEngine.releaseAll();
       subtractiveEngine.releaseAll();

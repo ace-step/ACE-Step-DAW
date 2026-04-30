@@ -477,6 +477,27 @@ describe('TauriBackend', () => {
     expect(invokeMock).toHaveBeenCalledWith('audio_get_track_meter', expect.any(Object));
   });
 
+  it('reflects active native clip audio in track meters', () => {
+    const buffer = createMockAudioBuffer([0.5]);
+    const centerPan = equalPowerPan(0);
+
+    backend.schedulePlayback([
+      {
+        clipId: 'clip-1',
+        trackId: 'track-1',
+        startTime: 0,
+        buffer,
+        audioOffset: 0,
+        clipDuration: 1 / 48000,
+      },
+    ], 0, 1);
+
+    const meter = backend.getTrackMeter('track-1');
+    expect(meter.level).toBeCloseTo(0.5 * Math.max(centerPan.left, centerPan.right));
+    expect(meter.leftLevel).toBeCloseTo(0.5 * centerPan.left);
+    expect(meter.rightLevel).toBeCloseTo(0.5 * centerPan.right);
+  });
+
   it('throttles track meter refreshes while a native request is in flight', async () => {
     invokeMock.mockResolvedValueOnce({ slot: 0, generation: 1 });
     backend.ensureTrack('track-1');

@@ -319,6 +319,36 @@ describe('TauriBackend', () => {
     expect(invokeMock).toHaveBeenCalledWith('audio_transport_seek', { samplePosition: 48000 });
   });
 
+  it('does not let stale position refresh overwrite a scheduled seek', async () => {
+    const positionRefresh = deferred<number>();
+    invokeMock.mockImplementation((command) => {
+      if (command === 'audio_start_engine') return Promise.resolve({ state: 'running' });
+      if (command === 'audio_transport_get_position') return positionRefresh.promise;
+      return Promise.resolve(undefined);
+    });
+    const buffer = createMockAudioBuffer([1]);
+
+    await backend.resume();
+    backend.schedulePlayback([
+      {
+        clipId: 'clip-1',
+        trackId: 'track-1',
+        startTime: 1,
+        buffer,
+        audioOffset: 0,
+        clipDuration: 1 / 48000,
+      },
+    ], 1, 3);
+    expect(backend.getCurrentTime()).toBe(1);
+
+    positionRefresh.resolve(0);
+    await Promise.resolve();
+    await flushTransportCommands();
+
+    expect(backend.getCurrentTime()).toBe(1);
+    expect(invokeMock).toHaveBeenCalledWith('audio_transport_seek', { samplePosition: 48000 });
+  });
+
   it('ignores stale end-position events until the native seek and play land', async () => {
     let positionHandler: ((event: { payload: number }) => void) | null = null;
     const scheduleDeferred = deferred();

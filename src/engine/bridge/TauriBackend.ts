@@ -579,8 +579,10 @@ export class TauriBackend implements AudioBridge {
   }
 
   private refreshTransportPosition(): void {
+    const token = this._transportCommandToken;
     invoke<number>('audio_transport_get_position')
       .then((position) => {
+        if (token !== this._transportCommandToken) return;
         if (Number.isFinite(position)) {
           this._currentSamplePosition = Math.max(0, Math.floor(position));
         }

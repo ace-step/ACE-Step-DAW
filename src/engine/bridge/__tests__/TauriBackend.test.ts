@@ -598,6 +598,36 @@ describe('TauriBackend', () => {
     expect(meter.rightLevel).toBeCloseTo(0.5 * centerPan.right);
   });
 
+  it('sums overlapping native clip audio in simulated track meters', () => {
+    const bufferA = createMockAudioBuffer([0.75]);
+    const bufferB = createMockAudioBuffer([0.75]);
+    const centerPan = equalPowerPan(0);
+
+    backend.schedulePlayback([
+      {
+        clipId: 'clip-a',
+        trackId: 'track-1',
+        startTime: 0,
+        buffer: bufferA,
+        audioOffset: 0,
+        clipDuration: 1 / 48000,
+      },
+      {
+        clipId: 'clip-b',
+        trackId: 'track-1',
+        startTime: 0,
+        buffer: bufferB,
+        audioOffset: 0,
+        clipDuration: 1 / 48000,
+      },
+    ], 0, 1);
+
+    const meter = backend.getTrackMeter('track-1');
+    expect(meter.leftLevel).toBeCloseTo(1.5 * centerPan.left);
+    expect(meter.rightLevel).toBeCloseTo(1.5 * centerPan.right);
+    expect(meter.clipped).toBe(true);
+  });
+
   it('preserves boosted native track volume when baking clip audio', async () => {
     invokeMock.mockResolvedValueOnce({ slot: 0, generation: 1 });
     backend.ensureTrack('track-1');

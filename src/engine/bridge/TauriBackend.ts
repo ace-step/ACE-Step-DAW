@@ -459,10 +459,12 @@ export class TauriBackend implements AudioBridge {
       );
       const left = clip.buffer.getChannelData(0);
       const right = clip.buffer.numberOfChannels > 1 ? clip.buffer.getChannelData(1) : left;
-      leftLevel = Math.max(leftLevel, Math.abs(left[sampleIndex] ?? 0) * volume * pan.left);
-      rightLevel = Math.max(rightLevel, Math.abs(right[sampleIndex] ?? 0) * volume * pan.right);
+      leftLevel += (left[sampleIndex] ?? 0) * volume * pan.left;
+      rightLevel += (right[sampleIndex] ?? 0) * volume * pan.right;
     }
 
+    leftLevel = Math.abs(leftLevel);
+    rightLevel = Math.abs(rightLevel);
     const level = Math.max(leftLevel, rightLevel);
     return {
       level,

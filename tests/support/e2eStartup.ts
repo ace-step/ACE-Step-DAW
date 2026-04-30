@@ -39,16 +39,20 @@ export async function createProjectViaDialog(
   bpm?: number,
 ) {
   await ensureNewProjectDialog(page);
+  const dialog = page.locator('.fixed.inset-0').filter({
+    has: page.getByRole('heading', { name: 'New Project' }),
+  }).first();
+  await expect(dialog).toBeVisible();
 
-  const nameInput = page.locator('input[type="text"]').first();
+  const nameInput = dialog.locator('input[type="text"]').first();
   await nameInput.fill(name);
 
   if (typeof bpm === 'number') {
-    const bpmInput = page.locator('input[type="number"]').first();
+    const bpmInput = dialog.locator('input[type="number"]').first();
     await bpmInput.fill(String(bpm));
   }
 
-  await page.locator('button:has-text("Create")').first().click();
+  await dialog.locator('button:has-text("Create")').first().click();
   await page.waitForFunction(
     (expectedName) => {
       const dawWindow = window as E2EBrowserWindow;

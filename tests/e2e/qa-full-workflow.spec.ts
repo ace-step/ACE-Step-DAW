@@ -28,6 +28,7 @@ import {
 import {
   getProjectBpm,
   getProjectName,
+  getTransportState,
   getTrackCount,
   type E2EBrowserWindow,
 } from '../support/browserStores';
@@ -418,15 +419,11 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04a-space-play.png'), fullPage: true });
 
       // Check transport state
-      const isPlaying = await page.evaluate(() => {
-        const ts = (window as E2EBrowserWindow).__transportStore;
-        if (ts) return ts.getState().isPlaying;
-        return null;
-      });
+      await expect.poll(async () => (await getTransportState(page)).isPlaying).toBe(true);
 
       // Press space again
       await page.keyboard.press('Space');
-      await page.waitForTimeout(200);
+      await expect.poll(async () => (await getTransportState(page)).isPlaying).toBe(false);
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04a-space-pause.png'), fullPage: true });
     });
 
@@ -472,21 +469,18 @@ test.describe('QA Test Suite: Full Workflow', () => {
     });
 
     test('4f. L toggles loop mode', async ({ page }) => {
-      await page.keyboard.press('l');
-      await page.waitForTimeout(200);
-      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04f-loop-toggle.png'), fullPage: true });
+      const before = (await getTransportState(page)).loopEnabled;
 
-      const loopEnabled = await page.evaluate(() => {
-        const ts = (window as E2EBrowserWindow).__transportStore;
-        if (ts) return ts.getState().loopEnabled;
-        return null;
-      });
-      // Just verify no crash
+      await page.keyboard.press('l');
+      await expect.poll(async () => (await getTransportState(page)).loopEnabled).toBe(!before);
+      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04f-loop-toggle.png'), fullPage: true });
     });
 
     test('4g. K toggles metronome', async ({ page }) => {
+      const before = (await getTransportState(page)).metronomeEnabled;
+
       await page.keyboard.press('k');
-      await page.waitForTimeout(200);
+      await expect.poll(async () => (await getTransportState(page)).metronomeEnabled).toBe(!before);
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04g-metronome.png'), fullPage: true });
     });
 

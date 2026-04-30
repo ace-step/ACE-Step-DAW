@@ -8,20 +8,55 @@
  * Why this test exists: protects the transport surface separately from larger bundles.
  * Left to other layers: detailed focus routing and human audible timing checks.
  */
-import { test, expect } from '@playwright/test';
-import { dismissWelcomeOverlay } from '../support/e2eStartup';
+import { test, expect, type Page } from '@playwright/test';
+import {
+  focusApplicationShell,
+  loadFreshApp,
+} from '../support/e2eStartup';
+import {
+  getProjectBpm,
+  getTransportState,
+  type E2EBrowserWindow,
+} from '../support/browserStores';
+
+async function readTransportLineX(page: Page) {
+  return page.evaluate(() => {
+    const line = document.querySelector<HTMLElement>('.playhead-glow');
+    const transform = line?.style.transform ?? '';
+    const match = /translateX\((-?\d+(?:\.\d+)?)px\)/.exec(transform);
+    return match ? Number(match[1]) : null;
+  });
+}
+
+async function focusTransportTestSurface(page: Page) {
+  await page.evaluate(() => {
+    const dawWindow = window as E2EBrowserWindow;
+    const active = document.activeElement as HTMLElement | null;
+    active?.blur?.();
+    dawWindow.__uiStore.getState().setKeyboardContext('timeline');
+    dawWindow.__uiStore.getState().setHistoryFocusScope('arrangement');
+  });
+  await page.mouse.click(10, 10);
+  await focusApplicationShell(page);
+}
 
 test.describe('Transport Controls @critical', () => {
   test.beforeEach(async ({ page }) => {
-    await dismissWelcomeOverlay(page);
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForFunction(() => typeof (window as any).__store !== 'undefined', null, { timeout: 10000 });
-    // Create a project so the DAW UI is visible
+    await loadFreshApp(page);
+    await page.waitForFunction(
+      () => typeof (window as E2EBrowserWindow).__transportStore !== 'undefined',
+      null,
+      { timeout: 10000 },
+    );
     await page.evaluate(() => {
-      const store = (window as any).__store;
-      store.getState().createProject({ name: 'Transport Test' });
+      const dawWindow = window as E2EBrowserWindow;
+      dawWindow.__uiStore.getState().setShowNewProjectDialog(false);
+      dawWindow.__store.getState().createProject({ name: 'Transport Test' });
+      dawWindow.__store.getState().addTrack('drums');
+      dawWindow.__transportStore.getState().seek(0);
     });
+    await expect(page.getByTestId('transport-bar')).toBeVisible({ timeout: 10000 });
+    await focusTransportTestSurface(page);
   });
 
   test('transport bar is visible', async ({ page }) => {
@@ -29,25 +64,61 @@ test.describe('Transport Controls @critical', () => {
     await expect(page.getByTestId('transport-bar')).toBeVisible({ timeout: 10000 });
   });
 
-  test('play button exists and is clickable', async ({ page }) => {
-    // Look for play button by aria-label or role
-    const playButton = page.getByRole('button', { name: /play/i });
-    // If no button found by role, try finding by keyboard shortcut hint
-    if (await playButton.count() === 0) {
-      // Verify play can be triggered via space key
-      await page.keyboard.press('Space');
-      // Just verify no error thrown
-    } else {
-      await expect(playButton.first()).toBeVisible();
-    }
+  test('play button starts and pauses transport state', async ({ page }) => {
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect.poll(async () => (await getTransportState(page)).isPlaying).toBe(true);
+    await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Pause' }).click();
+    await expect.poll(async () => (await getTransportState(page)).isPlaying).toBe(false);
+  });
+
+  test('spacebar advances transport time and visible playhead position', async ({ page }) => {
+    const before = await getTransportState(page);
+
+    await page.keyboard.press('Space');
+
+    await expect.poll(async () => (await getTransportState(page)).isPlaying).toBe(true);
+    await expect.poll(async () => (await getTransportState(page)).currentTime, {
+      timeout: 5000,
+    }).toBeGreaterThan(before.currentTime + 0.05);
+
+    await expect.poll(async () => await readTransportLineX(page) ?? -1, {
+      timeout: 5000,
+    }).toBeGreaterThan(0);
+    const firstX = await readTransportLineX(page);
+    expect(firstX).not.toBeNull();
+
+    await expect.poll(async () => await readTransportLineX(page) ?? -1, {
+      timeout: 5000,
+    }).toBeGreaterThan((firstX ?? 0) + 2);
+
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await getTransportState(page)).isPlaying).toBe(false);
+
+    const pausedTime = (await getTransportState(page)).currentTime;
+    await page.waitForTimeout(250);
+    const laterTime = (await getTransportState(page)).currentTime;
+    expect(Math.abs(laterTime - pausedTime)).toBeLessThan(0.05);
+  });
+
+  test('loop and metronome shortcuts toggle their transport flags', async ({ page }) => {
+    const initial = await getTransportState(page);
+
+    await page.keyboard.press('l');
+    await expect.poll(async () => (await getTransportState(page)).loopEnabled).toBe(!initial.loopEnabled);
+
+    await page.keyboard.press('l');
+    await expect.poll(async () => (await getTransportState(page)).loopEnabled).toBe(initial.loopEnabled);
+
+    await page.keyboard.press('k');
+    await expect.poll(async () => (await getTransportState(page)).metronomeEnabled).toBe(!initial.metronomeEnabled);
+
+    await page.keyboard.press('k');
+    await expect.poll(async () => (await getTransportState(page)).metronomeEnabled).toBe(initial.metronomeEnabled);
   });
 
   test('BPM display shows current BPM', async ({ page }) => {
-    // Check that BPM value is displayed somewhere in the UI
-    const bpmText = await page.evaluate(() => {
-      const store = (window as any).__store;
-      return store.getState().project?.bpm;
-    });
-    expect(bpmText).toBe(120);
+    expect(await getProjectBpm(page)).toBe(120);
   });
 });

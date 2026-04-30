@@ -13,6 +13,7 @@ import { useWAMStore } from '../store/wamStore';
 import { effectsEngine, initWasmDsp } from '../engine/EffectsEngine';
 import { pluginEngine } from '../engine/PluginEngine';
 import { getAudioEngine } from './useAudioEngine';
+import { VST3LatencyCompensation } from '../services/vst3bridge/VST3LatencyCompensation';
 import { createDebugLogger } from '../utils/debugLogger';
 import type { CompressorParams } from '../types/project';
 import type { WAMActiveInstance } from '../types/wam';
@@ -51,12 +52,12 @@ export function buildCombinedEffectsChain(trackId: string): { input: AudioNode |
 
 /**
  * Derive a stable fingerprint of VST3 instances for effect chain syncing.
- * Only includes fields that affect audio routing (instanceId, trackId, enabled).
+ * Only includes fields that affect audio routing or timing.
  */
 function selectVst3EffectChainKey(s: { instances: Record<string, VST3ActiveInstance> }): string {
   const parts: string[] = [];
   for (const [id, inst] of Object.entries(s.instances)) {
-    parts.push(`${id}:${inst.trackId ?? ''}:${inst.enabled ? '1' : '0'}`);
+    parts.push(`${id}:${inst.trackId ?? ''}:${inst.enabled ? '1' : '0'}:${inst.latencySamples ?? 0}`);
   }
   return parts.sort().join('|');
 }
@@ -67,6 +68,56 @@ function selectWamEffectChainKey(s: { instances: Record<string, WAMActiveInstanc
     parts.push(`${id}:${inst.trackId ?? ''}:${inst.enabled ? '1' : '0'}`);
   }
   return parts.sort().join('|');
+}
+
+export function calculatePluginDelayCompensation(trackIds: string[], sampleRate: number): Map<string, number> {
+  return VST3LatencyCompensation.calculateCompensation(
+    trackIds.map((id) => ({
+      id,
+      pluginLatencies: [pluginEngine.getChainLatency(id)],
+    })),
+    sampleRate,
+  );
+}
+
+interface PluginDelayCompensationTrack {
+  id: string;
+  isGroup?: boolean;
+  parentTrackId?: string;
+}
+
+function getSignalPathTrackIds(
+  track: PluginDelayCompensationTrack,
+  trackById: Map<string, PluginDelayCompensationTrack>,
+): string[] {
+  const path = [track.id];
+  const visited = new Set(path);
+  let parentTrackId = track.parentTrackId;
+  while (parentTrackId && !visited.has(parentTrackId)) {
+    visited.add(parentTrackId);
+    path.push(parentTrackId);
+    parentTrackId = trackById.get(parentTrackId)?.parentTrackId;
+  }
+  return path;
+}
+
+export function calculatePluginDelayCompensationForTracks(
+  tracks: PluginDelayCompensationTrack[],
+  sampleRate: number,
+): Map<string, number> {
+  const trackById = new Map(tracks.map((track) => [track.id, track]));
+  const sourceTracks = tracks.filter((track) => !track.isGroup);
+  const compensationByTrack = VST3LatencyCompensation.calculateCompensation(
+    sourceTracks.map((track) => ({
+      id: track.id,
+      pluginLatencies: getSignalPathTrackIds(track, trackById).map((id) => pluginEngine.getChainLatency(id)),
+    })),
+    sampleRate,
+  );
+  for (const track of tracks) {
+    if (track.isGroup) compensationByTrack.set(track.id, 0);
+  }
+  return compensationByTrack;
 }
 
 export function useEffectsSync() {
@@ -116,6 +167,8 @@ export function useEffectsSync() {
       instancesByTrack.set(inst.trackId, list);
     }
 
+    const trackNodes = new Map<string, ReturnType<typeof engine.getOrCreateTrackNode>>();
+
     // First pass: rebuild built-in effect chains + sync VST3 bypass, then splice combined chain
     for (const track of tracks) {
       const effects = track.effects ?? [];
@@ -133,12 +186,17 @@ export function useEffectsSync() {
       if (trackNode) {
         const { input, output } = buildCombinedEffectsChain(track.id);
         trackNode.spliceEffects(input, output);
-
-        // Always apply latency compensation (including clearing to 0 when plugins removed/bypassed)
-        const pluginLatency = pluginEngine.getChainLatency(track.id);
-        const sampleRate = engine.ctx?.sampleRate ?? 44100;
-        trackNode.setLatencyCompensation(pluginLatency, sampleRate);
+        trackNodes.set(track.id, trackNode);
       }
+    }
+
+    const sampleRate = engine.ctx?.sampleRate ?? 44100;
+    const compensationByTrack = calculatePluginDelayCompensationForTracks(
+      tracks.filter((track) => trackNodes.has(track.id)),
+      sampleRate,
+    );
+    for (const [trackId, trackNode] of trackNodes) {
+      trackNode.setLatencyCompensation(compensationByTrack.get(trackId) ?? 0, sampleRate);
     }
 
     // Second pass: wire sidechain connections (all chains must exist first)

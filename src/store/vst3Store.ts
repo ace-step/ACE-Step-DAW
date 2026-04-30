@@ -13,6 +13,7 @@ import { toastSuccess, toastError } from '../hooks/useToast';
 import { _getBridgeClient } from '../hooks/useVST3Connection';
 import { VST3PluginAdapter } from '../services/vst3bridge/VST3PluginAdapter';
 import { pluginEngine } from '../engine/PluginEngine';
+import type { VST3ParamInfo } from '../services/vst3bridge/VST3BridgeProtocol';
 
 export interface VST3Store {
   /* ── Connection ──────────────────────────────────────── */
@@ -77,6 +78,7 @@ export interface VST3Store {
   _upsertInstance: (instance: VST3ActiveInstance) => void;
   _removeInstance: (instanceId: string) => void;
   _updateParameter: (instanceId: string, paramId: number, value: number) => void;
+  _updateLatency: (instanceId: string, latencySamples: number) => void;
 }
 
 /** Load favorites from localStorage */
@@ -95,6 +97,25 @@ function saveFavorites(ids: Set<string>): void {
   } catch {
     /* ignore persistence failures so UI state updates still succeed */
   }
+}
+
+function sanitizeLatencySamples(samples: unknown): number {
+  const value = Number(samples);
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function normalizeParameter(param: VST3ParamInfo): VST3Parameter {
+  const defaultValue = param.defaultValue ?? param.default ?? param.min;
+  return {
+    id: param.id,
+    name: param.name ?? param.title ?? `Parameter ${param.id}`,
+    value: defaultValue,
+    minValue: param.min,
+    maxValue: param.max,
+    defaultValue,
+    enumValues: [],
+    unit: param.units ?? param.unitName ?? '',
+  };
 }
 
 /** Compare semver strings: returns true if version >= minimum */
@@ -151,38 +172,10 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
     try {
       const client = _getBridgeClient();
 
-      // Listen for the instanceCreated event from the bridge
-      const instancePromise = new Promise<VST3Parameter[]>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          client.off('instanceCreated', onCreated);
-          client.off('error', onError);
-          reject(new Error('Plugin instantiation timed out'));
-        }, 10_000);
-
-        const onCreated = (msg: Record<string, unknown>) => {
-          const createdId = msg.instanceId as string;
-          if (createdId === instanceId) {
-            clearTimeout(timeout);
-            client.off('instanceCreated', onCreated);
-            client.off('error', onError);
-            const params = (msg.parameters as VST3Parameter[]) ?? [];
-            resolve(params);
-          }
-        };
-
-        const onError = (msg: Record<string, unknown>) => {
-          clearTimeout(timeout);
-          client.off('instanceCreated', onCreated);
-          client.off('error', onError);
-          reject(new Error((msg.message as string) ?? 'Unknown error'));
-        };
-
-        client.on('instanceCreated', onCreated);
-        client.on('error', onError);
-      });
-
-      await client.createInstance(pluginId, instanceId);
-      const parameters = await instancePromise;
+      const instantiateResponse = await client.instantiate(pluginId, instanceId);
+      const pluginParameters = instantiateResponse.parameters ?? [];
+      const parameters = pluginParameters.map(normalizeParameter);
+      const latencySamples = sanitizeLatencySamples(instantiateResponse.latencySamples);
 
       get()._upsertInstance({
         instanceId,
@@ -195,6 +188,7 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
         parameters,
         presets: [],
         activePreset: null,
+        latencySamples,
       });
 
       // Create the audio adapter and register with the plugin engine
@@ -207,18 +201,19 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
           { ...pluginInfo, uid: pluginInfo.id },
           {
             instanceId,
-            parameters: parameters.map((p) => ({
+            parameters: pluginParameters.map((p) => ({
               id: p.id,
-              name: p.name,
-              title: p.name,
-              default: p.defaultValue,
-              defaultValue: p.defaultValue,
-              min: p.minValue,
-              max: p.maxValue,
-              stepCount: 0,
-              unit: '',
+              name: p.name ?? p.title ?? `Parameter ${p.id}`,
+              title: p.title ?? p.name ?? `Parameter ${p.id}`,
+              default: p.default ?? p.defaultValue ?? p.min,
+              defaultValue: p.defaultValue ?? p.default ?? p.min,
+              min: p.min,
+              max: p.max,
+              stepCount: p.stepCount,
+              unitName: p.unitName,
+              units: p.units,
             })),
-            latencySamples: 0,
+            latencySamples,
           },
           client,
         );
@@ -430,6 +425,29 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
           parameters: inst.parameters.map((p: VST3Parameter) =>
             p.id === paramId ? { ...p, value } : p,
           ),
+        },
+      },
+    });
+  },
+
+  _updateLatency: (instanceId, latencySamples) => {
+    const { instances } = get();
+    const inst = instances[instanceId];
+    if (!inst) return;
+
+    const sanitizedLatency = sanitizeLatencySamples(latencySamples);
+    try {
+      pluginEngine.setPluginLatency(inst.trackId, instanceId, sanitizedLatency);
+    } catch {
+      // Store state should still reflect the companion's latest latency report.
+    }
+
+    set({
+      instances: {
+        ...instances,
+        [instanceId]: {
+          ...inst,
+          latencySamples: sanitizedLatency,
         },
       },
     });

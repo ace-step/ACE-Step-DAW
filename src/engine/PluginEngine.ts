@@ -230,7 +230,7 @@ export class PluginEngine {
 
   /**
    * Get total latency of plugin chain for a track (in samples).
-   * Sums latencySamples from all plugins in the chain.
+   * Sums latencySamples from all active plugins in the chain.
    * WAP plugins without latencySamples are assumed to have 0 latency.
    */
   getChainLatency(trackId: string): number {
@@ -238,9 +238,44 @@ export class PluginEngine {
     if (!chain) return 0;
     let total = 0;
     for (const node of chain) {
-      total += node.plugin.latencySamples ?? 0;
+      if (node.bypassed) continue;
+      const latencySamples = node.plugin.latencySamples ?? 0;
+      total += Number.isFinite(latencySamples) ? Math.max(0, Math.floor(latencySamples)) : 0;
     }
     return total;
+  }
+
+  /**
+   * Update a live plugin's reported latency.
+   * VST3 plugins can report latency after instantiation or after parameter changes.
+   */
+  setPluginLatency(trackId: string, instanceId: string, latencySamples: number): void {
+    const chain = this.chains.get(trackId);
+    if (!chain) return;
+    const node = chain.find((candidate) => candidate.instanceId === instanceId);
+    if (!node) return;
+
+    const sanitizedLatency = Number.isFinite(latencySamples)
+      ? Math.max(0, Math.floor(latencySamples))
+      : 0;
+    const plugin = node.plugin as WAPPlugin & {
+      setLatencySamples?: (samples: number) => void;
+      latencySamples?: number;
+    };
+    if (typeof plugin.setLatencySamples === 'function') {
+      plugin.setLatencySamples(sanitizedLatency);
+      return;
+    }
+
+    try {
+      Object.defineProperty(plugin, 'latencySamples', {
+        value: sanitizedLatency,
+        configurable: true,
+        enumerable: true,
+      });
+    } catch {
+      // Some third-party plugin wrappers may expose latency as a non-configurable readonly field.
+    }
   }
 
   /**

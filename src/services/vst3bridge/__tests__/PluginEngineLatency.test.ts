@@ -59,4 +59,33 @@ describe('PluginEngine.getChainLatency', () => {
     engine.addPlugin('track-1', 'inst-3', p3, ctx);
     expect(engine.getChainLatency('track-1')).toBe(384);
   });
+
+  it('excludes bypassed plugins from chain latency', () => {
+    const p1 = createMockPlugin(128);
+    const p2 = createMockPlugin(256);
+    engine.addPlugin('track-1', 'inst-1', p1, ctx);
+    engine.addPlugin('track-1', 'inst-2', p2, ctx);
+
+    engine.setPluginBypassed('track-1', 'inst-2', true);
+
+    expect(engine.getChainLatency('track-1')).toBe(128);
+  });
+
+  it('updates a live plugin latency report', () => {
+    const plugin = createMockPlugin(128);
+    engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+
+    engine.setPluginLatency('track-1', 'inst-1', 512);
+
+    expect(engine.getChainLatency('track-1')).toBe(512);
+  });
+
+  it('normalizes invalid and fractional latency samples', () => {
+    const p1 = createMockPlugin(128.8);
+    const p2 = createMockPlugin(Number.NaN);
+    engine.addPlugin('track-1', 'inst-1', p1, ctx);
+    engine.addPlugin('track-1', 'inst-2', p2, ctx);
+
+    expect(engine.getChainLatency('track-1')).toBe(128);
+  });
 });

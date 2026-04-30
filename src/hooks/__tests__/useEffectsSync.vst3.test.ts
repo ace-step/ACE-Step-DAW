@@ -9,6 +9,8 @@ import { pluginEngine } from '../../engine/PluginEngine';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import {
   buildCombinedEffectsChain,
+  calculatePluginDelayCompensation,
+  calculatePluginDelayCompensationForTracks,
 } from '../useEffectsSync';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -83,5 +85,58 @@ describe('buildCombinedEffectsChain', () => {
     expect(result.output).toBe(effectsOutput);
     // VST3 output connected to built-in input
     expect(pluginOutput.connect).toHaveBeenCalledWith(effectsInput);
+  });
+});
+
+describe('calculatePluginDelayCompensation', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('delays lower-latency tracks to match the maximum active plugin chain latency', () => {
+    vi.spyOn(pluginEngine, 'getChainLatency').mockImplementation((trackId) => {
+      if (trackId === 'track-late') return 512;
+      if (trackId === 'track-mid') return 128;
+      return 0;
+    });
+
+    const result = calculatePluginDelayCompensation(
+      ['track-late', 'track-mid', 'track-dry'],
+      48000,
+    );
+
+    expect(result.get('track-late')).toBe(0);
+    expect(result.get('track-mid')).toBe(384);
+    expect(result.get('track-dry')).toBe(512);
+  });
+
+  it('clears compensation when active plugin latencies are all zero', () => {
+    vi.spyOn(pluginEngine, 'getChainLatency').mockReturnValue(0);
+
+    const result = calculatePluginDelayCompensation(['track-a', 'track-b'], 48000);
+
+    expect(result.get('track-a')).toBe(0);
+    expect(result.get('track-b')).toBe(0);
+  });
+
+  it('accounts for group-bus latency without applying extra compensation to the bus', () => {
+    vi.spyOn(pluginEngine, 'getChainLatency').mockImplementation((trackId) => {
+      if (trackId === 'group-bus') return 512;
+      if (trackId === 'track-child') return 128;
+      return 0;
+    });
+
+    const result = calculatePluginDelayCompensationForTracks(
+      [
+        { id: 'group-bus', isGroup: true },
+        { id: 'track-child', parentTrackId: 'group-bus' },
+        { id: 'track-dry' },
+      ],
+      48000,
+    );
+
+    expect(result.get('group-bus')).toBe(0);
+    expect(result.get('track-child')).toBe(0);
+    expect(result.get('track-dry')).toBe(640);
   });
 });

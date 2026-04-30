@@ -41,6 +41,8 @@ export interface VST3ActiveInstance {
   hasSidechainInput?: boolean;
   /** Track ID feeding the sidechain input, or null if none. */
   sidechainSourceTrackId?: string | null;
+  /** Processing latency currently reported by the VST3 companion. */
+  latencySamples?: number;
 }
 
 /** A single parameter exposed by a VST3 plugin */

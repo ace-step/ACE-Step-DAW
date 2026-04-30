@@ -92,11 +92,18 @@ export function useVST3Connection() {
       });
     };
 
+    const onLatencyInfo = (msg: Record<string, unknown>) => {
+      const instanceId = msg.instanceId as string | undefined;
+      if (!instanceId) return;
+      store._updateLatency(instanceId, Number(msg.samples ?? 0));
+    };
+
     const unsubs = [
       client.on('statusChange', onStatusChange),
       client.on('error', onError),
       client.on('scanComplete', onScanComplete),
       client.on('scanProgress', onScanProgress),
+      client.on('latencyInfo', onLatencyInfo),
     ];
 
     // Sync current state immediately (handles HMR / singleton already connected)

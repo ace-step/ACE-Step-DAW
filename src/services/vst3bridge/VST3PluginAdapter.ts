@@ -37,6 +37,10 @@ const AUDIO_PUMP_INTERVAL_MS = 5;
 /** Audio block size sent per pump iteration (in sample frames). */
 const BLOCK_SIZE = 128;
 
+function sanitizeLatencySamples(samples: number): number {
+  return Number.isFinite(samples) ? Math.max(0, Math.floor(samples)) : 0;
+}
+
 // ─── Adapter ────────────────────────────────────────────────────────────────
 
 export class VST3PluginAdapter implements WAPPlugin {
@@ -45,8 +49,8 @@ export class VST3PluginAdapter implements WAPPlugin {
   readonly version: string;
   readonly author: string;
   readonly description: string;
-  readonly latencySamples: number;
 
+  private _latencySamples: number;
   private instanceId: string;
   private bridgeClient: VST3BridgeClient;
   private paramDescriptors: PluginParamDescriptor[] = [];
@@ -74,7 +78,7 @@ export class VST3PluginAdapter implements WAPPlugin {
     this.author = pluginInfo.vendor;
     this.description = `VST3: ${pluginInfo.name} by ${pluginInfo.vendor}`;
     this.bridgeClient = bridgeClient;
-    this.latencySamples = instantiateResponse.latencySamples;
+    this._latencySamples = sanitizeLatencySamples(instantiateResponse.latencySamples);
     this.instanceIdHash = fnv1aHash(instanceId);
 
     // Map VST3 params to WAP param descriptors
@@ -235,8 +239,18 @@ export class VST3PluginAdapter implements WAPPlugin {
   }
 
   /** Latency in samples introduced by this plugin. */
+  get latencySamples(): number {
+    return this._latencySamples;
+  }
+
+  /** Update latency reported by the companion. */
+  setLatencySamples(samples: number): void {
+    this._latencySamples = sanitizeLatencySamples(samples);
+  }
+
+  /** Latency in samples introduced by this plugin. */
   get pluginLatency(): number {
-    return this.latencySamples;
+    return this._latencySamples;
   }
 
   /** Ask the companion to open the native VST3 editor window. */

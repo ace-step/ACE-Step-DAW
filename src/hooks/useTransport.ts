@@ -1142,6 +1142,22 @@ export function useTransport() {
     engine.masterVolume = masterVolume;
     engine.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(playbackLatency));
     engine.applyMastering(mastering);
+    if (
+      bridge.backend === 'tauri'
+      && getTauriPlaybackClockOwner() === 'native'
+      && (
+        mastering?.enabled
+        || (playbackReturnTracks?.length ?? 0) > 0
+        || (useProjectStore.getState().project?.automationLanes?.some((lane) => lane.points.length > 0) ?? false)
+        || playbackTracks.some(trackNeedsWebAudio)
+      )
+    ) {
+      setTauriPlaybackClockOwner('web-audio');
+      bridge.stopAllSources();
+      engine.stop();
+      void play(useTransportStore.getState().currentTime);
+      return;
+    }
     for (const track of playbackTracks) {
       bridge.ensureTrack(track.id);
       bridge.setTrackParams(track.id, {
@@ -1185,7 +1201,7 @@ export function useTransport() {
     if (playbackTracks) {
       engine.syncSends(playbackTracks, playbackReturnTracks ?? []);
     }
-  }, [isPlaying, masterVolume, mastering, playbackLatency, playbackTracks, playbackReturnTracks]);
+  }, [isPlaying, masterVolume, mastering, play, playbackLatency, playbackTracks, playbackReturnTracks]);
 
   return {
     isPlaying,

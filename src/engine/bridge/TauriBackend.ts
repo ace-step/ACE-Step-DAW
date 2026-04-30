@@ -133,6 +133,7 @@ export class TauriBackend implements AudioBridge {
   private _transportEndArmedToken: number | null = null;
   private _transportCommandQueue: Promise<void> = Promise.resolve();
   private _lastScheduledClips: BridgeClipInfo[] = [];
+  private _republishQueued = false;
 
   /**
    * Maps the AudioBridge's string `trackId` to the native engine's
@@ -264,7 +265,7 @@ export class TauriBackend implements AudioBridge {
       handle: entry.handle,
       params: entry.params,
     }).catch(() => {});
-    this.republishActiveSchedule();
+    this.requestRepublishActiveSchedule();
   }
 
   setTrackGroupRouting(trackId: string, groupId: string | null): void {
@@ -278,7 +279,7 @@ export class TauriBackend implements AudioBridge {
     // via `AudioGraph::any_solo()`. No explicit command needed — the
     // individual `setTrackParams` calls with `solo: true/false`
     // already propagate through the command queue.
-    this.republishActiveSchedule();
+    this.requestRepublishActiveSchedule();
   }
 
   // ── Metering ──────────────────────────────────────────────────────
@@ -492,6 +493,16 @@ export class TauriBackend implements AudioBridge {
     this._transportCommandQueue = run.catch(() => {});
     void run.catch(() => {});
     return run;
+  }
+
+  private requestRepublishActiveSchedule(): void {
+    if (this._scheduledEndSample === null || this._lastScheduledClips.length === 0) return;
+    if (this._republishQueued) return;
+    this._republishQueued = true;
+    queueMicrotask(() => {
+      this._republishQueued = false;
+      this.republishActiveSchedule();
+    });
   }
 
   private republishActiveSchedule(): void {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { getAudioBridge } from '../../engine/bridge';
 import { METER_CANVAS_STOPS, METER_DB_TICKS, METER_DB_TICKS_MINOR, METER_PADDING_PCT, dbToFill, levelToFill } from '../meter-colors';
 
 const BAR_WIDTH = 4;
@@ -77,6 +78,7 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
     };
 
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
 
     const tick = () => {
       const dpr = window.devicePixelRatio || 1;
@@ -93,7 +95,7 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
       let clipped = false;
 
       if (masterStage) {
-        const meter = engine.getMasterMeter(masterStage);
+        const meter = bridge.getMasterMeter(masterStage);
         leftLevel = meter.level;
         rightLevel = meter.level;
         clipped = meter.clipped;
@@ -103,7 +105,7 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
         rightLevel = meter.level;
         clipped = meter.clipped;
       } else if (trackId) {
-        const meter = engine.getTrackMeter(trackId);
+        const meter = bridge.getTrackMeter(trackId);
         leftLevel = isStereo ? meter.leftLevel : meter.level;
         rightLevel = isStereo ? meter.rightLevel : meter.level;
         clipped = meter.clipped;
@@ -183,12 +185,13 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
 
   const resetClip = () => {
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
     if (masterStage) {
-      engine.resetMasterClip(masterStage);
+      bridge.resetMasterClip(masterStage);
     } else if (returnTrackId) {
       engine.resetReturnTrackClip(returnTrackId);
     } else if (trackId) {
-      engine.resetTrackClip(trackId);
+      bridge.resetTrackClip(trackId);
     }
     clippedRef.current = false;
     clippedStateRef.current = false;

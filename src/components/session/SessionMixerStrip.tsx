@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { getAudioBridge } from '../../engine/bridge';
 import { Knob } from '../ui/Knob';
 
 /** Convert linear level (0..1+) to a 0..1 fill fraction mapping -60dB..0dB */
@@ -45,8 +46,9 @@ export function SessionMixerStrip({
   // Animate meter levels
   useEffect(() => {
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
     const tick = () => {
-      const meter = engine.getTrackMeter(trackId);
+      const meter = bridge.getTrackMeter(trackId);
       setLeftFill(levelToFill(meter.leftLevel));
       setRightFill(levelToFill(meter.rightLevel));
       rafRef.current = requestAnimationFrame(tick);

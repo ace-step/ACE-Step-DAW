@@ -110,7 +110,7 @@ export interface AudioBridge {
   applyMastering(mastering: MasteringState | null | undefined): void;
 
   // ── Clip Scheduling ─────────────────────────────────────────────
-  schedulePlayback(clips: BridgeClipInfo[], fromTime: number, totalDuration: number): void;
+  schedulePlayback(clips: BridgeClipInfo[], fromTime: number, totalDuration: number): void | Promise<void>;
   pauseAllSources(): void;
   stopAllSources(): void;
 

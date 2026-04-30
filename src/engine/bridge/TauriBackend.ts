@@ -361,7 +361,7 @@ export class TauriBackend implements AudioBridge {
     clips: BridgeClipInfo[],
     fromTime: number,
     totalDuration: number,
-  ): void {
+  ): Promise<void> {
     const token = ++this._transportCommandToken;
     this._transportEndArmedToken = null;
     this._lastScheduledClips = clips;
@@ -370,7 +370,7 @@ export class TauriBackend implements AudioBridge {
     this._scheduledEndSample = Math.max(0, Math.round(totalDuration * this.sampleRate));
     this._currentSamplePosition = seekSamplePosition;
 
-    this.enqueueTransportCommand(async () => {
+    return this.enqueueTransportCommand(async () => {
       if (token !== this._transportCommandToken) return;
       await invoke('audio_clip_set_schedule', { clips: nativeClips });
       if (token !== this._transportCommandToken) return;
@@ -487,10 +487,11 @@ export class TauriBackend implements AudioBridge {
     return true;
   }
 
-  private enqueueTransportCommand(command: () => Promise<void>): void {
+  private enqueueTransportCommand(command: () => Promise<void>): Promise<void> {
     const run = this._transportCommandQueue.then(command, command);
     this._transportCommandQueue = run.catch(() => {});
     void run.catch(() => {});
+    return run;
   }
 
   private republishActiveSchedule(): void {

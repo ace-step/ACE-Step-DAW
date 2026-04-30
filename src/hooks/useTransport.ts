@@ -491,7 +491,7 @@ export function useTransport() {
 
     if (useNativeClipPlayback) {
       setTauriPlaybackClockOwner('native');
-      bridge.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
+      await bridge.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
       // The native backend owns audio clip playback, but MIDI, synth,
       // sequencer, automation, and Strudel still use AudioEngine's
       // RAF clock until the Rust engine reaches full feature parity.

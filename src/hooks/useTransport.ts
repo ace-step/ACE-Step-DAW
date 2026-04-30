@@ -115,9 +115,10 @@ function trackNeedsWebAudio(track: Track): boolean {
     || (track.sends?.some((send) => send.amount > 0.000001) ?? false);
 }
 
-function canUseNativeClipPlayback(project: Project, entries: NativePlaybackEntry[]): boolean {
+export function canUseNativeClipPlayback(project: Project, entries: NativePlaybackEntry[]): boolean {
   if (project.mastering?.enabled) return false;
   if ((project.returnTracks?.length ?? 0) > 0) return false;
+  if (project.automationLanes?.some((lane) => lane.points.length > 0)) return false;
   if (entries.some(clipNeedsWebAudio)) return false;
   return !project.tracks.some(trackNeedsWebAudio);
 }
@@ -922,6 +923,7 @@ export function useTransport() {
 
   const startScrub = useCallback(async (time: number) => {
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
     const transport = useTransportStore.getState();
     const scrubProject = useProjectStore.getState().project;
     if (!scrubProject) return;
@@ -932,6 +934,8 @@ export function useTransport() {
     const resumePlayback = transport.isPlaying || engine.playing;
     if (resumePlayback) {
       engine.stop();
+      setTauriPlaybackClockOwner('web-audio');
+      bridge.stopAllSources();
       synthEngine.releaseAll();
       subtractiveEngine.releaseAll();
       wavetableEngine.releaseAll();

@@ -130,7 +130,7 @@ vi.mock('../useToast', () => ({
   toastError: vi.fn(),
 }));
 
-import { useTransport } from '../useTransport';
+import { canUseNativeClipPlayback, useTransport } from '../useTransport';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
@@ -196,6 +196,23 @@ describe('useTransport', () => {
       undefined,
       { sound: 'woodblock', volume: 0.8 },
     );
+  });
+
+  it('disables native clip playback when automation lanes are active', () => {
+    const project = useProjectStore.getState().project!;
+    expect(canUseNativeClipPlayback(project, [])).toBe(true);
+
+    project.automationLanes = [{
+      id: 'automation-1',
+      trackId: 'track-1',
+      parameter: { type: 'mixer', param: 'volume' },
+      points: [
+        { time: 0, value: 0.25 },
+        { time: 1, value: 0.75 },
+      ],
+    }];
+
+    expect(canUseNativeClipPlayback(project, [])).toBe(false);
   });
 
   // ── pause() ──

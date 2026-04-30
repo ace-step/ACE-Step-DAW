@@ -27,9 +27,10 @@ import type {
 } from './types';
 import type { MasteringState } from '../../types/project';
 
-const ZERO_METER: MeterData = { level: -Infinity, leftLevel: -Infinity, rightLevel: -Infinity, clipped: false };
-const ZERO_MASTER: MasterMeterData = { level: -Infinity, clipped: false };
+const ZERO_METER: MeterData = { level: 0, leftLevel: 0, rightLevel: 0, clipped: false };
+const ZERO_MASTER: MasterMeterData = { level: 0, clipped: false };
 const TRANSPORT_POSITION_EVENT = 'transport-position';
+const METER_REFRESH_INTERVAL_MS = 50;
 
 function toMeterData(reading: NativeMeterReading): MeterData {
   const level = Number.isFinite(reading.peak) && reading.peak > 0 ? reading.peak : 0;
@@ -58,9 +59,11 @@ function isAlreadyRunningError(error: unknown): boolean {
 
 function getPanGains(pan: number): { left: number; right: number } {
   const clamped = Math.max(-1, Math.min(1, Number.isFinite(pan) ? pan : 0));
-  if (clamped < 0) return { left: 1, right: 1 + clamped };
-  if (clamped > 0) return { left: 1 - clamped, right: 1 };
-  return { left: 1, right: 1 };
+  const angle = ((clamped + 1) * Math.PI) / 4;
+  return {
+    left: Math.cos(angle),
+    right: Math.sin(angle),
+  };
 }
 
 function clipToNative(
@@ -122,6 +125,10 @@ export class TauriBackend implements AudioBridge {
   private _decodeContext: AudioContext | null = null;
   private _trackMeters = new Map<string, MeterData>();
   private _masterMeter: MasterMeterData = ZERO_MASTER;
+  private _lastTrackMeterRefreshMs = new Map<string, number>();
+  private _trackMeterRefreshInFlight = new Set<string>();
+  private _lastMasterMeterRefreshMs = -Infinity;
+  private _masterMeterRefreshInFlight = false;
   private _transportCommandToken = 0;
   private _lastScheduledClips: BridgeClipInfo[] = [];
 
@@ -276,12 +283,15 @@ export class TauriBackend implements AudioBridge {
 
   getTrackMeter(_trackId: string): MeterData {
     const entry = this._trackEntries.get(_trackId);
-    if (entry?.handle) {
+    if (entry?.handle && this.shouldRefreshTrackMeter(_trackId)) {
       invoke<NativeMeterReading>('audio_get_track_meter', { handle: entry.handle })
         .then((reading) => {
           this._trackMeters.set(_trackId, toMeterData(reading));
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => {
+          this._trackMeterRefreshInFlight.delete(_trackId);
+        });
     }
     return this._trackMeters.get(_trackId) ?? ZERO_METER;
   }
@@ -299,11 +309,16 @@ export class TauriBackend implements AudioBridge {
   }
 
   getMasterMeter(_stage: 'input' | 'output'): MasterMeterData {
-    invoke<NativeMeterReading>('audio_get_master_meter')
-      .then((reading) => {
-        this._masterMeter = toMasterMeterData(reading);
-      })
-      .catch(() => {});
+    if (this.shouldRefreshMasterMeter()) {
+      invoke<NativeMeterReading>('audio_get_master_meter')
+        .then((reading) => {
+          this._masterMeter = toMasterMeterData(reading);
+        })
+        .catch(() => {})
+        .finally(() => {
+          this._masterMeterRefreshInFlight = false;
+        });
+    }
     return this._masterMeter;
   }
 
@@ -343,13 +358,14 @@ export class TauriBackend implements AudioBridge {
     const token = ++this._transportCommandToken;
     this._lastScheduledClips = clips;
     const nativeClips = this.buildNativeClips(clips);
+    const seekSamplePosition = Math.max(0, Math.round(fromTime * this.sampleRate));
     this._scheduledEndSample = Math.max(0, Math.round(totalDuration * this.sampleRate));
-    this._currentSamplePosition = Math.max(0, Math.round(fromTime * this.sampleRate));
+    this._currentSamplePosition = seekSamplePosition;
 
     void (async () => {
       await invoke('audio_clip_set_schedule', { clips: nativeClips });
       if (token !== this._transportCommandToken) return;
-      await invoke('audio_transport_seek', { samplePosition: this._currentSamplePosition });
+      await invoke('audio_transport_seek', { samplePosition: seekSamplePosition });
       if (token !== this._transportCommandToken) return;
       await invoke('audio_transport_play');
     })().catch(() => {});
@@ -389,6 +405,29 @@ export class TauriBackend implements AudioBridge {
         return clipToNative(clip, this.sampleRate, params, anySoloed);
       })
       .filter((clip): clip is NativeClipSource => clip !== null);
+  }
+
+  private meterNowMs(): number {
+    return typeof performance !== 'undefined' ? performance.now() : Date.now();
+  }
+
+  private shouldRefreshTrackMeter(trackId: string): boolean {
+    if (this._trackMeterRefreshInFlight.has(trackId)) return false;
+    const now = this.meterNowMs();
+    const last = this._lastTrackMeterRefreshMs.get(trackId) ?? -Infinity;
+    if (now - last < METER_REFRESH_INTERVAL_MS) return false;
+    this._lastTrackMeterRefreshMs.set(trackId, now);
+    this._trackMeterRefreshInFlight.add(trackId);
+    return true;
+  }
+
+  private shouldRefreshMasterMeter(): boolean {
+    if (this._masterMeterRefreshInFlight) return false;
+    const now = this.meterNowMs();
+    if (now - this._lastMasterMeterRefreshMs < METER_REFRESH_INTERVAL_MS) return false;
+    this._lastMasterMeterRefreshMs = now;
+    this._masterMeterRefreshInFlight = true;
+    return true;
   }
 
   private republishActiveSchedule(): void {

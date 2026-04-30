@@ -24,6 +24,12 @@ function createMockAudioBuffer(samples: number[], sampleRate = 48000): AudioBuff
   } as unknown as AudioBuffer;
 }
 
+function equalPowerPan(pan: number): { left: number; right: number } {
+  const clamped = Math.max(-1, Math.min(1, pan));
+  const angle = ((clamped + 1) * Math.PI) / 4;
+  return { left: Math.cos(angle), right: Math.sin(angle) };
+}
+
 describe('TauriBackend', () => {
   let backend: TauriBackend;
 
@@ -70,22 +76,22 @@ describe('TauriBackend', () => {
 
   it('getTrackMeter returns silent meter', () => {
     const meter = backend.getTrackMeter('any-track');
-    expect(meter.level).toBe(-Infinity);
+    expect(meter.level).toBe(0);
     expect(meter.clipped).toBe(false);
   });
 
-  it('getTrackLevel returns -Infinity', () => {
-    expect(backend.getTrackLevel('any-track')).toBe(-Infinity);
+  it('getTrackLevel returns silence by default', () => {
+    expect(backend.getTrackLevel('any-track')).toBe(0);
   });
 
   it('getMasterMeter returns silent meter', () => {
     const meter = backend.getMasterMeter('output');
-    expect(meter.level).toBe(-Infinity);
+    expect(meter.level).toBe(0);
     expect(meter.clipped).toBe(false);
   });
 
-  it('getMasterLevel returns -Infinity', () => {
-    expect(backend.getMasterLevel('input')).toBe(-Infinity);
+  it('getMasterLevel returns silence by default', () => {
+    expect(backend.getMasterLevel('input')).toBe(0);
   });
 
   it('getTrackSpectrum returns null', () => {
@@ -207,6 +213,7 @@ describe('TauriBackend', () => {
 
   it('schedulePlayback sends clips through native schedule and starts transport', async () => {
     const buffer = createMockAudioBuffer([0.125, 0.25, 0.5, 1]);
+    const centerPan = equalPowerPan(0);
 
     backend.schedulePlayback([
       {
@@ -217,7 +224,7 @@ describe('TauriBackend', () => {
         audioOffset: 0,
         clipDuration: 4 / 48000,
       },
-    ], 1, 2);
+    ], 1, 3);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -228,7 +235,16 @@ describe('TauriBackend', () => {
           startSample: 48000,
           lengthSamples: 4,
           gain: 1,
-          audioData: [0.125, 0.125, 0.25, 0.25, 0.5, 0.5, 1, 1],
+          audioData: [
+            0.125 * centerPan.left,
+            0.125 * centerPan.right,
+            0.25 * centerPan.left,
+            0.25 * centerPan.right,
+            0.5 * centerPan.left,
+            0.5 * centerPan.right,
+            centerPan.left,
+            centerPan.right,
+          ],
         },
       ],
     });
@@ -236,9 +252,46 @@ describe('TauriBackend', () => {
     expect(invokeMock).toHaveBeenCalledWith('audio_transport_play');
   });
 
+  it('uses the scheduled seek sample even if transport events update the cache first', async () => {
+    let positionHandler: ((event: { payload: number }) => void) | null = null;
+    let resolveSchedule!: () => void;
+    invokeMock.mockImplementation((command) => {
+      if (command === 'audio_clip_set_schedule') {
+        return new Promise((resolve) => {
+          resolveSchedule = () => resolve(undefined);
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+    listenMock.mockImplementation(async (_event, handler) => {
+      positionHandler = handler as (event: { payload: number }) => void;
+      return vi.fn();
+    });
+    const buffer = createMockAudioBuffer([1]);
+    backend.setTimeUpdateCallback(() => {});
+
+    backend.schedulePlayback([
+      {
+        clipId: 'clip-1',
+        trackId: 'track-1',
+        startTime: 1,
+        buffer,
+        audioOffset: 0,
+        clipDuration: 1 / 48000,
+      },
+    ], 1, 3);
+    positionHandler?.({ payload: 96000 });
+    resolveSchedule();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(invokeMock).toHaveBeenCalledWith('audio_transport_seek', { samplePosition: 48000 });
+  });
+
   it('applies cached track volume, pan, mute, and solo before native scheduling', async () => {
     const audibleBuffer = createMockAudioBuffer([1, 1]);
     const mutedBuffer = createMockAudioBuffer([1, 1]);
+    const pan = equalPowerPan(-0.5);
     backend.ensureTrack('audible');
     backend.ensureTrack('muted');
     backend.setTrackParams('audible', { volume: 0.5, pan: -0.5, soloed: true });
@@ -272,7 +325,7 @@ describe('TauriBackend', () => {
           startSample: 0,
           lengthSamples: 2,
           gain: 1,
-          audioData: [0.5, 0.25, 0.5, 0.25],
+          audioData: [0.5 * pan.left, 0.5 * pan.right, 0.5 * pan.left, 0.5 * pan.right],
         },
       ],
     });
@@ -280,6 +333,7 @@ describe('TauriBackend', () => {
 
   it('republishes active native schedule when track params change', async () => {
     const buffer = createMockAudioBuffer([1, 1]);
+    const pan = equalPowerPan(0.5);
     invokeMock.mockResolvedValueOnce({ slot: 0, generation: 1 });
     backend.ensureTrack('track-1');
     await Promise.resolve();
@@ -307,7 +361,7 @@ describe('TauriBackend', () => {
           startSample: 0,
           lengthSamples: 2,
           gain: 1,
-          audioData: [0.125, 0.25, 0.125, 0.25],
+          audioData: [0.25 * pan.left, 0.25 * pan.right, 0.25 * pan.left, 0.25 * pan.right],
         },
       ],
     });
@@ -374,6 +428,7 @@ describe('TauriBackend', () => {
 
   it('resamples non-48kHz buffers before sending native clips', async () => {
     const buffer = createMockAudioBuffer([0, 1], 24000);
+    const centerPan = equalPowerPan(0);
 
     backend.schedulePlayback([
       {
@@ -395,7 +450,16 @@ describe('TauriBackend', () => {
           startSample: 0,
           lengthSamples: 4,
           gain: 1,
-          audioData: [0, 0, 0.5, 0.5, 1, 1, 1, 1],
+          audioData: [
+            0,
+            0,
+            0.5 * centerPan.left,
+            0.5 * centerPan.right,
+            centerPan.left,
+            centerPan.right,
+            centerPan.left,
+            centerPan.right,
+          ],
         },
       ],
     });
@@ -411,5 +475,29 @@ describe('TauriBackend', () => {
     await Promise.resolve();
 
     expect(invokeMock).toHaveBeenCalledWith('audio_get_track_meter', expect.any(Object));
+  });
+
+  it('throttles track meter refreshes while a native request is in flight', async () => {
+    invokeMock.mockResolvedValueOnce({ slot: 0, generation: 1 });
+    backend.ensureTrack('track-1');
+    await Promise.resolve();
+    invokeMock.mockClear();
+
+    invokeMock.mockResolvedValue({ rms: 0.2, peak: 0.4, clipped: false });
+    backend.getTrackMeter('track-1');
+    backend.getTrackMeter('track-1');
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith('audio_get_track_meter', expect.any(Object));
+  });
+
+  it('throttles master meter refreshes while a native request is in flight', () => {
+    invokeMock.mockResolvedValue({ rms: 0.2, peak: 0.4, clipped: false });
+
+    backend.getMasterMeter('output');
+    backend.getMasterMeter('input');
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith('audio_get_master_meter');
   });
 });

@@ -77,7 +77,9 @@ const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
 
 interface NativePlaybackEntry {
   trackId?: string;
-  buffer?: Pick<AudioBuffer, 'numberOfChannels'>;
+  buffer?: Pick<AudioBuffer, 'length' | 'numberOfChannels' | 'sampleRate'>;
+  audioOffset?: number;
+  clipDuration?: number;
   fadeInDuration?: number;
   fadeOutDuration?: number;
   fadeInCurvePoint?: { x: number; y: number };
@@ -90,6 +92,7 @@ interface NativePlaybackEntry {
 }
 
 const NATIVE_MAX_CLIPS = 1024;
+const NATIVE_MAX_PCM_FRAMES = 48000 * 10;
 
 function hasNonZero(value: number | undefined | null): boolean {
   return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) > 0.000001;
@@ -105,6 +108,18 @@ function clipNeedsWebAudio(entry: NativePlaybackEntry): boolean {
     || entry.stretchMode !== undefined
     || (entry.gainEnvelope?.length ?? 0) > 0
     || (entry.warpMarkers?.length ?? 0) > 0;
+}
+
+function getNativePcmFrameCount(entry: NativePlaybackEntry): number {
+  if (!entry.buffer) return 0;
+  const sourceRate = entry.buffer.sampleRate || 48000;
+  const sourceStart = Math.max(0, Math.round((entry.audioOffset ?? 0) * sourceRate));
+  const availableFrames = Math.max(0, entry.buffer.length - sourceStart);
+  const sourceDuration = Math.min(
+    Math.max(0, entry.clipDuration ?? availableFrames / sourceRate),
+    availableFrames / sourceRate,
+  );
+  return Math.max(0, Math.round(sourceDuration * 48000));
 }
 
 function trackNeedsWebAudio(track: Track): boolean {
@@ -128,6 +143,8 @@ function trackNeedsWebAudio(track: Track): boolean {
 
 export function canUseNativeClipPlayback(project: Project, entries: NativePlaybackEntry[]): boolean {
   if (entries.length > NATIVE_MAX_CLIPS) return false;
+  const totalNativeFrames = entries.reduce((sum, entry) => sum + getNativePcmFrameCount(entry), 0);
+  if (totalNativeFrames > NATIVE_MAX_PCM_FRAMES) return false;
   if (project.mastering?.enabled) return false;
   if ((project.returnTracks?.length ?? 0) > 0) return false;
   if (project.automationLanes?.some((lane) => lane.points.length > 0)) return false;

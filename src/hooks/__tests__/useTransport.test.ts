@@ -135,14 +135,15 @@ import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 
-function nativeClipEntry(trackId: string, numberOfChannels = 1) {
+function nativeClipEntry(trackId: string, numberOfChannels = 1, clipDuration = 1) {
+  const sampleRate = 48000;
   return {
     clipId: 'clip-1',
     trackId,
     startTime: 0,
     audioOffset: 0,
-    clipDuration: 1,
-    buffer: { numberOfChannels } as AudioBuffer,
+    clipDuration,
+    buffer: { length: Math.ceil(clipDuration * sampleRate), numberOfChannels, sampleRate } as AudioBuffer,
   };
 }
 
@@ -286,6 +287,13 @@ describe('useTransport', () => {
     const entries = Array.from({ length: 1025 }, () => nativeClipEntry(project.tracks[0]!.id));
 
     expect(canUseNativeClipPlayback(project, entries)).toBe(false);
+  });
+
+  it('disables native clip playback when PCM payload would be too large', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+
+    expect(canUseNativeClipPlayback(project, [nativeClipEntry(project.tracks[0]!.id, 1, 180)])).toBe(false);
   });
 
   // ── pause() ──

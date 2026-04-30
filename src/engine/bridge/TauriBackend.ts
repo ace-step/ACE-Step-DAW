@@ -130,6 +130,7 @@ export class TauriBackend implements AudioBridge {
   private _lastMasterMeterRefreshMs = -Infinity;
   private _masterMeterRefreshInFlight = false;
   private _transportCommandToken = 0;
+  private _transportEndArmedToken: number | null = null;
   private _transportCommandQueue: Promise<void> = Promise.resolve();
   private _lastScheduledClips: BridgeClipInfo[] = [];
 
@@ -362,6 +363,7 @@ export class TauriBackend implements AudioBridge {
     totalDuration: number,
   ): void {
     const token = ++this._transportCommandToken;
+    this._transportEndArmedToken = null;
     this._lastScheduledClips = clips;
     const nativeClips = this.buildNativeClips(clips);
     const seekSamplePosition = Math.max(0, Math.round(fromTime * this.sampleRate));
@@ -375,11 +377,15 @@ export class TauriBackend implements AudioBridge {
       await invoke('audio_transport_seek', { samplePosition: seekSamplePosition });
       if (token !== this._transportCommandToken) return;
       await invoke('audio_transport_play');
+      if (token === this._transportCommandToken) {
+        this._transportEndArmedToken = token;
+      }
     });
   }
 
   stopAllSources(): void {
     const token = ++this._transportCommandToken;
+    this._transportEndArmedToken = null;
     this._scheduledEndSample = null;
     this._currentSamplePosition = 0;
     this._lastScheduledClips = [];
@@ -393,6 +399,7 @@ export class TauriBackend implements AudioBridge {
 
   pauseAllSources(): void {
     const token = ++this._transportCommandToken;
+    this._transportEndArmedToken = null;
     this.enqueueTransportCommand(async () => {
       if (token !== this._transportCommandToken) return;
       await invoke('audio_transport_pause');
@@ -533,8 +540,10 @@ export class TauriBackend implements AudioBridge {
       this._timeUpdateCb?.(currentTime);
       if (
         this._scheduledEndSample !== null
+        && this._transportEndArmedToken === this._transportCommandToken
         && this._currentSamplePosition >= this._scheduledEndSample
       ) {
+        this._transportEndArmedToken = null;
         this._scheduledEndSample = null;
         this.stopAllSources();
         this._onEndedCb?.();

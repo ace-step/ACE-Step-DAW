@@ -134,6 +134,18 @@ describe('useAudioEngine', () => {
     expect(mockResume).toHaveBeenCalledTimes(1);
   });
 
+  it('resumes WebAudio when the Tauri bridge is active', async () => {
+    mockBridge.backend = 'tauri';
+    const { result } = renderHook(() => useAudioEngine());
+
+    await act(async () => {
+      await result.current.resumeOnGesture();
+    });
+
+    expect(mockBridge.resume).toHaveBeenCalledTimes(1);
+    expect(mockResume).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes playback latency on resume', async () => {
     const { result } = renderHook(() => useAudioEngine());
 

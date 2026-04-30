@@ -69,9 +69,8 @@ export function useAudioEngine() {
     const bridge = getAudioBridge(engine);
     if (bridge.backend === 'tauri') {
       await bridge.resume();
-    } else {
-      await engine.resume();
     }
+    await engine.resume();
     const latency = engineRef.current.refreshPlaybackLatencyCompensation();
     const store = (await import('../store/projectStore')).useProjectStore.getState();
     store.detectPlaybackLatency(latency);

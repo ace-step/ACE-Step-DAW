@@ -306,6 +306,45 @@ describe('TauriBackend', () => {
     expect(invokeMock).toHaveBeenCalledWith('audio_transport_seek', { samplePosition: 48000 });
   });
 
+  it('ignores stale end-position events until the native seek and play land', async () => {
+    let positionHandler: ((event: { payload: number }) => void) | null = null;
+    const scheduleDeferred = deferred();
+    invokeMock.mockImplementation((command) => {
+      if (command === 'audio_clip_set_schedule') return scheduleDeferred.promise;
+      return Promise.resolve(undefined);
+    });
+    listenMock.mockImplementation(async (_event, handler) => {
+      positionHandler = handler as (event: { payload: number }) => void;
+      return vi.fn();
+    });
+    const onEnded = vi.fn();
+    const buffer = createMockAudioBuffer([1]);
+    backend.setTimeUpdateCallback(() => {});
+    backend.setOnEndedCallback(onEnded);
+
+    backend.schedulePlayback([
+      {
+        clipId: 'clip-1',
+        trackId: 'track-1',
+        startTime: 0,
+        buffer,
+        audioOffset: 0,
+        clipDuration: 1 / 48000,
+      },
+    ], 0, 1 / 48000);
+    await Promise.resolve();
+    positionHandler?.({ payload: 2 });
+
+    expect(onEnded).not.toHaveBeenCalled();
+    expect(invokeMock).not.toHaveBeenCalledWith('audio_transport_stop');
+
+    scheduleDeferred.resolve(undefined);
+    await flushTransportCommands();
+    positionHandler?.({ payload: 2 });
+
+    expect(onEnded).toHaveBeenCalledTimes(1);
+  });
+
   it('applies cached track volume, pan, mute, and solo before native scheduling', async () => {
     const audibleBuffer = createMockAudioBuffer([1, 1]);
     const mutedBuffer = createMockAudioBuffer([1, 1]);
@@ -437,7 +476,7 @@ describe('TauriBackend', () => {
         clipDuration: 1 / 48000,
       },
     ], 0, 1 / 48000);
-    await Promise.resolve();
+    await flushTransportCommands();
     positionHandler?.({ payload: 1 });
 
     expect(onEnded).toHaveBeenCalledTimes(1);

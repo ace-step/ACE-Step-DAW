@@ -5,7 +5,8 @@ use tauri::Manager;
 
 use crate::commands::audio::{
     audio_add_track, audio_clip_get_schedule, audio_clip_set_schedule,
-    audio_get_default_device, audio_get_engine_status, audio_list_devices,
+    audio_get_default_device, audio_get_engine_status, audio_get_master_meter,
+    audio_get_track_meter, audio_list_devices, audio_reset_master_clip, audio_reset_track_clip,
     audio_metronome_get_config, audio_metronome_set_config, audio_metronome_set_enabled,
     audio_remove_track, audio_set_master_volume, audio_set_track_params,
     audio_start_engine, audio_stop_engine, audio_transport_get_count_in,
@@ -55,6 +56,10 @@ pub fn run() {
             audio_remove_track,
             audio_set_track_params,
             audio_set_master_volume,
+            audio_get_track_meter,
+            audio_get_master_meter,
+            audio_reset_track_clip,
+            audio_reset_master_clip,
             audio_transport_play,
             audio_transport_stop,
             audio_transport_pause,

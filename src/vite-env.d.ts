@@ -4,6 +4,7 @@ interface ImportMetaEnv {
   readonly VITE_SOURCE_CODE_URL?: string;
   readonly VITE_LICENSE_URL?: string;
   readonly VITE_COPYRIGHT_NOTICE?: string;
+  readonly VITE_ENABLE_TAURI_AUDIO_BACKEND?: string;
 }
 
 interface ImportMeta {

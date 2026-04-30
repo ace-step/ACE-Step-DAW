@@ -162,9 +162,19 @@ export class WebAudioBackend implements AudioBridge {
       fadeOutDuration: c.fadeOutDuration,
       fadeInCurve: c.fadeInCurve,
       fadeOutCurve: c.fadeOutCurve,
+      fadeInCurvePoint: c.fadeInCurvePoint,
+      fadeOutCurvePoint: c.fadeOutCurvePoint,
       timeStretchRate: c.timeStretchRate,
+      pitchShift: c.pitchShift,
+      gainEnvelope: c.gainEnvelope,
+      warpMarkers: c.warpMarkers,
+      stretchMode: c.stretchMode,
     }));
     this.engine.schedulePlayback(engineClips, fromTime, totalDuration);
+  }
+
+  pauseAllSources(): void {
+    this.engine.stopAllSources();
   }
 
   stopAllSources(): void {

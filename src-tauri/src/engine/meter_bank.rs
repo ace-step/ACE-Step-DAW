@@ -68,6 +68,22 @@ impl MeterConsumers {
         drain_into(&mut self.master_consumer, &mut self.master_cache);
         self.master_cache
     }
+
+    /// Clear the latched clip flag from the main-thread cache for a
+    /// track slot. The audio-thread meter is reset by command queue;
+    /// this avoids one stale UI poll before that command drains.
+    pub fn reset_track_clip(&mut self, slot: usize) {
+        if let Some(cons) = self.track_consumers.get_mut(slot) {
+            drain_into(cons, &mut self.track_cache[slot]);
+            self.track_cache[slot].clipped = false;
+        }
+    }
+
+    /// Clear the latched clip flag from the main-thread master cache.
+    pub fn reset_master_clip(&mut self) {
+        drain_into(&mut self.master_consumer, &mut self.master_cache);
+        self.master_cache.clipped = false;
+    }
 }
 
 /// Drain the ring buffer into a cached value. If new entries exist,

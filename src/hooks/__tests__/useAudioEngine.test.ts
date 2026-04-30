@@ -12,6 +12,11 @@ const mockResume = vi.fn(async () => {});
 const mockSetTimeUpdateCallback = vi.fn();
 const mockRefreshPlaybackLatencyCompensation = vi.fn(() => 5);
 const mockSetPlaybackLatencyCompensation = vi.fn();
+const mockBridge = vi.hoisted(() => ({
+  backend: 'web-audio' as 'web-audio' | 'tauri',
+  resume: vi.fn(async () => {}),
+  setTimeUpdateCallback: vi.fn(),
+}));
 
 vi.mock('../../engine/AudioEngine', () => {
   return {
@@ -25,7 +30,18 @@ vi.mock('../../engine/AudioEngine', () => {
   };
 });
 
-import { getAudioEngine, getExistingAudioEngine, _setAudioResumed, useAudioEngine } from '../useAudioEngine';
+vi.mock('../../engine/bridge', () => ({
+  getAudioBridge: vi.fn(() => mockBridge),
+}));
+
+import {
+  getAudioEngine,
+  getExistingAudioEngine,
+  getTauriPlaybackClockOwner,
+  setTauriPlaybackClockOwner,
+  _setAudioResumed,
+  useAudioEngine,
+} from '../useAudioEngine';
 import { useTransportStore } from '../../store/transportStore';
 import { useProjectStore } from '../../store/projectStore';
 
@@ -36,6 +52,10 @@ describe('useAudioEngine', () => {
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useTransportStore.setState(useTransportStore.getInitialState(), true);
     useProjectStore.getState().createProject({ name: 'Audio Test' });
+    mockBridge.backend = 'web-audio';
+    mockBridge.resume.mockReset();
+    mockBridge.setTimeUpdateCallback.mockReset();
+    setTauriPlaybackClockOwner('web-audio');
   });
 
   afterEach(() => {
@@ -72,6 +92,36 @@ describe('useAudioEngine', () => {
     expect(useTransportStore.getState().currentTime).toBe(5.5);
   });
 
+  it('keeps the WebAudio clock active when the Tauri bridge is installed', () => {
+    mockBridge.backend = 'tauri';
+    renderHook(() => useAudioEngine());
+
+    const engineCallback = mockSetTimeUpdateCallback.mock.calls[0][0];
+    const bridgeCallback = mockBridge.setTimeUpdateCallback.mock.calls[0][0];
+
+    engineCallback(2.25);
+    expect(useTransportStore.getState().currentTime).toBe(2.25);
+
+    bridgeCallback(3.5);
+    expect(useTransportStore.getState().currentTime).toBe(2.25);
+    expect(getTauriPlaybackClockOwner()).toBe('web-audio');
+  });
+
+  it('uses the Tauri bridge clock when native playback owns transport', () => {
+    mockBridge.backend = 'tauri';
+    setTauriPlaybackClockOwner('native');
+    renderHook(() => useAudioEngine());
+
+    const engineCallback = mockSetTimeUpdateCallback.mock.calls[0][0];
+    const bridgeCallback = mockBridge.setTimeUpdateCallback.mock.calls[0][0];
+
+    engineCallback(2.25);
+    expect(useTransportStore.getState().currentTime).toBe(0);
+
+    bridgeCallback(3.5);
+    expect(useTransportStore.getState().currentTime).toBe(3.5);
+  });
+
   // ── resumeOnGesture ──
 
   it('resumes engine and starts Tone on gesture', async () => {
@@ -81,6 +131,18 @@ describe('useAudioEngine', () => {
       await result.current.resumeOnGesture();
     });
 
+    expect(mockResume).toHaveBeenCalledTimes(1);
+  });
+
+  it('resumes WebAudio when the Tauri bridge is active', async () => {
+    mockBridge.backend = 'tauri';
+    const { result } = renderHook(() => useAudioEngine());
+
+    await act(async () => {
+      await result.current.resumeOnGesture();
+    });
+
+    expect(mockBridge.resume).toHaveBeenCalledTimes(1);
     expect(mockResume).toHaveBeenCalledTimes(1);
   });
 

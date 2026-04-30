@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
-import { getAudioEngine } from './useAudioEngine';
+import {
+  getAudioEngine,
+  getTauriPlaybackClockOwner,
+  setTauriPlaybackClockOwner,
+} from './useAudioEngine';
+import { getAudioBridge } from '../engine/bridge';
+import type { AudioBridge } from '../engine/bridge/types';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { synthEngine } from '../engine/SynthEngine';
 import { subtractiveEngine } from '../engine/SubtractiveEngine';
@@ -68,6 +74,102 @@ const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   tambourine: 14,
   perc: 15,
 };
+
+interface NativePlaybackEntry {
+  trackId?: string;
+  buffer?: Pick<AudioBuffer, 'length' | 'numberOfChannels' | 'sampleRate'>;
+  audioOffset?: number;
+  clipDuration?: number;
+  fadeInDuration?: number;
+  fadeOutDuration?: number;
+  fadeInCurvePoint?: { x: number; y: number };
+  fadeOutCurvePoint?: { x: number; y: number };
+  timeStretchRate?: number;
+  pitchShift?: number;
+  stretchMode?: import('../types/project').StretchMode;
+  gainEnvelope?: import('../types/project').GainEnvelopePoint[];
+  warpMarkers?: import('../types/project').AudioWarpMarker[];
+}
+
+const NATIVE_MAX_CLIPS = 1024;
+const NATIVE_MAX_PCM_FRAMES = 48000 * 10;
+
+function hasNonZero(value: number | undefined | null): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) > 0.000001;
+}
+
+function clipNeedsWebAudio(entry: NativePlaybackEntry): boolean {
+  return hasNonZero(entry.fadeInDuration)
+    || hasNonZero(entry.fadeOutDuration)
+    || entry.fadeInCurvePoint !== undefined
+    || entry.fadeOutCurvePoint !== undefined
+    || (entry.timeStretchRate !== undefined && Math.abs(entry.timeStretchRate - 1) > 0.000001)
+    || hasNonZero(entry.pitchShift)
+    || entry.stretchMode !== undefined
+    || (entry.gainEnvelope?.length ?? 0) > 0
+    || (entry.warpMarkers?.length ?? 0) > 0;
+}
+
+function getNativePcmFrameCount(entry: NativePlaybackEntry): number {
+  if (!entry.buffer) return 0;
+  const sourceRate = entry.buffer.sampleRate || 48000;
+  const sourceStart = Math.max(0, Math.round((entry.audioOffset ?? 0) * sourceRate));
+  const availableFrames = Math.max(0, entry.buffer.length - sourceStart);
+  const sourceDuration = Math.min(
+    Math.max(0, entry.clipDuration ?? availableFrames / sourceRate),
+    availableFrames / sourceRate,
+  );
+  return Math.max(0, Math.round(sourceDuration * 48000));
+}
+
+function trackNeedsWebAudio(track: Track): boolean {
+  const trackType = track.trackType ?? 'stems';
+  return !['stems', 'sample', 'mix'].includes(trackType)
+    || track.isGroup === true
+    || track.parentTrackId !== undefined
+    || (typeof track.volume === 'number' && track.volume > 1.000001)
+    || track.panMode === 'dual-mono'
+    || hasNonZero(track.panLeft)
+    || hasNonZero(track.panRight)
+    || hasNonZero(track.eqLowGain)
+    || hasNonZero(track.eqMidGain)
+    || hasNonZero(track.eqHighGain)
+    || track.compressorEnabled === true
+    || hasNonZero(track.reverbMix)
+    || ((track.effects?.length ?? 0) > 0 && track.effectsBypassed !== true)
+    || (track.plugins?.some((plugin) => plugin.enabled !== false) ?? false)
+    || (track.sends?.some((send) => send.amount > 0.000001) ?? false);
+}
+
+export function canUseNativeClipPlayback(project: Project, entries: NativePlaybackEntry[]): boolean {
+  if (entries.length > NATIVE_MAX_CLIPS) return false;
+  const totalNativeFrames = entries.reduce((sum, entry) => sum + getNativePcmFrameCount(entry), 0);
+  if (totalNativeFrames > NATIVE_MAX_PCM_FRAMES) return false;
+  if (project.mastering?.enabled) return false;
+  if ((project.returnTracks?.length ?? 0) > 0) return false;
+  if (project.automationLanes?.some((lane) => lane.points.length > 0)) return false;
+  if (entries.some(clipNeedsWebAudio)) return false;
+  const tracksById = new Map(project.tracks.map((track) => [track.id, track]));
+  if (entries.some((entry) => {
+    if (!entry.trackId || !entry.buffer) return false;
+    const track = tracksById.get(entry.trackId);
+    return entry.buffer.numberOfChannels > 1 || hasNonZero(track?.pan);
+  })) return false;
+  return !project.tracks.some(trackNeedsWebAudio);
+}
+
+function getActivePlaybackTime(
+  engine: ReturnType<typeof getAudioEngine>,
+  bridge: AudioBridge,
+): number {
+  if (!useTransportStore.getState().isPlaying) {
+    return useTransportStore.getState().currentTime;
+  }
+  if (bridge.backend === 'tauri' && getTauriPlaybackClockOwner() === 'native') {
+    return bridge.getCurrentTime();
+  }
+  return engine.getCurrentTime();
+}
 
 /**
  * Trim an AudioBuffer to a specific project-time region.
@@ -170,8 +272,12 @@ export function useTransport() {
 
   const play = useCallback(async (fromTime?: number) => {
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
+    if (bridge.backend === 'tauri') {
+      await bridge.resume();
+    }
     await engine.resume();
     await synthEngine.ensureStarted();
     await subtractiveEngine.ensureStarted();
@@ -190,9 +296,13 @@ export function useTransport() {
     // Sync master volume
     const nextProject = useProjectStore.getState().project;
     if (!nextProject) return;
+    const playbackLatencySeconds = getPlaybackLatencyCompensationSeconds(nextProject.playbackLatency);
     engine.masterVolume = nextProject.masterVolume ?? 1.0;
-    engine.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(nextProject.playbackLatency));
+    engine.setPlaybackLatencyCompensation(playbackLatencySeconds);
     engine.applyMastering(nextProject.mastering);
+    bridge.setMasterVolume(nextProject.masterVolume ?? 1.0);
+    bridge.setPlaybackLatencyCompensation(playbackLatencySeconds);
+    bridge.applyMastering(nextProject.mastering);
 
     interface ScheduleEntry {
       clipId: string;
@@ -220,8 +330,24 @@ export function useTransport() {
     // First pass: create all TrackNodes (groups first so children can route to them)
     for (const track of proj.tracks.filter((t) => t.isGroup)) {
       engine.getOrCreateTrackNode(track.id);
+      bridge.ensureTrack(track.id);
     }
     for (const track of proj.tracks) {
+      bridge.ensureTrack(track.id);
+      bridge.setTrackParams(track.id, {
+        volume: track.volume,
+        muted: track.muted,
+        soloed: track.soloed,
+        pan: track.pan ?? 0,
+        eqLowGain: track.eqLowGain ?? 0,
+        eqMidGain: track.eqMidGain ?? 0,
+        eqHighGain: track.eqHighGain ?? 0,
+        compressorEnabled: track.compressorEnabled ?? false,
+        compressorThreshold: track.compressorThreshold ?? -24,
+        compressorRatio: track.compressorRatio ?? 4,
+        reverbMix: track.reverbMix ?? 0,
+        reverbRoomSize: track.reverbRoomSize ?? 0.5,
+      });
       const trackNode = engine.getOrCreateTrackNode(track.id);
       trackNode.volume = track.volume;
       trackNode.muted = track.muted;
@@ -238,12 +364,13 @@ export function useTransport() {
       trackNode.setReverb(track.reverbMix ?? 0, track.reverbRoomSize ?? 0.5);
       // Route child tracks through their parent group bus
       engine.setTrackGroupRouting(track.id, track.parentTrackId ?? null);
+      bridge.setTrackGroupRouting(track.id, track.parentTrackId ?? null);
 
       // Frozen track: play frozen bounce instead of individual clips/MIDI
       if (track.frozen && track.frozenAudioKey && mainView !== 'session') {
         const frozenBlob = await loadAudioBlobByKey(track.frozenAudioKey);
         if (frozenBlob) {
-          const frozenBuffer = await engine.decodeAudioData(frozenBlob);
+          const frozenBuffer = await bridge.decodeAudioData(frozenBlob);
           clipBuffers.push({
             clipId: `frozen-${track.id}`,
             trackId: track.id,
@@ -280,7 +407,7 @@ export function useTransport() {
         }
         if (!blob) continue;
 
-        const rawBuffer = await engine.decodeAudioData(blob);
+        const rawBuffer = await bridge.decodeAudioData(blob);
         const buffer = alreadyTrimmed
           ? rawBuffer
           : trimBuffer(engine.ctx, rawBuffer, audibleStartTime, audibleDuration);
@@ -351,6 +478,7 @@ export function useTransport() {
     }
 
     engine.updateSoloState();
+    bridge.updateSoloState();
 
     // Wire aux sends to return tracks
     engine.syncSends(proj.tracks, proj.returnTracks ?? []);
@@ -374,10 +502,27 @@ export function useTransport() {
       if (lastClipEnd > 0) effectiveEnd = lastClipEnd;
     }
 
-    // Playback reads from stretchedBufferCache (populated on clip stretch mouseup).
-    // If Signalsmith/Rubber Band already finished → high quality buffer used.
-    // If neither finished yet → legacy fallback via _getProcessedBuffer.
-    engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
+    const useNativeClipPlayback = bridge.backend === 'tauri'
+      && canUseNativeClipPlayback(nextProject, clipBuffers);
+
+    if (useNativeClipPlayback) {
+      setTauriPlaybackClockOwner('native');
+      await bridge.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
+      // The native backend owns audio clip playback, but MIDI, synth,
+      // sequencer, automation, and Strudel still use AudioEngine's
+      // RAF clock until the Rust engine reaches full feature parity.
+      engine.schedulePlayback([], startFrom, effectiveEnd);
+    } else if (bridge.backend === 'tauri') {
+      setTauriPlaybackClockOwner('web-audio');
+      await bridge.stopAllSources();
+      engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
+    } else {
+      setTauriPlaybackClockOwner('web-audio');
+      // Playback reads from stretchedBufferCache (populated on clip stretch mouseup).
+      // If Signalsmith/Rubber Band already finished → high quality buffer used.
+      // If neither finished yet → legacy fallback via _getProcessedBuffer.
+      bridge.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
+    }
 
     const { metronomeEnabled, metronomeSound, metronomeVolume } = useTransportStore.getState();
     if (metronomeEnabled) {
@@ -745,11 +890,14 @@ export function useTransport() {
       await stopRecording();
     }
     const engine = getAudioEngine();
-    const time = engine.getCurrentTime();
+    const bridge = getAudioBridge(engine);
+    const time = getActivePlaybackTime(engine, bridge);
     finalizeSessionArrangementRecording(time);
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
     engine.stop();
+    setTauriPlaybackClockOwner('web-audio');
+    await bridge.pauseAllSources();
     synthEngine.releaseAll();
     subtractiveEngine.releaseAll();
     wavetableEngine.releaseAll();
@@ -767,10 +915,13 @@ export function useTransport() {
       await stopRecording();
     }
     const engine = getAudioEngine();
-    const time = engine.playing ? engine.getCurrentTime() : useTransportStore.getState().currentTime;
+    const bridge = getAudioBridge(engine);
+    const time = getActivePlaybackTime(engine, bridge);
     finalizeSessionArrangementRecording(time);
     stopStrudelEditorPlayback();
     engine.stop();
+    setTauriPlaybackClockOwner('web-audio');
+    await bridge.stopAllSources();
     synthEngine.releaseAll();
     subtractiveEngine.releaseAll();
     wavetableEngine.releaseAll();
@@ -782,12 +933,15 @@ export function useTransport() {
     useTransportStore.getState().stop();
   }, [finalizeSessionArrangementRecording, isRecording, stopRecording]);
 
-  const seek = useCallback((time: number) => {
+  const seek = useCallback(async (time: number) => {
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
-    if (engine.playing) {
+    if (engine.playing || (bridge.backend === 'tauri' && useTransportStore.getState().isPlaying)) {
       engine.stop();
+      setTauriPlaybackClockOwner('web-audio');
+      await bridge.stopAllSources();
       synthEngine.releaseAll();
       subtractiveEngine.releaseAll();
       wavetableEngine.releaseAll();
@@ -795,7 +949,7 @@ export function useTransport() {
       granularEngine.releaseAll();
       modulationEngine.releaseAll();
       useTransportStore.getState().seek(time);
-      play(time);
+      await play(time);
     } else {
       useTransportStore.getState().seek(time);
     }
@@ -803,6 +957,7 @@ export function useTransport() {
 
   const startScrub = useCallback(async (time: number) => {
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
     const transport = useTransportStore.getState();
     const scrubProject = useProjectStore.getState().project;
     if (!scrubProject) return;
@@ -813,6 +968,8 @@ export function useTransport() {
     const resumePlayback = transport.isPlaying || engine.playing;
     if (resumePlayback) {
       engine.stop();
+      setTauriPlaybackClockOwner('web-audio');
+      await bridge.stopAllSources();
       synthEngine.releaseAll();
       subtractiveEngine.releaseAll();
       wavetableEngine.releaseAll();
@@ -935,7 +1092,8 @@ export function useTransport() {
   // Register the onEnded callback — respect loopEnabled
   useEffect(() => {
     const engine = getAudioEngine();
-    engine.setOnEndedCallback(() => {
+    const bridge = getAudioBridge(engine);
+    const onEnded = () => {
       const {
         loopEnabled,
         isRecording,
@@ -957,9 +1115,19 @@ export function useTransport() {
       } else {
         useTransportStore.getState().stop();
       }
+    };
+    engine.setOnEndedCallback(() => {
+      if (bridge.backend === 'tauri' && getTauriPlaybackClockOwner() === 'native') return;
+      onEnded();
     });
+    if (bridge.backend === 'tauri') {
+      bridge.setOnEndedCallback(onEnded);
+    }
     return () => {
       engine.setOnEndedCallback(() => {});
+      if (bridge.backend === 'tauri') {
+        bridge.setOnEndedCallback(() => {});
+      }
     };
   }, [play, onLoopCycle]);
 
@@ -967,10 +1135,49 @@ export function useTransport() {
   useEffect(() => {
     if (!playbackTracks || !isPlaying) return;
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
+    bridge.setMasterVolume(masterVolume);
+    bridge.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(playbackLatency));
+    bridge.applyMastering(mastering);
     engine.masterVolume = masterVolume;
     engine.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(playbackLatency));
     engine.applyMastering(mastering);
+    if (
+      bridge.backend === 'tauri'
+      && getTauriPlaybackClockOwner() === 'native'
+      && (
+        mastering?.enabled
+        || (playbackReturnTracks?.length ?? 0) > 0
+        || (useProjectStore.getState().project?.automationLanes?.some((lane) => lane.points.length > 0) ?? false)
+        || playbackTracks.some(trackNeedsWebAudio)
+      )
+    ) {
+      const restartTime = useTransportStore.getState().currentTime;
+      setTauriPlaybackClockOwner('web-audio');
+      engine.stop();
+      void (async () => {
+        await bridge.stopAllSources();
+        await play(restartTime);
+      })();
+      return;
+    }
     for (const track of playbackTracks) {
+      bridge.ensureTrack(track.id);
+      bridge.setTrackParams(track.id, {
+        volume: track.volume,
+        muted: track.muted,
+        soloed: track.soloed,
+        pan: track.pan ?? 0,
+        eqLowGain: track.eqLowGain ?? 0,
+        eqMidGain: track.eqMidGain ?? 0,
+        eqHighGain: track.eqHighGain ?? 0,
+        compressorEnabled: track.compressorEnabled ?? false,
+        compressorThreshold: track.compressorThreshold ?? -24,
+        compressorRatio: track.compressorRatio ?? 4,
+        reverbMix: track.reverbMix ?? 0,
+        reverbRoomSize: track.reverbRoomSize ?? 0.5,
+      });
+      bridge.setTrackGroupRouting(track.id, track.parentTrackId ?? null);
       const trackNode = engine.trackNodes.get(track.id);
       if (trackNode) {
         trackNode.volume = track.volume;
@@ -991,12 +1198,13 @@ export function useTransport() {
       }
     }
     engine.updateSoloState();
+    bridge.updateSoloState();
 
     // Sync aux send routing (handles amount, pre/post, and return track params)
     if (playbackTracks) {
       engine.syncSends(playbackTracks, playbackReturnTracks ?? []);
     }
-  }, [isPlaying, masterVolume, mastering, playbackLatency, playbackTracks, playbackReturnTracks]);
+  }, [isPlaying, masterVolume, mastering, play, playbackLatency, playbackTracks, playbackReturnTracks]);
 
   return {
     isPlaying,

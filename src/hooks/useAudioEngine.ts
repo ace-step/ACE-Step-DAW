@@ -2,13 +2,23 @@ import { useRef, useEffect, useCallback } from 'react';
 import { AudioEngine } from '../engine/AudioEngine';
 import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
+import { getAudioBridge } from '../engine/bridge';
 
 let _engineInstance: AudioEngine | null = null;
 let _audioResumed = false;
+let _tauriPlaybackClockOwner: 'native' | 'web-audio' = 'web-audio';
 
 /** @internal Set audio-resumed flag — for tests only */
 export function _setAudioResumed(value: boolean) {
   _audioResumed = value;
+}
+
+export function setTauriPlaybackClockOwner(owner: 'native' | 'web-audio') {
+  _tauriPlaybackClockOwner = owner;
+}
+
+export function getTauriPlaybackClockOwner(): 'native' | 'web-audio' {
+  return _tauriPlaybackClockOwner;
 }
 
 export function getAudioEngine(): AudioEngine {
@@ -27,12 +37,23 @@ export function useAudioEngine() {
 
   useEffect(() => {
     const engine = engineRef.current;
+    const bridge = getAudioBridge(engine);
     engine.setTimeUpdateCallback((time) => {
+      if (bridge.backend === 'tauri' && _tauriPlaybackClockOwner === 'native') return;
       useTransportStore.getState().setCurrentTime(time);
     });
+    if (bridge.backend === 'tauri') {
+      bridge.setTimeUpdateCallback((time) => {
+        if (_tauriPlaybackClockOwner !== 'native') return;
+        useTransportStore.getState().setCurrentTime(time);
+      });
+    }
 
     return () => {
       engine.setTimeUpdateCallback(() => {});
+      if (bridge.backend === 'tauri') {
+        bridge.setTimeUpdateCallback(() => {});
+      }
     };
   }, []);
 
@@ -44,7 +65,12 @@ export function useAudioEngine() {
     // same context. The parallel `Promise.all([engine.resume(),
     // Tone.start()])` was redundant work. Verified by codex review
     // on PR #1727.
-    await engineRef.current.resume();
+    const engine = engineRef.current;
+    const bridge = getAudioBridge(engine);
+    if (bridge.backend === 'tauri') {
+      await bridge.resume();
+    }
+    await engine.resume();
     const latency = engineRef.current.refreshPlaybackLatencyCompensation();
     const store = (await import('../store/projectStore')).useProjectStore.getState();
     store.detectPlaybackLatency(latency);

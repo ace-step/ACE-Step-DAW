@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     stop: vi.fn(),
     getCurrentTime: vi.fn(() => 3.5),
     setOnEndedCallback: vi.fn(),
+    stopAllSources: vi.fn(),
     trackNodes: new Map(),
     updateSoloState: vi.fn(),
     syncSends: vi.fn(),
@@ -17,6 +18,10 @@ const mocks = vi.hoisted(() => ({
     masterVolume: 1,
     playing: false,
   },
+  tauriClock: { owner: 'web-audio' as 'native' | 'web-audio' },
+  setTauriPlaybackClockOwner: vi.fn((owner: 'native' | 'web-audio') => {
+    mocks.tauriClock.owner = owner;
+  }),
   stopRecording: vi.fn(async () => {}),
   onLoopCycle: vi.fn(async () => {}),
   stopAllStrudelTracks: vi.fn(),
@@ -26,6 +31,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('tone', () => ({}));
 vi.mock('../useAudioEngine', () => ({
   getAudioEngine: () => mocks.engine,
+  getTauriPlaybackClockOwner: () => mocks.tauriClock.owner,
+  setTauriPlaybackClockOwner: (owner: 'native' | 'web-audio') => mocks.setTauriPlaybackClockOwner(owner),
 }));
 vi.mock('../useRecording', () => ({
   useRecording: () => ({
@@ -82,6 +89,7 @@ import { useUIStore } from '../../store/uiStore';
 describe('useTransport strudel controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.tauriClock.owner = 'web-audio';
     useProjectStore.getState().createProject('Transport Test');
     useTransportStore.setState({
       isPlaying: true,

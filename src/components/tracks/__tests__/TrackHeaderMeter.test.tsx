@@ -10,6 +10,7 @@ const engine = {
 
 vi.mock('../../../hooks/useAudioEngine', () => ({
   getAudioEngine: () => engine,
+  getTauriPlaybackClockOwner: () => 'web-audio',
 }));
 
 describe('TrackHeaderMeter', () => {

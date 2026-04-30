@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { getAudioEngine, getTauriPlaybackClockOwner } from '../../hooks/useAudioEngine';
+import { getAudioBridge } from '../../engine/bridge';
 import { METER_GRADIENT_HORIZONTAL, levelToMeterFill } from '../meter-colors';
 
 interface FaderMeterProps {
@@ -33,8 +34,12 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
   // Animate meter levels
   useEffect(() => {
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
     const tick = () => {
-      const meter = engine.getTrackMeter(trackId);
+      const meterSource = bridge.backend === 'tauri' && getTauriPlaybackClockOwner() === 'native'
+        ? bridge
+        : engine;
+      const meter = meterSource.getTrackMeter(trackId);
       setLeftFill(levelToMeterFill(meter.leftLevel));
       setRightFill(levelToMeterFill(meter.rightLevel));
       setClipping((was) => was || meter.clipped);
@@ -46,7 +51,11 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
 
   const resetClip = useCallback(() => {
     const engine = getAudioEngine();
-    engine.resetTrackClip(trackId);
+    const bridge = getAudioBridge(engine);
+    const meterSource = bridge.backend === 'tauri' && getTauriPlaybackClockOwner() === 'native'
+      ? bridge
+      : engine;
+    meterSource.resetTrackClip(trackId);
     setClipping(false);
   }, [trackId]);
 

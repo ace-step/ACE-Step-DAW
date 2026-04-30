@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { LevelMeter } from '../LevelMeter';
 
 vi.mock('../../../hooks/useAudioEngine', () => ({
+  getTauriPlaybackClockOwner: () => 'web-audio',
   getAudioEngine: () => ({
     getTrackMeter: () => ({ level: 0.5, leftLevel: 0.4, rightLevel: 0.6, clipped: false }),
     getMasterMeter: () => ({ level: 0.3, clipped: false }),

@@ -497,6 +497,20 @@ impl Engine {
         self.send_command(EngineCommand::SetMasterVolume { volume })
     }
 
+    /// Clear a track meter's latched clip flag.
+    pub fn reset_track_clip(&mut self, handle: SlotHandle) -> Result<(), CommandError> {
+        let running = self.running.as_mut().ok_or(CommandError::NotRunning)?;
+        running.meter_consumers.reset_track_clip(handle.index());
+        self.send_command(EngineCommand::ResetTrackClip { handle })
+    }
+
+    /// Clear the master meter's latched clip flag.
+    pub fn reset_master_clip(&mut self) -> Result<(), CommandError> {
+        let running = self.running.as_mut().ok_or(CommandError::NotRunning)?;
+        running.meter_consumers.reset_master_clip();
+        self.send_command(EngineCommand::ResetMasterClip)
+    }
+
     // ── Transport (3A) ───────────────────────────────────────────────
 
     /// Begin playback from the current position.

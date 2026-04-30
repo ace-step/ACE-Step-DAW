@@ -354,6 +354,14 @@ fn make_audio_callback(
                             bus.enabled = enabled;
                         }
                     }
+                    EngineCommand::ResetTrackClip { handle } => {
+                        if graph.handle_matches(handle) {
+                            meters.track_meters[handle.index()].reset_clip();
+                        }
+                    }
+                    EngineCommand::ResetMasterClip => {
+                        meters.master_meter.reset_clip();
+                    }
                     // Transport commands (3A) — route to the audio-thread
                     // `Transport` instance. Position advance happens at
                     // the tail of the callback, AFTER the drain, so that

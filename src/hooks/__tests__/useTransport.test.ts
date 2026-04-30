@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     play: vi.fn(async () => {}),
     schedulePlayback: vi.fn(),
     scheduleMetronome: vi.fn(),
+    stopAllSources: vi.fn(),
     clearBufferCache: vi.fn(),
     setMasterVolume: vi.fn(),
     ensureTrackNode: vi.fn(() => ({
@@ -33,6 +34,10 @@ const mocks = vi.hoisted(() => ({
     setTrackMute: vi.fn(),
     setTrackSolo: vi.fn(),
   },
+  tauriClock: { owner: 'web-audio' as 'native' | 'web-audio' },
+  setTauriPlaybackClockOwner: vi.fn((owner: 'native' | 'web-audio') => {
+    mocks.tauriClock.owner = owner;
+  }),
   stopRecording: vi.fn(async () => {}),
   onLoopCycle: vi.fn(async () => {}),
   stopAllStrudelTracks: vi.fn(),
@@ -48,6 +53,8 @@ vi.mock('tone', () => ({
 }));
 vi.mock('../useAudioEngine', () => ({
   getAudioEngine: () => mocks.engine,
+  getTauriPlaybackClockOwner: () => mocks.tauriClock.owner,
+  setTauriPlaybackClockOwner: (owner: 'native' | 'web-audio') => mocks.setTauriPlaybackClockOwner(owner),
 }));
 vi.mock('../useRecording', () => ({
   useRecording: () => ({
@@ -123,10 +130,22 @@ vi.mock('../useToast', () => ({
   toastError: vi.fn(),
 }));
 
-import { useTransport } from '../useTransport';
+import { canUseNativeClipPlayback, useTransport } from '../useTransport';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
+
+function nativeClipEntry(trackId: string, numberOfChannels = 1, clipDuration = 1) {
+  const sampleRate = 48000;
+  return {
+    clipId: 'clip-1',
+    trackId,
+    startTime: 0,
+    audioOffset: 0,
+    clipDuration,
+    buffer: { length: Math.ceil(clipDuration * sampleRate), numberOfChannels, sampleRate } as AudioBuffer,
+  };
+}
 
 describe('useTransport', () => {
   beforeEach(() => {
@@ -137,6 +156,7 @@ describe('useTransport', () => {
     useProjectStore.getState().createProject({ name: 'Transport Test' });
     useUIStore.setState({ mainView: 'arrangement' });
     mocks.engine.playing = false;
+    mocks.tauriClock.owner = 'web-audio';
   });
 
   // ── play() ──
@@ -188,6 +208,92 @@ describe('useTransport', () => {
       undefined,
       { sound: 'woodblock', volume: 0.8 },
     );
+  });
+
+  it('disables native clip playback when automation lanes are active', () => {
+    const project = useProjectStore.getState().project!;
+    expect(canUseNativeClipPlayback(project, [])).toBe(true);
+
+    project.automationLanes = [{
+      id: 'automation-1',
+      trackId: 'track-1',
+      parameter: { type: 'mixer', param: 'volume' },
+      points: [
+        { time: 0, value: 0.25 },
+        { time: 1, value: 0.75 },
+      ],
+    }];
+
+    expect(canUseNativeClipPlayback(project, [])).toBe(false);
+  });
+
+  it('disables native clip playback when enabled track plugins are active', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+    expect(canUseNativeClipPlayback(project, [])).toBe(true);
+
+    project.tracks[0]!.plugins = [{
+      id: 'plugin-1',
+      pluginId: 'ace-plugin',
+      enabled: true,
+      params: {},
+      manifest: {
+        id: 'ace-plugin',
+        name: 'ACE Plugin',
+        pluginType: 'effect',
+        version: '1.0.0',
+        author: 'ACE',
+        description: 'Test plugin',
+        parameters: [],
+      },
+    }];
+
+    expect(canUseNativeClipPlayback(project, [])).toBe(false);
+  });
+
+  it('disables native clip playback when WebAudio-rendered tracks are present', () => {
+    useProjectStore.getState().addTrack('pianoRoll');
+    const project = useProjectStore.getState().project!;
+
+    expect(canUseNativeClipPlayback(project, [])).toBe(false);
+  });
+
+  it('disables native clip playback for boosted track volume', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+    project.tracks[0]!.volume = 1.25;
+
+    expect(canUseNativeClipPlayback(project, [nativeClipEntry(project.tracks[0]!.id)])).toBe(false);
+  });
+
+  it('disables native clip playback for panned stereo clips', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+    project.tracks[0]!.pan = 0.5;
+
+    expect(canUseNativeClipPlayback(project, [nativeClipEntry(project.tracks[0]!.id, 2)])).toBe(false);
+  });
+
+  it('disables native clip playback for centered stereo clips', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+
+    expect(canUseNativeClipPlayback(project, [nativeClipEntry(project.tracks[0]!.id, 2)])).toBe(false);
+  });
+
+  it('disables native clip playback when the native schedule exceeds Rust capacity', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+    const entries = Array.from({ length: 1025 }, () => nativeClipEntry(project.tracks[0]!.id));
+
+    expect(canUseNativeClipPlayback(project, entries)).toBe(false);
+  });
+
+  it('disables native clip playback when PCM payload would be too large', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+
+    expect(canUseNativeClipPlayback(project, [nativeClipEntry(project.tracks[0]!.id, 1, 180)])).toBe(false);
   });
 
   // ── pause() ──

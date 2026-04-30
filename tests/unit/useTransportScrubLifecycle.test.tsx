@@ -16,6 +16,7 @@ const engineMock = {
   startTimelineScrub: vi.fn().mockResolvedValue(undefined),
   updateTimelineScrub: vi.fn().mockResolvedValue(undefined),
   stopTimelineScrub: vi.fn(),
+  stopAllSources: vi.fn(),
   stop: vi.fn(),
   getCurrentTime: vi.fn(() => 6.5),
   setOnEndedCallback: vi.fn(),
@@ -42,6 +43,8 @@ const engineMock = {
 
 vi.mock('../../src/hooks/useAudioEngine', () => ({
   getAudioEngine: () => engineMock,
+  getTauriPlaybackClockOwner: () => 'web-audio',
+  setTauriPlaybackClockOwner: vi.fn(),
 }));
 
 vi.mock('../../src/engine/SynthEngine', () => ({
@@ -131,6 +134,7 @@ describe('useTransport scrub lifecycle', () => {
     });
 
     expect(engineMock.stop).toHaveBeenCalledTimes(1);
+    expect(engineMock.stopAllSources).toHaveBeenCalledTimes(1);
     expect(useTransportStore.getState().isPlaying).toBe(false);
     expect(useTransportStore.getState().isScrubbing).toBe(true);
     expect(engineMock.startTimelineScrub).toHaveBeenCalledWith(expect.any(Array), expect.any(Array), 4, 0);

@@ -10,9 +10,9 @@ use tauri::{Emitter, State};
 
 use crate::engine::{
     audio_io, AudioDeviceInfo, ClipSchedule, ClipSource, CommandError, CountIn, Engine,
-    EngineConfig, EngineError, EngineStatus, LoopRegion, MetronomeConfig, PositionEmitter,
-    PunchRegion, TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap, TrackParams,
-    POSITION_EVENT_DEFAULT_INTERVAL,
+    EngineConfig, EngineError, EngineStatus, LoopRegion, MeterReading, MetronomeConfig,
+    PositionEmitter, PunchRegion, TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap,
+    TrackParams, POSITION_EVENT_DEFAULT_INTERVAL,
 };
 use crate::engine::slot::SlotHandle;
 
@@ -101,6 +101,14 @@ pub fn audio_start_engine(
         .0
         .lock()
         .map_err(|_| EngineError::Open("emitter mutex poisoned".into()))?;
+
+    let current_status = engine.status();
+    if current_status.is_running() {
+        // `Engine::start` returns AlreadyRunning, but the emitter is
+        // already valid in the normal running case. Return the current
+        // status without tearing it down.
+        return Ok(current_status);
+    }
 
     // Stop any leftover emitter BEFORE starting the new engine — so
     // we never have two emitters pushing to the same event name, and
@@ -216,6 +224,48 @@ pub fn audio_set_master_volume(
         .lock()
         .map_err(|_| CommandError::Disconnected)?;
     engine.set_master_volume(volume)
+}
+
+#[tauri::command]
+pub fn audio_get_track_meter(
+    handle: SlotHandle,
+    state: State<'_, EngineState>,
+) -> Result<MeterReading, CommandError> {
+    let mut engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.get_track_meter(handle))
+}
+
+#[tauri::command]
+pub fn audio_get_master_meter(state: State<'_, EngineState>) -> Result<MeterReading, CommandError> {
+    let mut engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.get_master_meter())
+}
+
+#[tauri::command]
+pub fn audio_reset_track_clip(
+    handle: SlotHandle,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let mut engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.reset_track_clip(handle)
+}
+
+#[tauri::command]
+pub fn audio_reset_master_clip(state: State<'_, EngineState>) -> Result<(), CommandError> {
+    let mut engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.reset_master_clip()
 }
 
 // ── Transport (3A) ──────────────────────────────────────────────────

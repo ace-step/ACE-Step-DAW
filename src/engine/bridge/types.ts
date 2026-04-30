@@ -6,6 +6,11 @@
  * In desktop mode it delegates to TauriBackend (IPC → Rust audio engine).
  */
 import type { MasteringState } from '../../types/project';
+import type {
+  AudioWarpMarker,
+  GainEnvelopePoint,
+  StretchMode,
+} from '../../types/project';
 
 // ── Metering ────────────────────────────────────────────────────────
 
@@ -34,7 +39,13 @@ export interface BridgeClipInfo {
   fadeOutDuration?: number;
   fadeInCurve?: 'linear' | 'exponential' | 'equal-power';
   fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
+  fadeInCurvePoint?: { x: number; y: number };
+  fadeOutCurvePoint?: { x: number; y: number };
   timeStretchRate?: number;
+  pitchShift?: number;
+  gainEnvelope?: GainEnvelopePoint[];
+  warpMarkers?: AudioWarpMarker[];
+  stretchMode?: StretchMode;
 }
 
 // ── Track Parameters ────────────────────────────────────────────────
@@ -99,8 +110,9 @@ export interface AudioBridge {
   applyMastering(mastering: MasteringState | null | undefined): void;
 
   // ── Clip Scheduling ─────────────────────────────────────────────
-  schedulePlayback(clips: BridgeClipInfo[], fromTime: number, totalDuration: number): void;
-  stopAllSources(): void;
+  schedulePlayback(clips: BridgeClipInfo[], fromTime: number, totalDuration: number): void | Promise<void>;
+  pauseAllSources(): void | Promise<void>;
+  stopAllSources(): void | Promise<void>;
 
   // ── Audio Data ──────────────────────────────────────────────────
   decodeAudioData(blob: Blob): Promise<AudioBuffer>;
@@ -200,3 +212,16 @@ export type NativeCommandError =
   | { kind: 'queueFull'; message: number }
   | { kind: 'disconnected' }
   | { kind: 'slotAllocatorFull'; message: number };
+
+export interface NativeMeterReading {
+  rms: number;
+  peak: number;
+  clipped: boolean;
+}
+
+export interface NativeClipSource {
+  startSample: number;
+  lengthSamples: number;
+  gain: number;
+  audioData: number[];
+}

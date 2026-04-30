@@ -135,6 +135,17 @@ import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 
+function nativeClipEntry(trackId: string, numberOfChannels = 1) {
+  return {
+    clipId: 'clip-1',
+    trackId,
+    startTime: 0,
+    audioOffset: 0,
+    clipDuration: 1,
+    buffer: { numberOfChannels } as AudioBuffer,
+  };
+}
+
 describe('useTransport', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -237,6 +248,29 @@ describe('useTransport', () => {
     }];
 
     expect(canUseNativeClipPlayback(project, [])).toBe(false);
+  });
+
+  it('disables native clip playback when WebAudio-rendered tracks are present', () => {
+    useProjectStore.getState().addTrack('pianoRoll');
+    const project = useProjectStore.getState().project!;
+
+    expect(canUseNativeClipPlayback(project, [])).toBe(false);
+  });
+
+  it('disables native clip playback for boosted track volume', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+    project.tracks[0]!.volume = 1.25;
+
+    expect(canUseNativeClipPlayback(project, [nativeClipEntry(project.tracks[0]!.id)])).toBe(false);
+  });
+
+  it('disables native clip playback for panned stereo clips', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+    project.tracks[0]!.pan = 0.5;
+
+    expect(canUseNativeClipPlayback(project, [nativeClipEntry(project.tracks[0]!.id, 2)])).toBe(false);
   });
 
   // ── pause() ──

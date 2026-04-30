@@ -76,6 +76,8 @@ const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
 };
 
 interface NativePlaybackEntry {
+  trackId?: string;
+  buffer?: Pick<AudioBuffer, 'numberOfChannels'>;
   fadeInDuration?: number;
   fadeOutDuration?: number;
   fadeInCurvePoint?: { x: number; y: number };
@@ -104,8 +106,14 @@ function clipNeedsWebAudio(entry: NativePlaybackEntry): boolean {
 }
 
 function trackNeedsWebAudio(track: Track): boolean {
-  return track.isGroup === true
+  const trackType = track.trackType ?? 'stems';
+  return !['stems', 'sample', 'mix'].includes(trackType)
+    || track.isGroup === true
     || track.parentTrackId !== undefined
+    || (typeof track.volume === 'number' && track.volume > 1.000001)
+    || track.panMode === 'dual-mono'
+    || hasNonZero(track.panLeft)
+    || hasNonZero(track.panRight)
     || hasNonZero(track.eqLowGain)
     || hasNonZero(track.eqMidGain)
     || hasNonZero(track.eqHighGain)
@@ -121,6 +129,12 @@ export function canUseNativeClipPlayback(project: Project, entries: NativePlayba
   if ((project.returnTracks?.length ?? 0) > 0) return false;
   if (project.automationLanes?.some((lane) => lane.points.length > 0)) return false;
   if (entries.some(clipNeedsWebAudio)) return false;
+  const tracksById = new Map(project.tracks.map((track) => [track.id, track]));
+  if (entries.some((entry) => {
+    if (!entry.trackId || !entry.buffer) return false;
+    const track = tracksById.get(entry.trackId);
+    return entry.buffer.numberOfChannels > 1 && hasNonZero(track?.pan);
+  })) return false;
   return !project.tracks.some(trackNeedsWebAudio);
 }
 

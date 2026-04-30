@@ -83,7 +83,7 @@ function clipToNative(
 
   const left = clip.buffer.getChannelData(0);
   const right = clip.buffer.numberOfChannels > 1 ? clip.buffer.getChannelData(1) : left;
-  const volume = Math.max(0, Math.min(1, Number.isFinite(trackParams.volume) ? trackParams.volume : 1));
+  const volume = Math.max(0, Number.isFinite(trackParams.volume) ? trackParams.volume : 1);
   const pan = getPanGains(trackParams.pan);
   const lastSourceIndex = Math.max(sourceStart, clip.buffer.length - 1);
   const sampleAt = (channel: Float32Array, sourcePosition: number): number => {
@@ -429,7 +429,7 @@ export class TauriBackend implements AudioBridge {
 
     const currentTime = this.getCurrentTime();
     const pan = getPanGains(params.pan);
-    const volume = Math.max(0, Math.min(1, Number.isFinite(params.volume) ? params.volume : 1));
+    const volume = Math.max(0, Number.isFinite(params.volume) ? params.volume : 1);
     let leftLevel = 0;
     let rightLevel = 0;
 

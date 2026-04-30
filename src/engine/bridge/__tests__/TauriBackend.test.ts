@@ -515,6 +515,39 @@ describe('TauriBackend', () => {
     expect(meter.rightLevel).toBeCloseTo(0.5 * centerPan.right);
   });
 
+  it('preserves boosted native track volume when baking clip audio', async () => {
+    invokeMock.mockResolvedValueOnce({ slot: 0, generation: 1 });
+    backend.ensureTrack('track-1');
+    await flushTransportCommands();
+    backend.setTrackParams('track-1', { volume: 1.25 });
+    invokeMock.mockClear();
+
+    const buffer = createMockAudioBuffer([1]);
+    const centerPan = equalPowerPan(0);
+    backend.schedulePlayback([
+      {
+        clipId: 'clip-1',
+        trackId: 'track-1',
+        startTime: 0,
+        buffer,
+        audioOffset: 0,
+        clipDuration: 1 / 48000,
+      },
+    ], 0, 1);
+    await flushTransportCommands();
+
+    expect(invokeMock).toHaveBeenCalledWith('audio_clip_set_schedule', {
+      clips: [
+        {
+          startSample: 0,
+          lengthSamples: 1,
+          gain: 1,
+          audioData: [1.25 * centerPan.left, 1.25 * centerPan.right],
+        },
+      ],
+    });
+  });
+
   it('serializes stale native stop commands before a newer schedule', async () => {
     const calls: string[] = [];
     const clearSchedule = deferred();

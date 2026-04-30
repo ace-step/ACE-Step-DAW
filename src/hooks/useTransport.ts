@@ -269,7 +269,6 @@ export function useTransport() {
   const { stopRecording, onLoopCycle } = useRecording();
   const mainView = useUIStore((s) => s.mainView);
   const scrubClipsRef = useRef<TimelineScrubClip[]>([]);
-  const lastEndedAtRef = useRef(0);
 
   const play = useCallback(async (fromTime?: number) => {
     const engine = getAudioEngine();
@@ -1095,9 +1094,6 @@ export function useTransport() {
     const engine = getAudioEngine();
     const bridge = getAudioBridge(engine);
     const onEnded = () => {
-      const now = Date.now();
-      if (now - lastEndedAtRef.current < 250) return;
-      lastEndedAtRef.current = now;
       const {
         loopEnabled,
         isRecording,
@@ -1120,7 +1116,10 @@ export function useTransport() {
         useTransportStore.getState().stop();
       }
     };
-    engine.setOnEndedCallback(onEnded);
+    engine.setOnEndedCallback(() => {
+      if (bridge.backend === 'tauri' && getTauriPlaybackClockOwner() === 'native') return;
+      onEnded();
+    });
     if (bridge.backend === 'tauri') {
       bridge.setOnEndedCallback(onEnded);
     }

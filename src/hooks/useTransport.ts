@@ -514,7 +514,7 @@ export function useTransport() {
       engine.schedulePlayback([], startFrom, effectiveEnd);
     } else if (bridge.backend === 'tauri') {
       setTauriPlaybackClockOwner('web-audio');
-      bridge.stopAllSources();
+      await bridge.stopAllSources();
       engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
     } else {
       setTauriPlaybackClockOwner('web-audio');
@@ -897,7 +897,7 @@ export function useTransport() {
     stopAllStrudelTracks();
     engine.stop();
     setTauriPlaybackClockOwner('web-audio');
-    bridge.pauseAllSources();
+    await bridge.pauseAllSources();
     synthEngine.releaseAll();
     subtractiveEngine.releaseAll();
     wavetableEngine.releaseAll();
@@ -921,7 +921,7 @@ export function useTransport() {
     stopStrudelEditorPlayback();
     engine.stop();
     setTauriPlaybackClockOwner('web-audio');
-    bridge.stopAllSources();
+    await bridge.stopAllSources();
     synthEngine.releaseAll();
     subtractiveEngine.releaseAll();
     wavetableEngine.releaseAll();
@@ -969,7 +969,7 @@ export function useTransport() {
     if (resumePlayback) {
       engine.stop();
       setTauriPlaybackClockOwner('web-audio');
-      bridge.stopAllSources();
+      await bridge.stopAllSources();
       synthEngine.releaseAll();
       subtractiveEngine.releaseAll();
       wavetableEngine.releaseAll();
@@ -1152,10 +1152,13 @@ export function useTransport() {
         || playbackTracks.some(trackNeedsWebAudio)
       )
     ) {
+      const restartTime = useTransportStore.getState().currentTime;
       setTauriPlaybackClockOwner('web-audio');
-      bridge.stopAllSources();
       engine.stop();
-      void play(useTransportStore.getState().currentTime);
+      void (async () => {
+        await bridge.stopAllSources();
+        await play(restartTime);
+      })();
       return;
     }
     for (const track of playbackTracks) {

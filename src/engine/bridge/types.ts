@@ -111,8 +111,8 @@ export interface AudioBridge {
 
   // ── Clip Scheduling ─────────────────────────────────────────────
   schedulePlayback(clips: BridgeClipInfo[], fromTime: number, totalDuration: number): void | Promise<void>;
-  pauseAllSources(): void;
-  stopAllSources(): void;
+  pauseAllSources(): void | Promise<void>;
+  stopAllSources(): void | Promise<void>;
 
   // ── Audio Data ──────────────────────────────────────────────────
   decodeAudioData(blob: Blob): Promise<AudioBuffer>;

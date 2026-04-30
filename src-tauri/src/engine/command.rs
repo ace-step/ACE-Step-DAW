@@ -142,6 +142,13 @@ pub enum EngineCommand {
     /// Enable or disable an aux return bus.
     SetAuxBusEnabled { bus_index: u8, enabled: bool },
 
+    /// Clear the latched clip flag on a track meter.
+    /// Generation-checked like other track-targeted commands.
+    ResetTrackClip { handle: SlotHandle },
+
+    /// Clear the latched clip flag on the master meter.
+    ResetMasterClip,
+
     // ── Transport (3A) ────────────────────────────────────────────────
 
     /// Begin playback from the current position.

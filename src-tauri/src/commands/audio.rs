@@ -247,6 +247,27 @@ pub fn audio_get_master_meter(state: State<'_, EngineState>) -> Result<MeterRead
     Ok(engine.get_master_meter())
 }
 
+#[tauri::command]
+pub fn audio_reset_track_clip(
+    handle: SlotHandle,
+    state: State<'_, EngineState>,
+) -> Result<(), CommandError> {
+    let mut engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.reset_track_clip(handle)
+}
+
+#[tauri::command]
+pub fn audio_reset_master_clip(state: State<'_, EngineState>) -> Result<(), CommandError> {
+    let mut engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    engine.reset_master_clip()
+}
+
 // ── Transport (3A) ──────────────────────────────────────────────────
 
 #[tauri::command]

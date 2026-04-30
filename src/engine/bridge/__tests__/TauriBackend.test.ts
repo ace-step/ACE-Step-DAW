@@ -188,17 +188,14 @@ describe('TauriBackend', () => {
   });
 
   it('stopAllSources clears the native schedule and stops transport', async () => {
-    backend.stopAllSources();
-    await Promise.resolve();
-    await Promise.resolve();
+    await backend.stopAllSources();
 
     expect(invokeMock).toHaveBeenCalledWith('audio_clip_set_schedule', { clips: [] });
     expect(invokeMock).toHaveBeenCalledWith('audio_transport_stop');
   });
 
   it('pauseAllSources pauses native transport without clearing the schedule', async () => {
-    backend.pauseAllSources();
-    await flushTransportCommands();
+    await backend.pauseAllSources();
 
     expect(invokeMock).toHaveBeenCalledWith('audio_transport_pause');
     expect(invokeMock).not.toHaveBeenCalledWith('audio_clip_set_schedule', { clips: [] });
@@ -227,6 +224,22 @@ describe('TauriBackend', () => {
 
   it('setOnEndedCallback does not throw', () => {
     expect(() => backend.setOnEndedCallback(() => {})).not.toThrow();
+  });
+
+  it('emits latency-compensated time updates from native transport events', async () => {
+    let positionHandler: ((event: { payload: number }) => void) | null = null;
+    listenMock.mockImplementation(async (_event, handler) => {
+      positionHandler = handler as (event: { payload: number }) => void;
+      return vi.fn();
+    });
+    const onTimeUpdate = vi.fn();
+
+    backend.setPlaybackLatencyCompensation(0.125);
+    backend.setTimeUpdateCallback(onTimeUpdate);
+    await Promise.resolve();
+    positionHandler?.({ payload: 48000 });
+
+    expect(onTimeUpdate).toHaveBeenCalledWith(0.875);
   });
 
   it('schedulePlayback sends clips through native schedule and starts transport', async () => {
@@ -531,6 +544,37 @@ describe('TauriBackend', () => {
     await Promise.resolve();
 
     expect(invokeMock).toHaveBeenCalledWith('audio_get_track_meter', expect.any(Object));
+  });
+
+  it('resets native track clip state through Tauri IPC', async () => {
+    invokeMock.mockResolvedValueOnce({ slot: 0, generation: 1 });
+    backend.ensureTrack('track-1');
+    await Promise.resolve();
+    invokeMock.mockResolvedValueOnce({ rms: 0.2, peak: 0.4, clipped: true });
+    backend.getTrackMeter('track-1');
+    await Promise.resolve();
+    expect(backend.getTrackMeter('track-1').clipped).toBe(true);
+    invokeMock.mockClear();
+
+    backend.resetTrackClip('track-1');
+
+    expect(backend.getTrackMeter('track-1').clipped).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith('audio_reset_track_clip', {
+      handle: { slot: 0, generation: 1 },
+    });
+  });
+
+  it('resets native master clip state through Tauri IPC', async () => {
+    invokeMock.mockResolvedValueOnce({ rms: 0.2, peak: 0.4, clipped: true });
+    backend.getMasterMeter('output');
+    await Promise.resolve();
+    expect(backend.getMasterMeter('output').clipped).toBe(true);
+    invokeMock.mockClear();
+
+    backend.resetMasterClip('output');
+
+    expect(backend.getMasterMeter('output').clipped).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith('audio_reset_master_clip');
   });
 
   it('reflects active native clip audio in track meters', () => {

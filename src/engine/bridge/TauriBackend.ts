@@ -308,8 +308,14 @@ export class TauriBackend implements AudioBridge {
     return this.getTrackMeter(trackId).level;
   }
 
-  resetTrackClip(_trackId: string): void {
-    // Will be wired in Phase 2B-2 (metering)
+  resetTrackClip(trackId: string): void {
+    this._trackMeters.set(trackId, {
+      ...(this._trackMeters.get(trackId) ?? ZERO_METER),
+      clipped: false,
+    });
+    const entry = this._trackEntries.get(trackId);
+    if (!entry?.handle) return;
+    invoke('audio_reset_track_clip', { handle: entry.handle }).catch(() => {});
   }
 
   getTrackSpectrum(_trackId: string): Float32Array | null {
@@ -335,7 +341,8 @@ export class TauriBackend implements AudioBridge {
   }
 
   resetMasterClip(_stage: 'input' | 'output'): void {
-    // Will be wired in Phase 2B-2 (metering)
+    this._masterMeter = { ...this._masterMeter, clipped: false };
+    invoke('audio_reset_master_clip').catch(() => {});
   }
 
   getMasterSpectrum(): Float32Array {
@@ -384,13 +391,13 @@ export class TauriBackend implements AudioBridge {
     });
   }
 
-  stopAllSources(): void {
+  stopAllSources(): Promise<void> {
     const token = ++this._transportCommandToken;
     this._transportEndArmedToken = null;
     this._scheduledEndSample = null;
     this._currentSamplePosition = 0;
     this._lastScheduledClips = [];
-    this.enqueueTransportCommand(async () => {
+    return this.enqueueTransportCommand(async () => {
       if (token !== this._transportCommandToken) return;
       await invoke('audio_clip_set_schedule', { clips: [] });
       if (token !== this._transportCommandToken) return;
@@ -398,10 +405,10 @@ export class TauriBackend implements AudioBridge {
     });
   }
 
-  pauseAllSources(): void {
+  pauseAllSources(): Promise<void> {
     const token = ++this._transportCommandToken;
     this._transportEndArmedToken = null;
-    this.enqueueTransportCommand(async () => {
+    return this.enqueueTransportCommand(async () => {
       if (token !== this._transportCommandToken) return;
       await invoke('audio_transport_pause');
     });
@@ -548,7 +555,7 @@ export class TauriBackend implements AudioBridge {
       const position = Number(event.payload);
       if (!Number.isFinite(position)) return;
       this._currentSamplePosition = Math.max(0, Math.floor(position));
-      const currentTime = this.getCurrentTime();
+      const currentTime = this.getCompensatedTime();
       this._timeUpdateCb?.(currentTime);
       if (
         this._scheduledEndSample !== null
@@ -557,7 +564,7 @@ export class TauriBackend implements AudioBridge {
       ) {
         this._transportEndArmedToken = null;
         this._scheduledEndSample = null;
-        this.stopAllSources();
+        void this.stopAllSources();
         this._onEndedCb?.();
       }
     })

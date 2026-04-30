@@ -252,6 +252,8 @@ impl AudioGraph {
             | EngineCommand::SetTrackSendLevel { .. }
             | EngineCommand::SetAuxBusVolume { .. }
             | EngineCommand::SetAuxBusEnabled { .. }
+            | EngineCommand::ResetTrackClip { .. }
+            | EngineCommand::ResetMasterClip
             | EngineCommand::TransportPlay
             | EngineCommand::TransportStop
             | EngineCommand::TransportPause

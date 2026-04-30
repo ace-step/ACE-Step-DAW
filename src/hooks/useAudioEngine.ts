@@ -29,11 +29,13 @@ export function useAudioEngine() {
   useEffect(() => {
     const engine = engineRef.current;
     const bridge = getAudioBridge(engine);
-    engine.setTimeUpdateCallback((time) => {
-      useTransportStore.getState().setCurrentTime(time);
-    });
     if (bridge.backend === 'tauri') {
+      engine.setTimeUpdateCallback(() => {});
       bridge.setTimeUpdateCallback((time) => {
+        useTransportStore.getState().setCurrentTime(time);
+      });
+    } else {
+      engine.setTimeUpdateCallback((time) => {
         useTransportStore.getState().setCurrentTime(time);
       });
     }

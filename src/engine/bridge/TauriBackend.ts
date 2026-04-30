@@ -49,6 +49,13 @@ function toMasterMeterData(reading: NativeMeterReading): MasterMeterData {
   };
 }
 
+function isAlreadyRunningError(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null && 'kind' in error) {
+    return (error as { kind?: unknown }).kind === 'alreadyRunning';
+  }
+  return String(error).includes('alreadyRunning');
+}
+
 function getPanGains(pan: number): { left: number; right: number } {
   const clamped = Math.max(-1, Math.min(1, Number.isFinite(pan) ? pan : 0));
   if (clamped < 0) return { left: 1, right: 1 + clamped };
@@ -133,9 +140,13 @@ export class TauriBackend implements AudioBridge {
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   async resume(): Promise<void> {
-    await invoke('audio_start_engine', {
-      config: { sampleRate: 48000, bufferSize: 256, deviceName: null },
-    });
+    try {
+      await invoke('audio_start_engine', {
+        config: { sampleRate: 48000, bufferSize: 256, deviceName: null },
+      });
+    } catch (error) {
+      if (!isAlreadyRunningError(error)) throw error;
+    }
     this.startTransportListener();
     this.refreshTransportPosition();
   }

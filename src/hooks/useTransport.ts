@@ -176,9 +176,8 @@ export function useTransport() {
     stopAllStrudelTracks();
     if (bridge.backend === 'tauri') {
       await bridge.resume();
-    } else {
-      await engine.resume();
     }
+    await engine.resume();
     await synthEngine.ensureStarted();
     await subtractiveEngine.ensureStarted();
     await samplerEngine.ensureStarted();
@@ -406,6 +405,12 @@ export function useTransport() {
     // If Signalsmith/Rubber Band already finished → high quality buffer used.
     // If neither finished yet → legacy fallback via _getProcessedBuffer.
     bridge.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
+    if (bridge.backend === 'tauri') {
+      // The native backend owns audio clip playback, but MIDI, synth,
+      // sequencer, automation, and Strudel still use AudioEngine's
+      // RAF clock until the Rust engine reaches full feature parity.
+      engine.schedulePlayback([], startFrom, effectiveEnd);
+    }
 
     const { metronomeEnabled, metronomeSound, metronomeVolume } = useTransportStore.getState();
     if (metronomeEnabled) {
@@ -995,9 +1000,11 @@ export function useTransport() {
         useTransportStore.getState().stop();
       }
     };
-    engine.setOnEndedCallback(onEnded);
     if (bridge.backend === 'tauri') {
+      engine.setOnEndedCallback(() => {});
       bridge.setOnEndedCallback(onEnded);
+    } else {
+      engine.setOnEndedCallback(onEnded);
     }
     return () => {
       engine.setOnEndedCallback(() => {});

@@ -119,6 +119,16 @@ describe('TauriBackend', () => {
     expect(listenMock).toHaveBeenCalledWith('transport-position', expect.any(Function));
   });
 
+  it('resume treats an already-running native engine as success', async () => {
+    invokeMock.mockRejectedValueOnce({ kind: 'alreadyRunning' });
+    invokeMock.mockResolvedValueOnce(0);
+
+    await expect(backend.resume()).resolves.toBeUndefined();
+
+    expect(listenMock).toHaveBeenCalledWith('transport-position', expect.any(Function));
+    expect(invokeMock).toHaveBeenCalledWith('audio_transport_get_position');
+  });
+
   it('setMasterVolume invokes native master gain command', () => {
     backend.setMasterVolume(0.5);
 

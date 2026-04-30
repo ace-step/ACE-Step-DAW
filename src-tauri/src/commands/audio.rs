@@ -10,9 +10,9 @@ use tauri::{Emitter, State};
 
 use crate::engine::{
     audio_io, AudioDeviceInfo, ClipSchedule, ClipSource, CommandError, CountIn, Engine,
-    EngineConfig, EngineError, EngineStatus, LoopRegion, MetronomeConfig, PositionEmitter,
-    PunchRegion, TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap, TrackParams,
-    POSITION_EVENT_DEFAULT_INTERVAL,
+    EngineConfig, EngineError, EngineStatus, LoopRegion, MeterReading, MetronomeConfig,
+    PositionEmitter, PunchRegion, TempoEvent, TempoMap, TimeSignatureEvent, TimeSignatureMap,
+    TrackParams, POSITION_EVENT_DEFAULT_INTERVAL,
 };
 use crate::engine::slot::SlotHandle;
 
@@ -216,6 +216,27 @@ pub fn audio_set_master_volume(
         .lock()
         .map_err(|_| CommandError::Disconnected)?;
     engine.set_master_volume(volume)
+}
+
+#[tauri::command]
+pub fn audio_get_track_meter(
+    handle: SlotHandle,
+    state: State<'_, EngineState>,
+) -> Result<MeterReading, CommandError> {
+    let mut engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.get_track_meter(handle))
+}
+
+#[tauri::command]
+pub fn audio_get_master_meter(state: State<'_, EngineState>) -> Result<MeterReading, CommandError> {
+    let mut engine = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::Disconnected)?;
+    Ok(engine.get_master_meter())
 }
 
 // ── Transport (3A) ──────────────────────────────────────────────────

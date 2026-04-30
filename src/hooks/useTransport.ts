@@ -3,6 +3,7 @@ import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
 import { getAudioEngine } from './useAudioEngine';
+import { getAudioBridge } from '../engine/bridge';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { synthEngine } from '../engine/SynthEngine';
 import { subtractiveEngine } from '../engine/SubtractiveEngine';
@@ -170,9 +171,14 @@ export function useTransport() {
 
   const play = useCallback(async (fromTime?: number) => {
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
-    await engine.resume();
+    if (bridge.backend === 'tauri') {
+      await bridge.resume();
+    } else {
+      await engine.resume();
+    }
     await synthEngine.ensureStarted();
     await subtractiveEngine.ensureStarted();
     await samplerEngine.ensureStarted();
@@ -190,9 +196,13 @@ export function useTransport() {
     // Sync master volume
     const nextProject = useProjectStore.getState().project;
     if (!nextProject) return;
+    const playbackLatencySeconds = getPlaybackLatencyCompensationSeconds(nextProject.playbackLatency);
     engine.masterVolume = nextProject.masterVolume ?? 1.0;
-    engine.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(nextProject.playbackLatency));
+    engine.setPlaybackLatencyCompensation(playbackLatencySeconds);
     engine.applyMastering(nextProject.mastering);
+    bridge.setMasterVolume(nextProject.masterVolume ?? 1.0);
+    bridge.setPlaybackLatencyCompensation(playbackLatencySeconds);
+    bridge.applyMastering(nextProject.mastering);
 
     interface ScheduleEntry {
       clipId: string;
@@ -220,8 +230,24 @@ export function useTransport() {
     // First pass: create all TrackNodes (groups first so children can route to them)
     for (const track of proj.tracks.filter((t) => t.isGroup)) {
       engine.getOrCreateTrackNode(track.id);
+      bridge.ensureTrack(track.id);
     }
     for (const track of proj.tracks) {
+      bridge.ensureTrack(track.id);
+      bridge.setTrackParams(track.id, {
+        volume: track.volume,
+        muted: track.muted,
+        soloed: track.soloed,
+        pan: track.pan ?? 0,
+        eqLowGain: track.eqLowGain ?? 0,
+        eqMidGain: track.eqMidGain ?? 0,
+        eqHighGain: track.eqHighGain ?? 0,
+        compressorEnabled: track.compressorEnabled ?? false,
+        compressorThreshold: track.compressorThreshold ?? -24,
+        compressorRatio: track.compressorRatio ?? 4,
+        reverbMix: track.reverbMix ?? 0,
+        reverbRoomSize: track.reverbRoomSize ?? 0.5,
+      });
       const trackNode = engine.getOrCreateTrackNode(track.id);
       trackNode.volume = track.volume;
       trackNode.muted = track.muted;
@@ -238,12 +264,13 @@ export function useTransport() {
       trackNode.setReverb(track.reverbMix ?? 0, track.reverbRoomSize ?? 0.5);
       // Route child tracks through their parent group bus
       engine.setTrackGroupRouting(track.id, track.parentTrackId ?? null);
+      bridge.setTrackGroupRouting(track.id, track.parentTrackId ?? null);
 
       // Frozen track: play frozen bounce instead of individual clips/MIDI
       if (track.frozen && track.frozenAudioKey && mainView !== 'session') {
         const frozenBlob = await loadAudioBlobByKey(track.frozenAudioKey);
         if (frozenBlob) {
-          const frozenBuffer = await engine.decodeAudioData(frozenBlob);
+          const frozenBuffer = await bridge.decodeAudioData(frozenBlob);
           clipBuffers.push({
             clipId: `frozen-${track.id}`,
             trackId: track.id,
@@ -280,7 +307,7 @@ export function useTransport() {
         }
         if (!blob) continue;
 
-        const rawBuffer = await engine.decodeAudioData(blob);
+        const rawBuffer = await bridge.decodeAudioData(blob);
         const buffer = alreadyTrimmed
           ? rawBuffer
           : trimBuffer(engine.ctx, rawBuffer, audibleStartTime, audibleDuration);
@@ -351,6 +378,7 @@ export function useTransport() {
     }
 
     engine.updateSoloState();
+    bridge.updateSoloState();
 
     // Wire aux sends to return tracks
     engine.syncSends(proj.tracks, proj.returnTracks ?? []);
@@ -377,7 +405,7 @@ export function useTransport() {
     // Playback reads from stretchedBufferCache (populated on clip stretch mouseup).
     // If Signalsmith/Rubber Band already finished → high quality buffer used.
     // If neither finished yet → legacy fallback via _getProcessedBuffer.
-    engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
+    bridge.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
 
     const { metronomeEnabled, metronomeSound, metronomeVolume } = useTransportStore.getState();
     if (metronomeEnabled) {
@@ -745,11 +773,13 @@ export function useTransport() {
       await stopRecording();
     }
     const engine = getAudioEngine();
-    const time = engine.getCurrentTime();
+    const bridge = getAudioBridge(engine);
+    const time = bridge.getCurrentTime();
     finalizeSessionArrangementRecording(time);
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
     engine.stop();
+    bridge.pauseAllSources();
     synthEngine.releaseAll();
     subtractiveEngine.releaseAll();
     wavetableEngine.releaseAll();
@@ -767,10 +797,14 @@ export function useTransport() {
       await stopRecording();
     }
     const engine = getAudioEngine();
-    const time = engine.playing ? engine.getCurrentTime() : useTransportStore.getState().currentTime;
+    const bridge = getAudioBridge(engine);
+    const time = engine.playing || bridge.backend === 'tauri'
+      ? bridge.getCurrentTime()
+      : useTransportStore.getState().currentTime;
     finalizeSessionArrangementRecording(time);
     stopStrudelEditorPlayback();
     engine.stop();
+    bridge.stopAllSources();
     synthEngine.releaseAll();
     subtractiveEngine.releaseAll();
     wavetableEngine.releaseAll();
@@ -784,10 +818,12 @@ export function useTransport() {
 
   const seek = useCallback((time: number) => {
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
     stopStrudelEditorPlayback();
     stopAllStrudelTracks();
-    if (engine.playing) {
+    if (engine.playing || (bridge.backend === 'tauri' && useTransportStore.getState().isPlaying)) {
       engine.stop();
+      bridge.stopAllSources();
       synthEngine.releaseAll();
       subtractiveEngine.releaseAll();
       wavetableEngine.releaseAll();
@@ -935,7 +971,8 @@ export function useTransport() {
   // Register the onEnded callback — respect loopEnabled
   useEffect(() => {
     const engine = getAudioEngine();
-    engine.setOnEndedCallback(() => {
+    const bridge = getAudioBridge(engine);
+    const onEnded = () => {
       const {
         loopEnabled,
         isRecording,
@@ -957,9 +994,16 @@ export function useTransport() {
       } else {
         useTransportStore.getState().stop();
       }
-    });
+    };
+    engine.setOnEndedCallback(onEnded);
+    if (bridge.backend === 'tauri') {
+      bridge.setOnEndedCallback(onEnded);
+    }
     return () => {
       engine.setOnEndedCallback(() => {});
+      if (bridge.backend === 'tauri') {
+        bridge.setOnEndedCallback(() => {});
+      }
     };
   }, [play, onLoopCycle]);
 

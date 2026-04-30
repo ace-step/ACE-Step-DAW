@@ -178,8 +178,47 @@ describe('WebAudioBackend', () => {
     expect(engine.schedulePlayback).toHaveBeenCalledWith([], 0, 10);
   });
 
+  it('preserves advanced clip playback fields', () => {
+    const buffer = {} as AudioBuffer;
+    const gainEnvelope = [{ time: 0, gain: 0.5 }];
+    const warpMarkers = [{ originalTime: 0, quantizedTime: 0 }];
+
+    backend.schedulePlayback([
+      {
+        clipId: 'clip-1',
+        trackId: 'track-1',
+        startTime: 1,
+        buffer,
+        audioOffset: 0.25,
+        clipDuration: 2,
+        fadeInCurvePoint: { x: 0.2, y: 0.8 },
+        fadeOutCurvePoint: { x: 0.7, y: 0.3 },
+        pitchShift: 3,
+        gainEnvelope,
+        warpMarkers,
+        stretchMode: 'complexPro',
+      },
+    ], 0, 4);
+
+    expect(engine.schedulePlayback).toHaveBeenCalledWith([
+      expect.objectContaining({
+        fadeInCurvePoint: { x: 0.2, y: 0.8 },
+        fadeOutCurvePoint: { x: 0.7, y: 0.3 },
+        pitchShift: 3,
+        gainEnvelope,
+        warpMarkers,
+        stretchMode: 'complexPro',
+      }),
+    ], 0, 4);
+  });
+
   it('delegates stopAllSources', () => {
     backend.stopAllSources();
+    expect(engine.stopAllSources).toHaveBeenCalled();
+  });
+
+  it('delegates pauseAllSources', () => {
+    backend.pauseAllSources();
     expect(engine.stopAllSources).toHaveBeenCalled();
   });
 

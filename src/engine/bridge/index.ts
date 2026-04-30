@@ -18,19 +18,31 @@ import type { AudioBridge } from './types';
 import type { AudioEngine } from '../AudioEngine';
 import { WebAudioBackend } from './WebAudioBackend';
 import { TauriBackend } from './TauriBackend';
-import { isTauri } from '../../utils/tauri';
+import { isTauriAudioBackendEnabled } from '../../utils/tauri';
 
 /**
  * Create the appropriate AudioBridge for the current runtime.
  *
- * During Phase 1 migration, always use the WebAudio-backed bridge,
- * including inside the Tauri shell, until the Rust/Tauri backend
- * fully implements the required AudioBridge lifecycle methods.
+ * The native Rust backend is opt-in while migration continues. Browser
+ * builds and Tauri shells without the gate keep the WebAudio backend.
  *
  * @param engine - The AudioEngine singleton used by WebAudioBackend.
  */
 export function createBridge(engine: AudioEngine): AudioBridge {
-  // TODO: Switch to TauriBackend when Rust engine is ready (Phase 3+)
-  // if (isTauri()) return new TauriBackend();
+  if (isTauriAudioBackendEnabled()) return new TauriBackend();
   return new WebAudioBackend(engine);
+}
+
+let bridgeInstance: AudioBridge | null = null;
+
+export function getAudioBridge(engine: AudioEngine): AudioBridge {
+  if (!bridgeInstance) {
+    bridgeInstance = createBridge(engine);
+  }
+  return bridgeInstance;
+}
+
+/** @internal Reset singleton for tests. */
+export function _resetAudioBridgeForTests(): void {
+  bridgeInstance = null;
 }

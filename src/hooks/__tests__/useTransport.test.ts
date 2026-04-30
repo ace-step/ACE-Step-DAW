@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     play: vi.fn(async () => {}),
     schedulePlayback: vi.fn(),
     scheduleMetronome: vi.fn(),
+    stopAllSources: vi.fn(),
     clearBufferCache: vi.fn(),
     setMasterVolume: vi.fn(),
     ensureTrackNode: vi.fn(() => ({

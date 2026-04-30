@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { isTauri, invokeTauri } from '../tauri';
+import { isTauri, isTauriAudioBackendEnabled, invokeTauri } from '../tauri';
 
 describe('tauri bridge utilities', () => {
   afterEach(() => {
@@ -7,6 +7,7 @@ describe('tauri bridge utilities', () => {
       delete (window as Record<string, unknown>).__TAURI__;
       delete (window as Record<string, unknown>).__TAURI_INTERNALS__;
     }
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -23,6 +24,27 @@ describe('tauri bridge utilities', () => {
     it('returns true when __TAURI_INTERNALS__ is on window (v2)', () => {
       (window as Record<string, unknown>).__TAURI_INTERNALS__ = {};
       expect(isTauri()).toBe(true);
+    });
+  });
+
+  describe('isTauriAudioBackendEnabled', () => {
+    it('returns false outside Tauri even when the native backend gate is enabled', () => {
+      vi.stubEnv('VITE_ENABLE_TAURI_AUDIO_BACKEND', 'true');
+
+      expect(isTauriAudioBackendEnabled()).toBe(false);
+    });
+
+    it('returns false inside Tauri when the native backend gate is disabled', () => {
+      (window as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+
+      expect(isTauriAudioBackendEnabled()).toBe(false);
+    });
+
+    it('returns true only inside Tauri with the native backend gate enabled', () => {
+      (window as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+      vi.stubEnv('VITE_ENABLE_TAURI_AUDIO_BACKEND', 'true');
+
+      expect(isTauriAudioBackendEnabled()).toBe(true);
     });
   });
 

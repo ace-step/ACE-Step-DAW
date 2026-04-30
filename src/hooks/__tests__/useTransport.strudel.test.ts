@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     stop: vi.fn(),
     getCurrentTime: vi.fn(() => 3.5),
     setOnEndedCallback: vi.fn(),
+    stopAllSources: vi.fn(),
     trackNodes: new Map(),
     updateSoloState: vi.fn(),
     syncSends: vi.fn(),

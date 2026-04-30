@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { getAudioEngine, getTauriPlaybackClockOwner } from '../../hooks/useAudioEngine';
 import { getAudioBridge } from '../../engine/bridge';
 import { Knob } from '../ui/Knob';
 
@@ -48,7 +48,10 @@ export function SessionMixerStrip({
     const engine = getAudioEngine();
     const bridge = getAudioBridge(engine);
     const tick = () => {
-      const meter = bridge.getTrackMeter(trackId);
+      const meterSource = bridge.backend === 'tauri' && getTauriPlaybackClockOwner() === 'native'
+        ? bridge
+        : engine;
+      const meter = meterSource.getTrackMeter(trackId);
       setLeftFill(levelToFill(meter.leftLevel));
       setRightFill(levelToFill(meter.rightLevel));
       rafRef.current = requestAnimationFrame(tick);

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { getAudioEngine, getTauriPlaybackClockOwner } from '../../hooks/useAudioEngine';
 import { getAudioBridge } from '../../engine/bridge';
 import { METER_CANVAS_STOPS, METER_DB_TICKS, METER_DB_TICKS_MINOR, METER_PADDING_PCT, dbToFill, levelToFill } from '../meter-colors';
 
@@ -94,8 +94,12 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
       let rightLevel = 0;
       let clipped = false;
 
+      const meterSource = bridge.backend === 'tauri' && getTauriPlaybackClockOwner() === 'native'
+        ? bridge
+        : engine;
+
       if (masterStage) {
-        const meter = bridge.getMasterMeter(masterStage);
+        const meter = meterSource.getMasterMeter(masterStage);
         leftLevel = meter.level;
         rightLevel = meter.level;
         clipped = meter.clipped;
@@ -105,7 +109,7 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
         rightLevel = meter.level;
         clipped = meter.clipped;
       } else if (trackId) {
-        const meter = bridge.getTrackMeter(trackId);
+        const meter = meterSource.getTrackMeter(trackId);
         leftLevel = isStereo ? meter.leftLevel : meter.level;
         rightLevel = isStereo ? meter.rightLevel : meter.level;
         clipped = meter.clipped;
@@ -186,12 +190,15 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
   const resetClip = () => {
     const engine = getAudioEngine();
     const bridge = getAudioBridge(engine);
+    const meterSource = bridge.backend === 'tauri' && getTauriPlaybackClockOwner() === 'native'
+      ? bridge
+      : engine;
     if (masterStage) {
-      bridge.resetMasterClip(masterStage);
+      meterSource.resetMasterClip(masterStage);
     } else if (returnTrackId) {
       engine.resetReturnTrackClip(returnTrackId);
     } else if (trackId) {
-      bridge.resetTrackClip(trackId);
+      meterSource.resetTrackClip(trackId);
     }
     clippedRef.current = false;
     clippedStateRef.current = false;

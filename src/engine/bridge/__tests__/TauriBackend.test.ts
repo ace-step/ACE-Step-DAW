@@ -30,6 +30,23 @@ function equalPowerPan(pan: number): { left: number; right: number } {
   return { left: Math.cos(angle), right: Math.sin(angle) };
 }
 
+function deferred<T = void>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+async function flushTransportCommands(turns = 6): Promise<void> {
+  for (let i = 0; i < turns; i++) {
+    await Promise.resolve();
+  }
+}
+
 describe('TauriBackend', () => {
   let backend: TauriBackend;
 
@@ -179,8 +196,9 @@ describe('TauriBackend', () => {
     expect(invokeMock).toHaveBeenCalledWith('audio_transport_stop');
   });
 
-  it('pauseAllSources pauses native transport without clearing the schedule', () => {
+  it('pauseAllSources pauses native transport without clearing the schedule', async () => {
     backend.pauseAllSources();
+    await flushTransportCommands();
 
     expect(invokeMock).toHaveBeenCalledWith('audio_transport_pause');
     expect(invokeMock).not.toHaveBeenCalledWith('audio_clip_set_schedule', { clips: [] });
@@ -280,10 +298,10 @@ describe('TauriBackend', () => {
         clipDuration: 1 / 48000,
       },
     ], 1, 3);
+    await Promise.resolve();
     positionHandler?.({ payload: 96000 });
     resolveSchedule();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushTransportCommands();
 
     expect(invokeMock).toHaveBeenCalledWith('audio_transport_seek', { samplePosition: 48000 });
   });
@@ -348,12 +366,11 @@ describe('TauriBackend', () => {
         clipDuration: 2 / 48000,
       },
     ], 0, 1);
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushTransportCommands();
     invokeMock.mockClear();
 
     backend.setTrackParams('track-1', { volume: 0.25, pan: 0.5 });
-    await Promise.resolve();
+    await flushTransportCommands();
 
     expect(invokeMock).toHaveBeenCalledWith('audio_clip_set_schedule', {
       clips: [
@@ -391,10 +408,10 @@ describe('TauriBackend', () => {
         clipDuration: 1 / 48000,
       },
     ], 0, 1);
+    await Promise.resolve();
     backend.stopAllSources();
     resolveFirstSchedule();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushTransportCommands();
 
     expect(invokeMock).not.toHaveBeenCalledWith('audio_transport_play');
   });
@@ -496,6 +513,50 @@ describe('TauriBackend', () => {
     expect(meter.level).toBeCloseTo(0.5 * Math.max(centerPan.left, centerPan.right));
     expect(meter.leftLevel).toBeCloseTo(0.5 * centerPan.left);
     expect(meter.rightLevel).toBeCloseTo(0.5 * centerPan.right);
+  });
+
+  it('serializes stale native stop commands before a newer schedule', async () => {
+    const calls: string[] = [];
+    const clearSchedule = deferred();
+    invokeMock.mockImplementation((command, args) => {
+      calls.push(command);
+      if (
+        command === 'audio_clip_set_schedule'
+        && Array.isArray((args as { clips?: unknown[] } | undefined)?.clips)
+        && (args as { clips: unknown[] }).clips.length === 0
+      ) {
+        return clearSchedule.promise;
+      }
+      return Promise.resolve(undefined);
+    });
+
+    backend.stopAllSources();
+    await Promise.resolve();
+    expect(calls).toEqual(['audio_clip_set_schedule']);
+
+    const buffer = createMockAudioBuffer([0.5]);
+    backend.schedulePlayback([
+      {
+        clipId: 'clip-1',
+        trackId: 'track-1',
+        startTime: 0,
+        buffer,
+        audioOffset: 0,
+        clipDuration: 1 / 48000,
+      },
+    ], 0, 1);
+    await Promise.resolve();
+    expect(calls).toEqual(['audio_clip_set_schedule']);
+
+    clearSchedule.resolve(undefined);
+    await flushTransportCommands();
+
+    expect(calls).toEqual([
+      'audio_clip_set_schedule',
+      'audio_clip_set_schedule',
+      'audio_transport_seek',
+      'audio_transport_play',
+    ]);
   });
 
   it('throttles track meter refreshes while a native request is in flight', async () => {

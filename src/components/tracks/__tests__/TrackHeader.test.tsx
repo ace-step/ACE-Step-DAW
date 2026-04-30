@@ -23,6 +23,7 @@ vi.mock('../../../services/freezeTrack', () => ({
 }));
 
 vi.mock('../../../hooks/useAudioEngine', () => ({
+  getTauriPlaybackClockOwner: () => 'web-audio',
   getAudioEngine: () => ({
     getTrackLevel: () => 0,
     getTrackMeter: () => ({ level: 0, clipped: false }),

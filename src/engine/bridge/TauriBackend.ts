@@ -130,6 +130,7 @@ export class TauriBackend implements AudioBridge {
   private _lastMasterMeterRefreshMs = -Infinity;
   private _masterMeterRefreshInFlight = false;
   private _transportCommandToken = 0;
+  private _transportCommandQueue: Promise<void> = Promise.resolve();
   private _lastScheduledClips: BridgeClipInfo[] = [];
 
   /**
@@ -367,13 +368,14 @@ export class TauriBackend implements AudioBridge {
     this._scheduledEndSample = Math.max(0, Math.round(totalDuration * this.sampleRate));
     this._currentSamplePosition = seekSamplePosition;
 
-    void (async () => {
+    this.enqueueTransportCommand(async () => {
+      if (token !== this._transportCommandToken) return;
       await invoke('audio_clip_set_schedule', { clips: nativeClips });
       if (token !== this._transportCommandToken) return;
       await invoke('audio_transport_seek', { samplePosition: seekSamplePosition });
       if (token !== this._transportCommandToken) return;
       await invoke('audio_transport_play');
-    })().catch(() => {});
+    });
   }
 
   stopAllSources(): void {
@@ -381,20 +383,20 @@ export class TauriBackend implements AudioBridge {
     this._scheduledEndSample = null;
     this._currentSamplePosition = 0;
     this._lastScheduledClips = [];
-    void (async () => {
+    this.enqueueTransportCommand(async () => {
       if (token !== this._transportCommandToken) return;
       await invoke('audio_clip_set_schedule', { clips: [] });
       if (token !== this._transportCommandToken) return;
       await invoke('audio_transport_stop');
-    })().catch(() => {});
+    });
   }
 
   pauseAllSources(): void {
     const token = ++this._transportCommandToken;
-    void (async () => {
+    this.enqueueTransportCommand(async () => {
       if (token !== this._transportCommandToken) return;
       await invoke('audio_transport_pause');
-    })().catch(() => {});
+    });
   }
 
   private buildNativeClips(clips: BridgeClipInfo[]): NativeClipSource[] {
@@ -478,14 +480,20 @@ export class TauriBackend implements AudioBridge {
     return true;
   }
 
+  private enqueueTransportCommand(command: () => Promise<void>): void {
+    const run = this._transportCommandQueue.then(command, command);
+    this._transportCommandQueue = run.catch(() => {});
+    void run.catch(() => {});
+  }
+
   private republishActiveSchedule(): void {
     if (this._scheduledEndSample === null || this._lastScheduledClips.length === 0) return;
     const token = this._transportCommandToken;
     const nativeClips = this.buildNativeClips(this._lastScheduledClips);
-    void (async () => {
+    this.enqueueTransportCommand(async () => {
       if (token !== this._transportCommandToken) return;
       await invoke('audio_clip_set_schedule', { clips: nativeClips });
-    })().catch(() => {});
+    });
   }
 
   // ── Audio Data ────────────────────────────────────────────────────

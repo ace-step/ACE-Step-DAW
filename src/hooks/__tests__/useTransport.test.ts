@@ -215,6 +215,30 @@ describe('useTransport', () => {
     expect(canUseNativeClipPlayback(project, [])).toBe(false);
   });
 
+  it('disables native clip playback when enabled track plugins are active', () => {
+    useProjectStore.getState().addTrack('stems');
+    const project = useProjectStore.getState().project!;
+    expect(canUseNativeClipPlayback(project, [])).toBe(true);
+
+    project.tracks[0]!.plugins = [{
+      id: 'plugin-1',
+      pluginId: 'ace-plugin',
+      enabled: true,
+      params: {},
+      manifest: {
+        id: 'ace-plugin',
+        name: 'ACE Plugin',
+        pluginType: 'effect',
+        version: '1.0.0',
+        author: 'ACE',
+        description: 'Test plugin',
+        parameters: [],
+      },
+    }];
+
+    expect(canUseNativeClipPlayback(project, [])).toBe(false);
+  });
+
   // ── pause() ──
 
   it('stops all engines and strudel when pausing', async () => {

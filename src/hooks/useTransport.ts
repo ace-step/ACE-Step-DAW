@@ -112,6 +112,7 @@ function trackNeedsWebAudio(track: Track): boolean {
     || track.compressorEnabled === true
     || hasNonZero(track.reverbMix)
     || ((track.effects?.length ?? 0) > 0 && track.effectsBypassed !== true)
+    || (track.plugins?.some((plugin) => plugin.enabled !== false) ?? false)
     || (track.sends?.some((send) => send.amount > 0.000001) ?? false);
 }
 

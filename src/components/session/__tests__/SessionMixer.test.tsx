@@ -9,6 +9,7 @@ vi.mock('../../../services/projectStorage', () => ({
 }));
 
 vi.mock('../../../hooks/useAudioEngine', () => ({
+  getTauriPlaybackClockOwner: () => 'web-audio',
   getAudioEngine: () => ({
     getTrackMeter: () => ({ leftLevel: 0, rightLevel: 0, clipped: false }),
     getTrackLevel: () => 0,

@@ -123,6 +123,7 @@ export class TauriBackend implements AudioBridge {
   private _trackMeters = new Map<string, MeterData>();
   private _masterMeter: MasterMeterData = ZERO_MASTER;
   private _transportCommandToken = 0;
+  private _lastScheduledClips: BridgeClipInfo[] = [];
 
   /**
    * Maps the AudioBridge's string `trackId` to the native engine's
@@ -254,6 +255,7 @@ export class TauriBackend implements AudioBridge {
       handle: entry.handle,
       params: entry.params,
     }).catch(() => {});
+    this.republishActiveSchedule();
   }
 
   setTrackGroupRouting(trackId: string, groupId: string | null): void {
@@ -267,6 +269,7 @@ export class TauriBackend implements AudioBridge {
     // via `AudioGraph::any_solo()`. No explicit command needed — the
     // individual `setTrackParams` calls with `solo: true/false`
     // already propagate through the command queue.
+    this.republishActiveSchedule();
   }
 
   // ── Metering ──────────────────────────────────────────────────────
@@ -338,18 +341,8 @@ export class TauriBackend implements AudioBridge {
     totalDuration: number,
   ): void {
     const token = ++this._transportCommandToken;
-    const anySoloed = Array.from(this._trackEntries.values()).some((entry) => entry.params.solo);
-    const nativeClips = clips
-      .map((clip) => {
-        const params = this._trackEntries.get(clip.trackId)?.params ?? {
-          volume: 1,
-          pan: 0,
-          mute: false,
-          solo: false,
-        };
-        return clipToNative(clip, this.sampleRate, params, anySoloed);
-      })
-      .filter((clip): clip is NativeClipSource => clip !== null);
+    this._lastScheduledClips = clips;
+    const nativeClips = this.buildNativeClips(clips);
     this._scheduledEndSample = Math.max(0, Math.round(totalDuration * this.sampleRate));
     this._currentSamplePosition = Math.max(0, Math.round(fromTime * this.sampleRate));
 
@@ -363,18 +356,49 @@ export class TauriBackend implements AudioBridge {
   }
 
   stopAllSources(): void {
-    this._transportCommandToken += 1;
+    const token = ++this._transportCommandToken;
     this._scheduledEndSample = null;
     this._currentSamplePosition = 0;
+    this._lastScheduledClips = [];
     void (async () => {
+      if (token !== this._transportCommandToken) return;
       await invoke('audio_clip_set_schedule', { clips: [] });
+      if (token !== this._transportCommandToken) return;
       await invoke('audio_transport_stop');
     })().catch(() => {});
   }
 
   pauseAllSources(): void {
-    this._transportCommandToken += 1;
-    invoke('audio_transport_pause').catch(() => {});
+    const token = ++this._transportCommandToken;
+    void (async () => {
+      if (token !== this._transportCommandToken) return;
+      await invoke('audio_transport_pause');
+    })().catch(() => {});
+  }
+
+  private buildNativeClips(clips: BridgeClipInfo[]): NativeClipSource[] {
+    const anySoloed = Array.from(this._trackEntries.values()).some((entry) => entry.params.solo);
+    return clips
+      .map((clip) => {
+        const params = this._trackEntries.get(clip.trackId)?.params ?? {
+          volume: 1,
+          pan: 0,
+          mute: false,
+          solo: false,
+        };
+        return clipToNative(clip, this.sampleRate, params, anySoloed);
+      })
+      .filter((clip): clip is NativeClipSource => clip !== null);
+  }
+
+  private republishActiveSchedule(): void {
+    if (this._scheduledEndSample === null || this._lastScheduledClips.length === 0) return;
+    const token = this._transportCommandToken;
+    const nativeClips = this.buildNativeClips(this._lastScheduledClips);
+    void (async () => {
+      if (token !== this._transportCommandToken) return;
+      await invoke('audio_clip_set_schedule', { clips: nativeClips });
+    })().catch(() => {});
   }
 
   // ── Audio Data ────────────────────────────────────────────────────

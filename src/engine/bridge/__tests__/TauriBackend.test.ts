@@ -278,6 +278,41 @@ describe('TauriBackend', () => {
     });
   });
 
+  it('republishes active native schedule when track params change', async () => {
+    const buffer = createMockAudioBuffer([1, 1]);
+    invokeMock.mockResolvedValueOnce({ slot: 0, generation: 1 });
+    backend.ensureTrack('track-1');
+    await Promise.resolve();
+
+    backend.schedulePlayback([
+      {
+        clipId: 'clip-1',
+        trackId: 'track-1',
+        startTime: 0,
+        buffer,
+        audioOffset: 0,
+        clipDuration: 2 / 48000,
+      },
+    ], 0, 1);
+    await Promise.resolve();
+    await Promise.resolve();
+    invokeMock.mockClear();
+
+    backend.setTrackParams('track-1', { volume: 0.25, pan: 0.5 });
+    await Promise.resolve();
+
+    expect(invokeMock).toHaveBeenCalledWith('audio_clip_set_schedule', {
+      clips: [
+        {
+          startSample: 0,
+          lengthSamples: 2,
+          gain: 1,
+          audioData: [0.125, 0.25, 0.125, 0.25],
+        },
+      ],
+    });
+  });
+
   it('does not resume stale playback after a stop interrupts scheduling', async () => {
     let resolveFirstSchedule!: () => void;
     let firstSchedule = true;

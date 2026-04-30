@@ -1018,10 +1018,30 @@ export function useTransport() {
   useEffect(() => {
     if (!playbackTracks || !isPlaying) return;
     const engine = getAudioEngine();
+    const bridge = getAudioBridge(engine);
+    bridge.setMasterVolume(masterVolume);
+    bridge.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(playbackLatency));
+    bridge.applyMastering(mastering);
     engine.masterVolume = masterVolume;
     engine.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(playbackLatency));
     engine.applyMastering(mastering);
     for (const track of playbackTracks) {
+      bridge.ensureTrack(track.id);
+      bridge.setTrackParams(track.id, {
+        volume: track.volume,
+        muted: track.muted,
+        soloed: track.soloed,
+        pan: track.pan ?? 0,
+        eqLowGain: track.eqLowGain ?? 0,
+        eqMidGain: track.eqMidGain ?? 0,
+        eqHighGain: track.eqHighGain ?? 0,
+        compressorEnabled: track.compressorEnabled ?? false,
+        compressorThreshold: track.compressorThreshold ?? -24,
+        compressorRatio: track.compressorRatio ?? 4,
+        reverbMix: track.reverbMix ?? 0,
+        reverbRoomSize: track.reverbRoomSize ?? 0.5,
+      });
+      bridge.setTrackGroupRouting(track.id, track.parentTrackId ?? null);
       const trackNode = engine.trackNodes.get(track.id);
       if (trackNode) {
         trackNode.volume = track.volume;
@@ -1042,6 +1062,7 @@ export function useTransport() {
       }
     }
     engine.updateSoloState();
+    bridge.updateSoloState();
 
     // Sync aux send routing (handles amount, pre/post, and return track params)
     if (playbackTracks) {

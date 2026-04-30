@@ -102,6 +102,14 @@ pub fn audio_start_engine(
         .lock()
         .map_err(|_| EngineError::Open("emitter mutex poisoned".into()))?;
 
+    let current_status = engine.status();
+    if current_status.is_running() {
+        // `Engine::start` returns AlreadyRunning, but the emitter is
+        // already valid in the normal running case. Return the current
+        // status without tearing it down.
+        return Ok(current_status);
+    }
+
     // Stop any leftover emitter BEFORE starting the new engine — so
     // we never have two emitters pushing to the same event name, and
     // we don't leak a thread if `start` fails.
